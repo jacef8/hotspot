@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt</title>
+
+  <!-- Leaflet Map CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+
+  <!-- Optional Firebase Config Block Paste Target -->
+  <script>
+    // Paste your Firebase config object below to enable real-time multiplayer across phones
+    window.FIREBASE_CONFIG = null;
+    /*
+    window.FIREBASE_CONFIG = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+      projectId: "YOUR_PROJECT",
+      storageBucket: "YOUR_PROJECT.appspot.com",
+      messagingSenderId: "SENDER_ID",
+      appId: "APP_ID"
+    };
+    */
+  </script>
+
+  <!-- Firebase Compat Libraries -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+</head>
+<body>
+
+  <div id="app-container">
+
+    <!-- Environment / GPS Diagnostic Banner -->
+    <div id="gps-warning-banner" class="warning-banner"></div>
+
+    <!-- Top Navigation / Sound Bar -->
+    <div class="top-bar" style="padding: 12px 20px 0;">
+      <span class="accuracy-tag" style="font-size: 11px; color: var(--text-muted); font-weight: 700;">GPS: Searching...</span>
+      <div style="display: flex; gap: 8px;">
+        <button class="icon-btn" onclick="window.hotspotApp.toggleSound()" id="sound-btn">🔊 Voice</button>
+        <button class="icon-btn" onclick="window.hotspotApp.showScreen('home-screen')">🏠 Home</button>
+      </div>
+    </div>
+
+    <!-- ==================== SCREEN 1: HOME / MAIN MENU ==================== -->
+    <div id="home-screen" class="screen active">
+      <div class="brand-header">
+        <h1 class="brand-title">HOTSPOT</h1>
+        <div class="brand-subtitle">Extreme Yard Tag & Proximity Hunt</div>
+      </div>
+
+      <div class="card" style="border-color: var(--accent-cyan);">
+        <div class="card-title">🚀 Solo Test Mode</div>
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 14px; line-height: 1.4;">
+          Plants a virtual hider ~100m out right now. Test pulse rings, haptics, announcer, & powerups with no setup or second phone!
+        </p>
+        <button class="btn btn-solo" onclick="window.hotspotApp.startSoloDrill()">
+          🎯 Tap Solo Drill to Test
+        </button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">⚔️ Multiplayer Hunt</div>
+        <button class="btn btn-primary" onclick="window.hotspotApp.showScreen('host-setup-screen')">
+          👑 Host a Hunt
+        </button>
+        <button class="btn btn-secondary" onclick="window.hotspotApp.showScreen('join-screen')">
+          🏃 Join a Hunt
+        </button>
+        <button class="btn btn-secondary" style="margin-bottom: 0;" onclick="window.hotspotApp.showScreen('join-spectator-screen')">
+          👁️ Spectator Screen (God View)
+        </button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🏆 Season Records</div>
+        <div class="stats-grid">
+          <div class="stat-box">
+            <div class="stat-val" id="stat-total-hunts">0</div>
+            <div class="stat-lbl">Hunts</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" id="stat-fastest-tag">--</div>
+            <div class="stat-lbl">Fastest Tag</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-val" id="stat-longest-hide">0s</div>
+            <div class="stat-lbl">Longest Hide</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SCREEN 2: HOST SETUP ==================== -->
+    <div id="host-setup-screen" class="screen">
+      <div class="brand-header">
+        <h2 class="brand-title" style="font-size: 28px;">Host Setup</h2>
+      </div>
+
+      <div class="card">
+        <div class="input-group">
+          <label class="input-label">Head Start Duration</label>
+          <select id="setup-headstart" class="select-input">
+            <option value="30">30 Seconds</option>
+            <option value="60" selected>60 Seconds (Standard)</option>
+            <option value="90">90 Seconds</option>
+            <option value="120">120 Seconds (Large Yard)</option>
+          </select>
+        </div>
+
+        <div class="input-group">
+          <label class="input-label">Game Mode</label>
+          <select id="setup-gamemode" class="select-input">
+            <option value="classic" selected>Classic Tag (First Tag Wins)</option>
+            <option value="infection">Infection Mode (Pack Grows!)</option>
+          </select>
+        </div>
+
+        <div class="input-group">
+          <label class="input-label">Your Runner Name</label>
+          <input type="text" id="host-nickname" class="text-input" value="AlphaHider" placeholder="Nickname">
+        </div>
+
+        <button class="btn btn-primary" onclick="
+          const hs = document.getElementById('setup-headstart').value;
+          const gm = document.getElementById('setup-gamemode').value;
+          const name = document.getElementById('host-nickname').value;
+          window.hotspotApp.playerName = name;
+          window.hotspotApp.createRoom(hs, gm);
+        ">
+          Create Room & Get Code
+        </button>
+      </div>
+    </div>
+
+    <!-- ==================== SCREEN 3: LOBBY ==================== -->
+    <div id="lobby-screen" class="screen">
+      <div class="brand-header">
+        <div class="brand-subtitle">ROOM CODE</div>
+        <div id="lobby-code-display" class="brand-title" style="font-size: 52px; color: var(--accent-cyan); text-shadow: 0 0 24px rgba(0, 240, 255, 0.5);">----</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Pack Members</div>
+        <div id="lobby-player-list" class="player-list">
+          <div class="player-badge hider">
+            <span class="role-icon">👑 HIDER</span>
+            <span class="name">Host</span>
+          </div>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" onclick="window.hotspotApp.startHeadstart()">
+        🔥 Turn the Pack Loose!
+      </button>
+    </div>
+
+    <!-- ==================== SCREEN 4: JOIN ROOM ==================== -->
+    <div id="join-screen" class="screen">
+      <div class="brand-header">
+        <h2 class="brand-title" style="font-size: 28px;">Join Hunt</h2>
+      </div>
+
+      <div class="card">
+        <div class="input-group">
+          <label class="input-label">4-Letter Room Code</label>
+          <input type="text" id="join-code-input" class="text-input" placeholder="e.g. X7K2" style="text-transform: uppercase; font-size: 24px; text-align: center; letter-spacing: 4px;">
+        </div>
+
+        <div class="input-group">
+          <label class="input-label">Your Nickname</label>
+          <input type="text" id="join-nickname-input" class="text-input" placeholder="Chaser" value="Chaser1">
+        </div>
+
+        <button class="btn btn-primary" onclick="
+          const code = document.getElementById('join-code-input').value;
+          const nick = document.getElementById('join-nickname-input').value;
+          window.hotspotApp.joinRoom(code, nick, 'seeker');
+        ">
+          Enter Hunt
+        </button>
+      </div>
+    </div>
+
+    <!-- ==================== SCREEN 5: JOIN SPECTATOR ==================== -->
+    <div id="join-spectator-screen" class="screen">
+      <div class="brand-header">
+        <h2 class="brand-title" style="font-size: 28px;">God View</h2>
+      </div>
+
+      <div class="card">
+        <div class="input-group">
+          <label class="input-label">4-Letter Room Code</label>
+          <input type="text" id="spectator-code-input" class="text-input" placeholder="e.g. X7K2" style="text-transform: uppercase; font-size: 24px; text-align: center;">
+        </div>
+
+        <button class="btn btn-primary" onclick="
+          const code = document.getElementById('spectator-code-input').value;
+          window.hotspotApp.joinRoom(code, 'Spectator', 'spectator');
+        ">
+          Launch Spectator Map
+        </button>
+      </div>
+    </div>
+
+    <!-- ==================== SCREEN 6: SEEKER LIVE HUNT ==================== -->
+    <div id="seeker-screen" class="screen">
+      <div style="text-align: center; margin-top: 10px;">
+        <span class="headstart-counter" style="font-size: 18px; font-weight: 800; color: var(--accent-amber);"></span>
+      </div>
+
+      <div class="seeker-radar-container">
+        <!-- Pulse Ring -->
+        <div id="seeker-pulse-ring" class="pulse-ring-outer">
+          <!-- Live Compass Arrow for Bearing Ping powerup -->
+          <svg id="bearing-arrow" class="bearing-arrow" viewBox="0 0 24 24" fill="none" stroke="#00F0FF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="12 2 19 21 12 17 5 21 12 2"></polygon>
+          </svg>
+          <div id="seeker-band-label" class="seeker-band-label">COLD</div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom: 10px;">
+        <div class="card-title">Tactical Powerup</div>
+        <button id="btn-bearing-ping" class="btn btn-secondary" onclick="window.hotspotApp.usePowerup('bearing')">
+          📡 Bearing Ping (3s Live Arrow)
+        </button>
+      </div>
+    </div>
+
+    <!-- ==================== SCREEN 7: HIDER LIVE HUNT ==================== -->
+    <div id="hider-screen" class="screen">
+      <div style="text-align: center; margin-top: 10px;">
+        <div class="brand-subtitle">HEAD START</div>
+        <div class="headstart-counter" style="font-size: 42px; font-weight: 900; color: var(--accent-amber);">60s</div>
+      </div>
+
+      <div class="card hider-radar-box">
+        <div class="card-title">Nearest Seeker Distance</div>
+        <div id="hider-nearest-dist" class="hider-dist-num">--m</div>
+        <div style="font-size: 12px; color: var(--text-muted);">Live Proximity Radar</div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Hider Powerups (1 Use)</div>
+        <div class="powerup-grid">
+          <button id="btn-powerup-decoy" class="btn-powerup" onclick="window.hotspotApp.usePowerup('decoy')">
+            🎭 Decoy (30s)
+          </button>
+          <button id="btn-powerup-smoke" class="btn-powerup" onclick="window.hotspotApp.usePowerup('smoke')">
+            💨 Smoke (15s)
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SCREEN 8: SPECTATOR GOD VIEW ==================== -->
+    <div id="spectator-screen" class="screen">
+      <div class="brand-header" style="margin-bottom: 12px;">
+        <h2 class="brand-title" style="font-size: 24px;">God View Map</h2>
+      </div>
+
+      <div id="spectator-map"></div>
+
+      <div class="card">
+        <div class="card-title">Live Field Stats</div>
+        <div id="spectator-leaderboard" class="player-list"></div>
+      </div>
+    </div>
+
+    <!-- ==================== SCREEN 9: POST-GAME REPLAY ==================== -->
+    <div id="replay-screen" class="screen">
+      <div class="brand-header" style="margin-bottom: 12px;">
+        <h2 class="brand-title" style="font-size: 28px; color: var(--primary-blaze);">TAGGED!</h2>
+        <div class="brand-subtitle">Post-Match Track Replay</div>
+      </div>
+
+      <div id="replay-map"></div>
+
+      <div class="card">
+        <div class="card-title">Replay Timeline Scrubber</div>
+        <input type="range" id="replay-slider" min="0" max="100" value="0" style="width: 100%; accent-color: var(--primary-blaze); margin-bottom: 12px;" oninput="window.hotspotReplay.stepReplay(this.value)">
+        <div style="display: flex; gap: 8px;">
+          <button class="btn btn-primary" style="flex: 1; padding: 12px;" onclick="window.hotspotReplay.playReplay((pct) => document.getElementById('replay-slider').value = pct)">
+            ▶ Play Tracks
+          </button>
+          <button class="btn btn-secondary" style="flex: 1; padding: 12px;" onclick="window.hotspotReplay.pauseReplay()">
+            ⏸ Pause
+          </button>
+        </div>
+      </div>
+
+      <button class="btn btn-secondary" onclick="window.hotspotApp.showScreen('home-screen')">
+        Back to Home
+      </button>
+    </div>
+
+  </div>
+
+  <!-- Scripts -->
+  <script src="audio.js"></script>
+  <script src="geo.js"></script>
+  <script src="replay.js"></script>
+  <script src="app.js"></script>
+
+  <script>
+    // Initialize default UI state
+    document.addEventListener('DOMContentLoaded', () => {
+      window.hotspotApp.updateSeasonStatsDisplay();
+    });
+  </script>
+</body>
+</html>
