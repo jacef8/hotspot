@@ -28,6 +28,13 @@ class HotspotReplay {
     const container = document.getElementById(elementId);
     if (!container) return;
 
+    // Leaflet is loaded from a CDN. If it did not arrive, skip the map rather
+    // than throwing — this runs inside the post-tag gameover handler.
+    if (typeof L === 'undefined') {
+      container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:12px;color:#94A3B8;text-align:center;padding:12px;">Map unavailable — no connection to map server.</div>';
+      return;
+    }
+
     // Load dark tile layer (CartoDB Dark Matter)
     this.map = L.map(elementId, { zoomControl: true }).setView(center, zoom);
 
