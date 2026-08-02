@@ -1,7 +1,8 @@
 /**
  * HOTSPOT - Audio & Announcer Engine
- * Web Speech API for dramatic voice commentary
+ * Web Speech API for dramatic voice commentary (Seekers & Spectators only)
  * Web Audio API for synthetic pulse sound effects, count-down beeps, and tag alerts
+ * Automatically SILENT for Hiders to prevent exposing their location!
  */
 
 class HotspotAudio {
@@ -24,7 +25,6 @@ class HotspotAudio {
         this.audioCtx.resume();
       }
       this.unlocked = true;
-      // Silent speech trigger to unlock Web Speech API on iOS
       if (this.synth && this.speechEnabled) {
         try {
           const u = new SpeechSynthesisUtterance('');
@@ -37,6 +37,10 @@ class HotspotAudio {
     ['click', 'touchstart', 'touchend', 'keydown'].forEach(evt => {
       window.addEventListener(evt, unlock, { once: true, capture: true });
     });
+  }
+
+  isHiderSilent() {
+    return window.hotspotApp && window.hotspotApp.role === 'hider';
   }
 
   initAudioContext() {
@@ -67,6 +71,8 @@ class HotspotAudio {
 
   speak(text, rate = 1.1, pitch = 1.0) {
     if (!this.speechEnabled || !this.synth) return;
+    if (this.isHiderSilent()) return; // SILENT FOR HIDER TO PREVENT LOCATION EXPOSURE!
+
     try {
       this.initAudioContext();
       if (this.audioCtx && this.audioCtx.state === 'suspended') {
@@ -91,6 +97,8 @@ class HotspotAudio {
 
   playPulseBeep(band) {
     if (!this.audioFxEnabled) return;
+    if (this.isHiderSilent()) return; // SILENT FOR HIDER!
+
     try {
       this.initAudioContext();
       if (!this.audioCtx || this.audioCtx.state === 'suspended') return;
@@ -124,6 +132,8 @@ class HotspotAudio {
 
   playPowerupSound(type) {
     if (!this.audioFxEnabled) return;
+    if (this.isHiderSilent()) return; // SILENT FOR HIDER!
+
     try {
       this.initAudioContext();
       if (!this.audioCtx || this.audioCtx.state === 'suspended') return;
@@ -162,6 +172,8 @@ class HotspotAudio {
 
   playCountdownBeep(isFinal = false) {
     if (!this.audioFxEnabled) return;
+    if (this.isHiderSilent()) return; // SILENT FOR HIDER!
+
     try {
       this.initAudioContext();
       if (!this.audioCtx || this.audioCtx.state === 'suspended') return;
@@ -186,6 +198,7 @@ class HotspotAudio {
 
   playTagScream() {
     if (!this.audioFxEnabled) return;
+    // Note: Tag scream plays when caught to announce game over
     try {
       this.initAudioContext();
       if (!this.audioCtx || this.audioCtx.state === 'suspended') return;
@@ -213,6 +226,8 @@ class HotspotAudio {
   }
 
   announceBandChange(band) {
+    if (this.isHiderSilent()) return; // SILENT FOR HIDER!
+
     const now = Date.now();
     if (this.lastSpokenBand === band && now - this.lastSpokenTime < 8000) {
       return;

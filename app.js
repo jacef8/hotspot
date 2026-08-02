@@ -2,6 +2,7 @@
  * HOTSPOT - Main Game Engine & Controller
  * Integrates Firebase RTDB, Game State, Solo Drill, Powerups, Proximity Engine,
  * Voice Announcer, Haptic Vibe, Spectator, and Replay.
+ * Includes Yard Boundary Geofencing & Silent Hider Mode.
  */
 
 window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || null;
@@ -16,6 +17,9 @@ class HotspotApp {
     this.gameMode = 'classic'; // 'classic' | 'infection'
     this.gameState = 'lobby'; // 'lobby' | 'headstart' | 'active' | 'gameover'
     this.headStartSeconds = 60;
+    this.boundaryRadius = 75; // Yard boundary limit in meters (75m default)
+    this.yardCenterPos = null;
+
     this.headStartTimer = null;
     this.headStartRemaining = 60;
     this.headStartStartTime = 0;
@@ -131,9 +135,10 @@ class HotspotApp {
   }
 
   // --- MULTIPLAYER ROOM SETUP ---
-  createRoom(headStartSec = 60, mode = 'classic') {
+  createRoom(headStartSec = 60, mode = 'classic', boundaryMeters = 75) {
     this.isSoloDrill = false;
     this.headStartSeconds = parseInt(headStartSec, 10) || 60;
+    this.boundaryRadius = parseInt(boundaryMeters, 10) || 75;
     this.gameMode = mode;
     this.roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
     this.role = 'hider';
@@ -151,6 +156,7 @@ class HotspotApp {
         hiderId: this.hiderId,
         gameState: 'lobby',
         headStartSeconds: this.headStartSeconds,
+        boundaryRadius: this.boundaryRadius,
         gameMode: this.gameMode,
         players: this.players,
         createdAt: Date.now()
@@ -185,6 +191,7 @@ class HotspotApp {
         this.hiderId = data.hiderId;
         this.gameMode = data.gameMode || 'classic';
         this.headStartSeconds = data.headStartSeconds || 60;
+        this.boundaryRadius = data.boundaryRadius || 75;
 
         roomRef.child('players/' + this.playerId).set({
           id: this.playerId,
@@ -234,6 +241,7 @@ class HotspotApp {
       this.hiderId = data.hiderId;
       this.gameMode = data.gameMode || 'classic';
       this.headStartSeconds = data.headStartSeconds || 60;
+      this.boundaryRadius = data.boundaryRadius || 75;
       this.updateLobbyList();
 
       if (data.gameState !== this.gameState) {
@@ -291,21 +299,26 @@ class HotspotApp {
     const startTime = Date.now();
     this.headStartStartTime = startTime;
 
+    if (this.myPosition) {
+      this.yardCenterPos = { lat: this.myPosition.lat, lng: this.myPosition.lng };
+    }
+
     if (this.db) {
       this.db.ref(`rooms/${this.roomCode}`).update({
         gameState: 'headstart',
         headStartStartTime: startTime,
-        headStartSeconds: this.headStartSeconds
+        headStartSeconds: this.headStartSeconds,
+        yardCenterPos: this.yardCenterPos
       });
     } else {
       this.handleGameStateChange('headstart', {
         headStartStartTime: startTime,
-        headStartSeconds: this.headStartSeconds
+        headStartSeconds: this.headStartSeconds,
+        yardCenterPos: this.yardCenterPos
       });
     }
   }
 
-  // Hider indicates ready early
   hiderReadyEarly() {
     window.hotspotAudio.speak('Hider is hidden early! Pack released!');
     if (this.headStartTimer) {
@@ -324,6 +337,7 @@ class HotspotApp {
     if (newState === 'headstart') {
       const startTime = (roomData && roomData.headStartStartTime) ? roomData.headStartStartTime : (this.headStartStartTime || Date.now());
       const duration = (roomData && roomData.headStartSeconds) ? roomData.headStartSeconds : this.headStartSeconds;
+      if (roomData && roomData.yardCenterPos) this.yardCenterPos = roomData.yardCenterPos;
 
       this.startGpsTracking();
 
@@ -411,6 +425,10 @@ class HotspotApp {
   onGpsUpdate(pos) {
     this.myPosition = pos;
 
+    if (!this.yardCenterPos && this.role === 'hider') {
+      this.yardCenterPos = { lat: pos.lat, lng: pos.lng };
+    }
+
     document.querySelectorAll('.accuracy-tag').forEach(el => {
       el.innerText = `±${Math.round(pos.accuracy)}m`;
     });
@@ -476,6 +494,7 @@ class HotspotApp {
   updateProximityEngine() {
     if (!this.myPosition) return;
 
+    // ================= SEEKER PROXIMITY CALCULATIONS =================
     if (this.role === 'seeker') {
       let hiderPos = null;
 
@@ -543,6 +562,7 @@ class HotspotApp {
       }
     }
 
+    // ================= HIDER RADAR & YARD BOUNDARY GEOFENCING =================
     if (this.role === 'hider') {
       const distEl = document.getElementById('hider-nearest-dist');
       const seekerPlayers = Object.values(this.players).filter(p => p.role === 'seeker' && p.lat && p.lng);
@@ -560,8 +580,30 @@ class HotspotApp {
       } else {
         if (distEl) distEl.innerText = '--m';
       }
+
+      // Check Yard Boundary Limit
+      const boundaryBanner = document.getElementById('hider-boundary-alert');
+      if (this.yardCenterPos && this.boundaryRadius > 0 && boundaryBanner) {
+        const distFromCenter = window.hotspotGeo.calculateDistance(
+          this.myPosition.lat, this.myPosition.lng,
+          this.yardCenterPos.lat, this.yardCenterPos.lng
+        );
+
+        if (distFromCenter > this.boundaryRadius) {
+          boundaryBanner.style.display = 'block';
+          boundaryBanner.style.background = '#EF4444';
+          boundaryBanner.innerText = `🛑 OUT OF BOUNDS! Move back inside the yard! (${Math.round(distFromCenter)}m from start)`;
+        } else if (distFromCenter > 0.8 * this.boundaryRadius) {
+          boundaryBanner.style.display = 'block';
+          boundaryBanner.style.background = '#F59E0B';
+          boundaryBanner.innerText = `⚠️ APPROACHING YARD EDGE! (${Math.round(distFromCenter)}m / ${this.boundaryRadius}m limit)`;
+        } else {
+          boundaryBanner.style.display = 'none';
+        }
+      }
     }
 
+    // ================= SPECTATOR GOD VIEW =================
     if (this.role === 'spectator') {
       window.hotspotReplay.updateSpectatorView(this.players);
     }

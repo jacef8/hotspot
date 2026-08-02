@@ -103,6 +103,17 @@
         </div>
 
         <div class="input-group">
+          <label class="input-label">Yard Boundary Limit</label>
+          <select id="setup-boundary" class="select-input">
+            <option value="50">50 Meters (Small Yard)</option>
+            <option value="75" selected>75 Meters (Standard Yard)</option>
+            <option value="100">100 Meters (Large Yard)</option>
+            <option value="150">150 Meters (Park)</option>
+            <option value="0">No Boundary Limit</option>
+          </select>
+        </div>
+
+        <div class="input-group">
           <label class="input-label">Game Mode</label>
           <select id="setup-gamemode" class="select-input">
             <option value="classic" selected>Classic Tag (First Tag Wins)</option>
@@ -119,9 +130,10 @@
       <button class="btn btn-primary" onclick="
         const hs = document.getElementById('setup-headstart').value;
         const gm = document.getElementById('setup-gamemode').value;
+        const b = document.getElementById('setup-boundary').value;
         const name = document.getElementById('host-nickname').value;
         window.hotspotApp.playerName = name;
-        window.hotspotApp.createRoom(hs, gm);
+        window.hotspotApp.createRoom(hs, gm, b);
       ">
         Create Room & Get Code
       </button>
@@ -243,6 +255,9 @@
         <div id="hider-timer-display" class="headstart-counter" style="font-size: 32px; font-weight: 900; color: var(--accent-amber);">60s</div>
       </div>
 
+      <!-- Yard Boundary Warning Banner -->
+      <div id="hider-boundary-alert" style="display: none; padding: 8px 12px; border-radius: 8px; font-size: 12px; font-weight: 800; text-align: center; margin: 4px 0; color: #FFF; animation: pulse-ring 1s infinite;"></div>
+
       <!-- Hider Ready Early Button -->
       <button id="btn-hider-ready" class="btn btn-secondary" style="margin: 6px 0; border-color: var(--accent-cyan);" onclick="window.hotspotApp.hiderReadyEarly()">
         ⚡ Ready Early (I'm Hidden)
@@ -251,7 +266,7 @@
       <div class="card hider-radar-box">
         <div class="card-title">Nearest Seeker Distance</div>
         <div id="hider-nearest-dist" class="hider-dist-num">--m</div>
-        <div style="font-size: 11px; color: var(--text-muted);">Live Proximity Radar</div>
+        <div style="font-size: 11px; color: var(--text-muted);">Silent Proximity Radar</div>
       </div>
 
       <div class="card" style="margin-bottom: 0;">
