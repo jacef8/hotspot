@@ -2,7 +2,7 @@
  * HOTSPOT - Main Game Engine & Controller
  * Standard US Customary Units (Feet & Yards).
  * 100% Bulletproof HTTPS 1-Second Heartbeat Cloud Sync Engine (Port 443).
- * Dynamic v2.4.1 Isolated Topic Channels & Storage Wipe.
+ * Zero-Cache Topic Nonce Architecture.
  */
 
 window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || null;
@@ -13,6 +13,7 @@ class HotspotApp {
     this.heartbeatInterval = null;
 
     this.roomCode = null;
+    this.roomNonce = null;
     this.joinTime = 0;
     this.playerId = 'player_' + Math.random().toString(36).substr(2, 6);
     this.playerName = 'Runner_' + Math.floor(Math.random() * 899 + 100);
@@ -59,7 +60,6 @@ class HotspotApp {
   clearStaleCache() {
     try {
       sessionStorage.clear();
-      // Keep only stats in localStorage
       const stats = localStorage.getItem('hotspot_stats');
       localStorage.clear();
       if (stats) localStorage.setItem('hotspot_stats', stats);
@@ -76,8 +76,7 @@ class HotspotApp {
   // --- 100% BULLETPROOF HTTPS 1-SECOND HEARTBEAT CLOUD SYNC ---
   initCloudSync() {
     if (!this.roomCode) return;
-    // v2.4.1 Isolated Topic channel to guarantee zero cached messages from older runs
-    const topic = 'hotspot_v241_room_' + this.roomCode.toLowerCase();
+    const topic = 'hotspot_r242_' + this.roomCode.toLowerCase();
 
     // 1. Clear existing timers and streams
     if (this.eventSource) {
@@ -114,7 +113,7 @@ class HotspotApp {
 
   sendHeartbeat() {
     if (!this.roomCode) return;
-    const topic = 'hotspot_v241_room_' + this.roomCode.toLowerCase();
+    const topic = 'hotspot_r242_' + this.roomCode.toLowerCase();
 
     const data = {
       type: 'HEARTBEAT',
@@ -145,7 +144,7 @@ class HotspotApp {
     if (!this.roomCode) return;
     data.senderId = this.playerId;
     data.timestamp = Date.now();
-    const topic = 'hotspot_v241_room_' + this.roomCode.toLowerCase();
+    const topic = 'hotspot_r242_' + this.roomCode.toLowerCase();
 
     try {
       fetch(`https://ntfy.sh/${topic}`, {
@@ -196,13 +195,13 @@ class HotspotApp {
         this.updateLobbyList();
       }
     } else if (data.type === 'START_HEADSTART') {
-      // ONLY trigger headstart if message timestamp is AFTER Seeker joined
-      if (this.gameState === 'lobby' && data.timestamp && data.timestamp >= (this.joinTime - 2000)) {
+      // STRICT TIMESTAMP GUARD: Only trigger headstart if sent AFTER Seeker joined
+      if (this.gameState === 'lobby' && data.timestamp && data.timestamp > (this.joinTime + 200)) {
         this.gameState = 'headstart';
         this.handleGameStateChange('headstart', data);
       }
     } else if (data.type === 'HIDER_READY_EARLY') {
-      if (data.timestamp && data.timestamp >= (this.joinTime - 2000)) {
+      if (data.timestamp && data.timestamp > (this.joinTime + 200)) {
         this.gameState = 'active';
         this.handleGameStateChange('active', data);
       }
