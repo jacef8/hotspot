@@ -105,14 +105,16 @@ class HotspotApp {
     }
 
     const peers = this.peerCount();
-    const relayOk = this.syncFailCount < 8;
+    const relayOk = this.rtdbConnected || this.syncFailCount < 8;
 
     let text;
     if (peers > 0) {
-      text = `🟢 Direct link active — ${peers} device${peers === 1 ? '' : 's'} · room ${this.roomCode}`
+      text = `🟢 Connected — ${peers} direct link${peers === 1 ? '' : 's'}${this.rtdbConnected ? ' + cloud' : ''} · room ${this.roomCode}`
         + (relayOk ? '' : ' (relay unavailable, not needed)');
     } else if (relayOk) {
-      text = `🟡 Looking for other devices… · room ${this.roomCode}`;
+      text = this.rtdbConnected
+        ? `🟢 Cloud sync active · room ${this.roomCode}`
+        : `🟡 Looking for other devices… · room ${this.roomCode}`;
     } else {
       text = `🔴 No connection to other devices · room ${this.roomCode}`;
     }
@@ -195,6 +197,10 @@ class HotspotApp {
     // 4. Initialize WebRTC Direct P2P Sync (Zero Server Rate Limits)
     this.initPeerSync();
 
+    // 5. Firebase Realtime Database relay — the path that keeps working when
+    //    WebRTC cannot form a link or a phone changes network mid-game.
+    this.initRtdbSync();
+
     // 5. Send initial heartbeat immediately
     this.sendHeartbeat();
   }
@@ -266,6 +272,138 @@ class HotspotApp {
         this.updateSyncStatus(this.peerCount() > 0);
       });
     } catch(e) {}
+  }
+
+  // --- FIREBASE REALTIME DATABASE RELAY ---
+  // Google-hosted, so it works on any network and survives a phone switching
+  // between WiFi and cellular — which a direct WebRTC link does not, and which
+  // is the likeliest reason a match froze mid-game. ntfy.sh, the previous
+  // relay, is simply unreachable. P2P stays as the low-latency fast path.
+  initRtdbSync() {
+    if (!this.roomCode) return;
+    if (typeof firebase === 'undefined' || !window.FIREBASE_CONFIG) return;
+
+    try {
+      if (!firebase.apps || !firebase.apps.length) {
+        firebase.initializeApp(window.FIREBASE_CONFIG);
+      }
+      this.rtdb = firebase.database();
+    } catch (e) {
+      this.rtdb = null;
+      return;
+    }
+
+    this.teardownRtdbListeners();
+
+    const base = `rooms/${this.roomCode}`;
+    const attach = () => {
+      if (!this.rtdb || !this.roomCode) return;
+
+      this.rtdbPlayersRef = this.rtdb.ref(`${base}/players`);
+      this.rtdbEventsPushRef = this.rtdb.ref(`${base}/events`);
+      this.rtdbEventsRef = this.rtdbEventsPushRef.limitToLast(30);
+      this.rtdbMyRef = this.rtdb.ref(`${base}/players/${this.playerId}`);
+
+      // If the phone dies or loses signal, drop our roster entry automatically.
+      try { this.rtdbMyRef.onDisconnect().remove(); } catch (e) {}
+
+      const onPlayer = (snap) => {
+        const p = snap.val();
+        if (!p || !p.id || p.id === this.playerId) return;
+        this.lastCloudMessageAt = Date.now();
+        this.handleCloudMessage({
+          type: 'HEARTBEAT',
+          senderId: p.id,
+          peerId: p.peerId || null,
+          player: p,
+          headStartSeconds: p.headStartSeconds,
+          boundaryRadius: p.boundaryRadius,
+          matchDurationSeconds: p.matchDurationSeconds
+        });
+      };
+      this.rtdbPlayersRef.on('child_added', onPlayer);
+      this.rtdbPlayersRef.on('child_changed', onPlayer);
+      this.rtdbPlayersRef.on('child_removed', (snap) => {
+        if (snap.key && snap.key !== this.playerId) delete this.players[snap.key];
+        this.updateLobbyList();
+      });
+
+      // Ignore whatever events are already sitting in the room when we attach,
+      // so a leftover START_HEADSTART cannot yank a joining phone straight into
+      // a finished round. child_added fires for existing children before the
+      // first value event, so priming on that is reliable.
+      this.rtdbPrimed = false;
+      this.rtdbEventsRef.on('child_added', (snap) => {
+        if (!this.rtdbPrimed) return;
+        const data = snap.val();
+        if (!data || data.senderId === this.playerId) return;
+        this.lastCloudMessageAt = Date.now();
+        this.handleCloudMessage(data);
+      });
+      this.rtdbEventsRef.once('value', () => { this.rtdbPrimed = true; });
+
+      this.rtdb.ref('.info/connected').on('value', (s) => {
+        this.rtdbConnected = !!s.val();
+        this.refreshTransportStatus();
+      });
+    };
+
+    // The room creator wipes any leftover state before anyone attaches.
+    if (this.isRoomHost) {
+      try {
+        this.rtdb.ref(base).remove().then(attach).catch(attach);
+      } catch (e) { attach(); }
+    } else {
+      attach();
+    }
+  }
+
+  rtdbPublishSelf(player) {
+    if (!this.rtdbMyRef || !player) return;
+    try {
+      this.rtdbMyRef.set({
+        id: this.playerId,
+        name: this.playerName,
+        role: this.role,
+        lat: player.lat,
+        lng: player.lng,
+        accuracy: player.accuracy,
+        peerId: this.myPeerId || null,
+        headStartSeconds: this.headStartSeconds,
+        boundaryRadius: this.boundaryRadius,
+        matchDurationSeconds: this.matchDurationSeconds,
+        ts: firebase.database.ServerValue.TIMESTAMP
+      }).catch(() => {});
+    } catch (e) {}
+  }
+
+  rtdbPublishEvent(data) {
+    if (!this.rtdbEventsPushRef) return;
+    try { this.rtdbEventsPushRef.push(data).catch(() => {}); } catch (e) {}
+  }
+
+  teardownRtdbListeners() {
+    try {
+      if (this.rtdbPlayersRef) this.rtdbPlayersRef.off();
+      if (this.rtdbEventsRef) this.rtdbEventsRef.off();
+      if (this.rtdb) this.rtdb.ref('.info/connected').off();
+    } catch (e) {}
+    this.rtdbPlayersRef = null;
+    this.rtdbEventsRef = null;
+  }
+
+  teardownRtdb() {
+    this.teardownRtdbListeners();
+    try {
+      if (this.rtdbMyRef) {
+        this.rtdbMyRef.onDisconnect().cancel();
+        this.rtdbMyRef.remove();
+      }
+    } catch (e) {}
+    this.rtdbMyRef = null;
+    this.rtdbEventsPushRef = null;
+    this.rtdbPrimed = false;
+    this.rtdbConnected = false;
   }
 
   // Abort relay requests quickly. When ntfy is blocked the TCP connect never
@@ -435,8 +573,10 @@ class HotspotApp {
     // 1. Send directly over WebRTC Peer-to-Peer DataChannel (0ms delay, 0 rate limits)
     this.broadcastPeer(data);
 
-    // 2. Publish to cloud relay as backup — throttled, unlike the P2P path.
+    // 2. Publish to the relays — throttled, unlike the P2P path.
     if (!includeCloud) return;
+
+    this.rtdbPublishSelf(data.player);
 
     try {
       this.cloudFetch(`https://ntfy.sh/${topic}`, {
@@ -464,8 +604,10 @@ class HotspotApp {
     data.timestamp = Date.now();
     const topic = this.getTopic();
 
-    // Broadcast over WebRTC Direct P2P
+    // Broadcast over WebRTC Direct P2P, and mirror to the relay so devices
+    // without a working peer link still receive it.
     this.broadcastPeer(data);
+    this.rtdbPublishEvent(data);
 
     try {
       this.cloudFetch(`https://ntfy.sh/${topic}`, {
@@ -756,6 +898,8 @@ class HotspotApp {
       this.matchTimer = null;
     }
     this.stopPulseLoop();
+
+    this.teardownRtdb();
 
     // Tear the WebRTC peer down. Leaving it alive kept a stale registration on
     // the broker under the old room and leaked a connection per room joined.

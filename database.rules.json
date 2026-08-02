@@ -1,7 +1,25 @@
 {
-  "_comment": "Realtime Database is NOT used by this app. Sync runs over WebRTC (PeerJS) with an ntfy.sh HTTPS relay as fallback. These rules stay closed so a stray `firebase deploy` cannot open the database to the world.",
   "rules": {
     ".read": false,
-    ".write": false
+    ".write": false,
+
+    "rooms": {
+      "$code": {
+        ".read": "$code.matches(/^[A-Z0-9]{6}$/)",
+        ".write": "$code.matches(/^[A-Z0-9]{6}$/)",
+
+        "players": {
+          "$playerId": {
+            ".validate": "newData.hasChildren(['id','name','role']) && newData.child('name').isString() && newData.child('name').val().length <= 24 && newData.child('role').isString() && newData.child('role').val().length <= 12"
+          }
+        },
+
+        "events": {
+          "$eventId": {
+            ".validate": "newData.hasChild('type') && newData.child('type').isString() && newData.child('type').val().length <= 32"
+          }
+        }
+      }
+    }
   }
 }
