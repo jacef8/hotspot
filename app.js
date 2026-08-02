@@ -305,6 +305,21 @@ class HotspotApp {
     }
   }
 
+  // Hider indicates ready early
+  hiderReadyEarly() {
+    window.hotspotAudio.speak('Hider is hidden early! Pack released!');
+    if (this.headStartTimer) {
+      clearInterval(this.headStartTimer);
+      this.headStartTimer = null;
+    }
+
+    if (this.db) {
+      this.db.ref(`rooms/${this.roomCode}`).update({ gameState: 'active' });
+    } else {
+      this.handleGameStateChange('active');
+    }
+  }
+
   handleGameStateChange(newState, roomData = null) {
     if (newState === 'headstart') {
       const startTime = (roomData && roomData.headStartStartTime) ? roomData.headStartStartTime : (this.headStartStartTime || Date.now());
@@ -367,7 +382,14 @@ class HotspotApp {
 
     } else if (newState === 'active') {
       this.gameStartTime = Date.now();
+      if (this.headStartTimer) clearInterval(this.headStartTimer);
       document.querySelectorAll('.headstart-counter').forEach(el => el.innerText = '🔥 HUNT IS LIVE!');
+      const hiderCounter = document.getElementById('hider-timer-display');
+      if (hiderCounter) hiderCounter.innerText = 'LIVE!';
+
+      const readyBtn = document.getElementById('btn-hider-ready');
+      if (readyBtn) readyBtn.style.display = 'none';
+
       this.startPulseLoop();
     } else if (newState === 'gameover') {
       this.stopPulseLoop();
@@ -454,7 +476,6 @@ class HotspotApp {
   updateProximityEngine() {
     if (!this.myPosition) return;
 
-    // ================= SEEKER PROXIMITY CALCULATIONS =================
     if (this.role === 'seeker') {
       let hiderPos = null;
 
@@ -517,13 +538,11 @@ class HotspotApp {
         }
       }
 
-      // Check Tag Radius (8m)
       if (distMeters <= 8 && this.gameState === 'active') {
         this.triggerTag(this.playerId, this.playerName, this.hiderId);
       }
     }
 
-    // ================= HIDER RADAR (DISTANCE TO CLOSEST SEEKER) =================
     if (this.role === 'hider') {
       const distEl = document.getElementById('hider-nearest-dist');
       const seekerPlayers = Object.values(this.players).filter(p => p.role === 'seeker' && p.lat && p.lng);
@@ -543,7 +562,6 @@ class HotspotApp {
       }
     }
 
-    // ================= SPECTATOR GOD VIEW =================
     if (this.role === 'spectator') {
       window.hotspotReplay.updateSpectatorView(this.players);
     }
