@@ -1,5 +1,5 @@
-// HOTSPOT Service Worker v2.5.6 — PWA Standalone Engine
-const CACHE_NAME = 'hotspot-v2.5.6';
+// HOTSPOT Service Worker v2.5.9 — PWA Standalone Engine
+const CACHE_NAME = 'hotspot-v2.5.9';
 const ASSETS = [
   './',
   './index.html',

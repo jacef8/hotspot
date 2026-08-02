@@ -35,13 +35,22 @@ class HotspotReplay {
       return;
     }
 
-    // Load dark tile layer (CartoDB Dark Matter)
     this.map = L.map(elementId, { zoomControl: true }).setView(center, zoom);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      attribution: '&copy; OpenStreetMap &copy; CARTO',
-      subdomains: 'abcd',
-      maxZoom: 20
+    // Satellite imagery (Esri World Imagery — no API key required). An aerial
+    // view makes the tag spot readable against real yard features: driveways,
+    // fences, tree lines. Note the {z}/{y}/{x} order — Esri differs from OSM.
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      attribution: 'Imagery &copy; Esri, Maxar, Earthstar Geographics',
+      maxZoom: 21,
+      maxNativeZoom: 19
+    }).addTo(this.map);
+
+    // Road and place-name overlay so streets stay readable on top of imagery.
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 21,
+      maxNativeZoom: 19,
+      opacity: 0.85
     }).addTo(this.map);
 
     setTimeout(() => {

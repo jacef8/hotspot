@@ -1102,11 +1102,13 @@ class HotspotApp {
 
     if (this.role === 'seeker') {
       let hiderPos = null;
+      let hiderPlayerForAcc = null;
 
       if (this.isSoloDrill) {
         hiderPos = window.hotspotGeo.soloHiderPosition;
       } else {
         const hiderPlayer = Object.values(this.players).find(p => p.role === 'hider');
+        hiderPlayerForAcc = hiderPlayer || null;
         if (hiderPlayer && hiderPlayer.lat) {
           hiderPos = { lat: hiderPlayer.lat, lng: hiderPlayer.lng };
         }
@@ -1150,13 +1152,30 @@ class HotspotApp {
 
       this.currentDistance = distFeet;
 
-      const bandInfo = window.hotspotGeo.getDistanceBand(distFeet);
+      // How much of this reading is GPS noise? Both phones contribute error.
+      const hiderAcc = (hiderPlayerForAcc && hiderPlayerForAcc.accuracy) || 25;
+      const marginFeet = window.hotspotGeo.combinedAccuracy(
+        this.myPosition.accuracy, hiderAcc
+      );
+      this.currentMargin = marginFeet;
+
+      const bandInfo = window.hotspotGeo.getDistanceBand(distFeet, marginFeet);
       this.currentBand = bandInfo.band;
 
       const pulseRing = document.getElementById('seeker-pulse-ring');
       const bandLabel = document.getElementById('seeker-band-label');
 
       if (bandLabel && !this.powerups.smokeActive) bandLabel.innerText = bandInfo.label;
+
+      // Show the actual number and its uncertainty so "close" is interpretable.
+      const distEl = document.getElementById('seeker-dist-readout');
+      if (distEl && !this.powerups.smokeActive) {
+        const shown = distFeet > 300
+          ? `${Math.round(distFeet / 3)} yd`
+          : `${Math.round(distFeet)} ft`;
+        distEl.innerHTML = `${shown} <span style="opacity:.65;font-size:.6em;">±${marginFeet} ft</span>`
+          + (bandInfo.capped ? '<div style="font-size:10px;color:#F59E0B;font-weight:700;margin-top:2px;">WEAK GPS — reading may be off</div>' : '');
+      }
 
       if (pulseRing) {
         pulseRing.style.borderColor = bandInfo.color;
@@ -1189,9 +1208,11 @@ class HotspotApp {
         }
       }
 
-      // Auto-tag within 25 feet. Latched per target so infection mode cannot
-      // re-fire the tag every 250ms while the seeker stays in range.
-      if (distFeet <= 25 && this.gameState === 'active' && !this.decoyPos) {
+      // Auto-tag inside RED HOT (40ft). Latched per target so infection mode
+      // cannot re-fire every 250ms while the seeker stays in range. Requires a
+      // credible fix — a ±80ft reading must not be allowed to end the round.
+      if (distFeet <= 40 && window.hotspotGeo.isTagCredible(marginFeet)
+          && this.gameState === 'active' && !this.decoyPos) {
         const hiderPlayer = Object.values(this.players).find(p => p.role === 'hider');
         const targetId = hiderPlayer ? hiderPlayer.id : (this.isSoloDrill ? 'solo_hider' : null);
         if (targetId && !this.taggedHiderIds[targetId]) {

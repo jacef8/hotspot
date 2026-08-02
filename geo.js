@@ -209,13 +209,52 @@ class HotspotGeo {
     }
   }
 
-  // Expects distance in FEET
-  getDistanceBand(feet) {
-    if (feet > 200) return { band: 'COLD', label: 'COLD', color: '#64748B', pulseMs: 1600 };
-    if (feet > 115) return { band: 'STRUCK', label: 'STRUCK', color: '#06B6D4', pulseMs: 1100 };
-    if (feet > 65)  return { band: 'TRAILING', label: 'TRAILING', color: '#F59E0B', pulseMs: 700 };
-    if (feet > 25)  return { band: 'BAYING', label: 'BAYING', color: '#FF5500', pulseMs: 400 };
-    return { band: 'TREED', label: 'TREED / TAGGED', color: '#EF4444', pulseMs: 180 };
+  // Distance rings, in FEET. Widened from the old ladder because the previous
+  // close-in rings (BAYING 25-65ft, TREED <25ft) were narrower than ordinary
+  // phone GPS error, so two players 90ft apart could read as "on top of you".
+  //
+  //   COLD     > 250 ft
+  //   WARM     150 - 250 ft
+  //   HOT       80 - 150 ft
+  //   HOTTER    40 -  80 ft
+  //   RED HOT  <  40 ft   (auto-tag range)
+  //
+  // marginFeet is the combined GPS uncertainty of both phones. A hot reading is
+  // only meaningful if the error is smaller than the ring itself, so the band is
+  // capped when the fix is poor rather than claiming false confidence.
+  getDistanceBand(feet, marginFeet = 0) {
+    const BANDS = [
+      { band: 'COLD',   label: 'COLD',    color: '#64748B', pulseMs: 1600, min: 250 },
+      { band: 'WARM',   label: 'WARM',    color: '#06B6D4', pulseMs: 1100, min: 150 },
+      { band: 'HOT',    label: 'HOT',     color: '#F59E0B', pulseMs: 700,  min: 80  },
+      { band: 'HOTTER', label: 'HOTTER',  color: '#FF5500', pulseMs: 400,  min: 40  },
+      { band: 'REDHOT', label: 'RED HOT', color: '#EF4444', pulseMs: 180,  min: -1  }
+    ];
+
+    let idx = BANDS.findIndex(b => feet > b.min);
+    if (idx < 0) idx = BANDS.length - 1;
+
+    // Cap how hot we are willing to claim, based on how good the fix is.
+    let maxIdx = BANDS.length - 1;
+    if (marginFeet > 100) maxIdx = 1;      // no hotter than WARM
+    else if (marginFeet > 60) maxIdx = 2;  // no hotter than HOT
+
+    const capped = idx > maxIdx;
+    if (capped) idx = maxIdx;
+
+    return { ...BANDS[idx], capped };
+  }
+
+  // Combined uncertainty of two independent GPS fixes.
+  combinedAccuracy(accA, accB) {
+    const a = (typeof accA === 'number' && accA > 0) ? accA : 25;
+    const b = (typeof accB === 'number' && accB > 0) ? accB : 25;
+    return Math.round(Math.sqrt(a * a + b * b));
+  }
+
+  // Below this combined uncertainty an auto-tag is credible.
+  isTagCredible(marginFeet) {
+    return marginFeet <= 60;
   }
 
   getBufferedPosition(rawPos, realTimeHiderPos) {

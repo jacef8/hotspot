@@ -125,12 +125,12 @@ class HotspotAudio {
       let freq = 220;
       let duration = 0.12;
 
-      if (band === 'STRUCK') { freq = 349.23; duration = 0.10; }
-      else if (band === 'TRAILING') { freq = 523.25; duration = 0.08; }
-      else if (band === 'BAYING') { freq = 783.99; duration = 0.06; }
-      else if (band === 'TREED') { freq = 1046.50; duration = 0.15; }
+      if (band === 'WARM') { freq = 349.23; duration = 0.10; }
+      else if (band === 'HOT') { freq = 523.25; duration = 0.08; }
+      else if (band === 'HOTTER') { freq = 783.99; duration = 0.06; }
+      else if (band === 'REDHOT') { freq = 1046.50; duration = 0.15; }
 
-      osc.type = band === 'TREED' ? 'sawtooth' : 'sine';
+      osc.type = band === 'REDHOT' ? 'sawtooth' : 'sine';
       osc.frequency.setValueAtTime(freq, this.audioCtx.currentTime);
 
       gain.gain.setValueAtTime(0.15, this.audioCtx.currentTime);
@@ -254,17 +254,17 @@ class HotspotAudio {
       case 'COLD':
         this.speak('Signal Cold. Keep searching!', 1.0, 0.9);
         break;
-      case 'STRUCK':
-        this.speak('Signal struck! You got a scent!', 1.1, 1.0);
+      case 'WARM':
+        this.speak('Getting warm! Keep pushing!', 1.1, 1.0);
         break;
-      case 'TRAILING':
-        this.speak('Warmer! Trailing closely!', 1.15, 1.05);
+      case 'HOT':
+        this.speak('Hot! You are closing in!', 1.15, 1.05);
         break;
-      case 'BAYING':
-        this.speak('Baying range! You are burning up!', 1.25, 1.1);
+      case 'HOTTER':
+        this.speak('Hotter! Very close now!', 1.25, 1.1);
         break;
-      case 'TREED':
-        this.speak('TREED! HIDER IN SIGHT!', 1.3, 1.2);
+      case 'REDHOT':
+        this.speak('RED HOT! THEY ARE RIGHT THERE!', 1.3, 1.2);
         break;
     }
   }
