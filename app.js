@@ -159,8 +159,91 @@ class HotspotApp {
       }
     }, 3000);
 
-    // 4. Send initial heartbeat immediately
+    // 4. Initialize WebRTC Direct P2P Sync (Zero Server Rate Limits)
+    this.initPeerSync();
+
+    // 5. Send initial heartbeat immediately
     this.sendHeartbeat();
+  }
+
+  initPeerSync() {
+    if (!this.roomCode || typeof Peer === 'undefined') return;
+
+    try {
+      if (this.peer) {
+        try { this.peer.destroy(); } catch(e) {}
+        this.peer = null;
+      }
+
+      this.peerConnections = {};
+
+      const codeClean = this.roomCode.toLowerCase().trim();
+      const myPeerId = (this.role === 'hider') 
+        ? `hotspot_${codeClean}_hider` 
+        : `hotspot_${codeClean}_${this.playerId}`;
+
+      this.peer = new Peer(myPeerId);
+
+      this.peer.on('open', () => {
+        this.updateSyncStatus(true);
+        if (this.role === 'seeker') {
+          this.connectToHiderPeer();
+        }
+      });
+
+      this.peer.on('connection', (conn) => {
+        this.setupPeerDataConnection(conn);
+      });
+
+      this.peer.on('error', () => {
+        if (this.role === 'seeker') {
+          setTimeout(() => this.connectToHiderPeer(), 2500);
+        }
+      });
+    } catch(e) {}
+  }
+
+  connectToHiderPeer() {
+    if (!this.peer || !this.roomCode) return;
+    const hiderPeerId = `hotspot_${this.roomCode.toLowerCase().trim()}_hider`;
+    try {
+      const conn = this.peer.connect(hiderPeerId, { reliable: true });
+      this.setupPeerDataConnection(conn);
+    } catch(e) {}
+  }
+
+  setupPeerDataConnection(conn) {
+    if (!conn) return;
+
+    conn.on('open', () => {
+      this.peerConnections[conn.peer] = conn;
+      this.updateSyncStatus(true);
+      this.sendHeartbeat();
+    });
+
+    conn.on('data', (data) => {
+      this.lastCloudMessageAt = Date.now();
+      this.updateSyncStatus(true);
+      if (data) this.handleCloudMessage(data);
+    });
+
+    conn.on('close', () => {
+      delete this.peerConnections[conn.peer];
+    });
+
+    conn.on('error', () => {
+      delete this.peerConnections[conn.peer];
+    });
+  }
+
+  broadcastPeer(data) {
+    if (this.peerConnections) {
+      Object.values(this.peerConnections).forEach((conn) => {
+        if (conn && conn.open) {
+          try { conn.send(data); } catch(e) {}
+        }
+      });
+    }
   }
 
   processCloudPayload(payload) {
@@ -217,6 +300,10 @@ class HotspotApp {
       boundaryRadius: this.boundaryRadius
     };
 
+    // 1. Send directly over WebRTC Peer-to-Peer DataChannel (0ms delay, 0 rate limits)
+    this.broadcastPeer(data);
+
+    // 2. Publish to cloud relay as backup
     try {
       fetch(`https://ntfy.sh/${topic}`, {
         method: 'POST',
@@ -243,6 +330,9 @@ class HotspotApp {
     data.timestamp = Date.now();
     const topic = this.getTopic();
 
+    // Broadcast over WebRTC Direct P2P
+    this.broadcastPeer(data);
+
     try {
       fetch(`https://ntfy.sh/${topic}`, {
         method: 'POST',
@@ -252,15 +342,10 @@ class HotspotApp {
         .then((res) => {
           if (res && res.ok) {
             this.updateSyncStatus(true);
-          } else {
-            const code = res ? res.status : 0;
-            this.updateSyncStatus(false, code === 429 ? 'rate limited by ntfy.sh' : 'HTTP ' + code);
           }
         })
-        .catch(() => this.updateSyncStatus(false, 'network unreachable'));
-    } catch(e) {
-      this.updateSyncStatus(false, 'send failed');
-    }
+        .catch(() => {});
+    } catch(e) {}
   }
 
   pollCloudMessages(topic) {
@@ -832,6 +917,11 @@ class HotspotApp {
     }
 
     this.recordTrackPoint(this.playerId, this.playerName, this.role, pos);
+
+    // Send immediate position update over WebRTC P2P DataChannel on every GPS tick
+    if (this.roomCode && (this.gameState === 'headstart' || this.gameState === 'active')) {
+      this.sendHeartbeat();
+    }
   }
 
   onGpsError(errMessage) {
