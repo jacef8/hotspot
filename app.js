@@ -22,6 +22,9 @@ class HotspotApp {
     this.taggedHiderIds = {};
     this.lastCloudMessageAt = 0;
     this.syncFailCount = 0;
+    // Whoever created the room owns the well-known peer id for it. Deliberately
+    // NOT tied to hider/seeker, so role swaps and rematches cannot break the mesh.
+    this.isRoomHost = false;
     this.playerId = 'player_' + Math.random().toString(36).substr(2, 6);
     this.playerName = 'Runner_' + Math.floor(Math.random() * 899 + 100);
     this.role = 'seeker'; // 'hider' | 'seeker' | 'spectator'
@@ -84,28 +87,48 @@ class HotspotApp {
   }
 
   updateSyncStatus(ok, note) {
+    if (ok) this.syncFailCount = 0;
+    else this.syncFailCount++;
+    if (note) this.lastSyncNote = note;
+    this.refreshTransportStatus();
+  }
+
+  // Report what is actually true about each transport. The old version showed a
+  // single "cloud sync" verdict, so a dead relay looked identical to a dead
+  // room even when the P2P mesh was carrying everything perfectly well.
+  refreshTransportStatus() {
     const banner = document.getElementById('sync-warning-banner');
     const homeLabel = document.getElementById('cloud-sync-status');
-
-    if (ok) {
-      this.syncFailCount = 0;
+    if (!this.roomCode) {
       if (banner) banner.style.display = 'none';
-      if (homeLabel && this.roomCode) {
-        homeLabel.innerText = '🟢 Cloud sync live — room ' + this.roomCode;
-      }
       return;
     }
 
-    this.syncFailCount++;
-    // Only display warning if hard failure persists for 8 consecutive cycles (>32s)
-    if (this.syncFailCount < 8) return;
+    const peers = this.peerCount();
+    const relayOk = this.syncFailCount < 8;
 
-    const msg = '⚠️ CLOUD SYNC FAILING' + (note ? ' — ' + note : '') + ' — players may not update.';
-    if (banner) {
-      banner.innerText = msg;
-      banner.style.display = 'block';
+    let text;
+    if (peers > 0) {
+      text = `🟢 Direct link active — ${peers} device${peers === 1 ? '' : 's'} · room ${this.roomCode}`
+        + (relayOk ? '' : ' (relay unavailable, not needed)');
+    } else if (relayOk) {
+      text = `🟡 Looking for other devices… · room ${this.roomCode}`;
+    } else {
+      text = `🔴 No connection to other devices · room ${this.roomCode}`;
     }
-    if (homeLabel) homeLabel.innerText = msg;
+    if (homeLabel) homeLabel.innerText = text;
+
+    // Only alarm when BOTH transports are down — a blocked relay alone is fine.
+    if (banner) {
+      if (peers === 0 && !relayOk) {
+        banner.innerText = '⚠️ Cannot reach other devices'
+          + (this.lastSyncNote ? ' (' + this.lastSyncNote + ')' : '')
+          + ' — check that both phones are on the internet.';
+        banner.style.display = 'block';
+      } else {
+        banner.style.display = 'none';
+      }
+    }
   }
 
   requestGpsPermissionDirectly() {
@@ -158,10 +181,15 @@ class HotspotApp {
     //    ntfy.sh free tier rate-limits per IP; the old 1s POST + 1s poll cadence
     //    exceeded it and every failure was swallowed silently.
     this.heartbeatInterval = setInterval(() => {
+      // Keep hammering on the host until the P2P mesh is up. This is the path
+      // that works when the relay is blocked or down.
+      if (!this.isRoomHost) this.ensureHostConnection();
+
       this.sendHeartbeat();
       if (Date.now() - this.lastCloudMessageAt > 12000) {
         this.pollCloudMessages(this.getTopic());
       }
+      this.refreshTransportStatus();
     }, 3000);
 
     // 4. Initialize WebRTC Direct P2P Sync (Zero Server Rate Limits)
@@ -182,18 +210,27 @@ class HotspotApp {
 
       this.peerConnections = {};
 
-      // The peer ID is unique per device and carries NO role. A well-known
-      // `<code>_hider` ID collided with the public broker's 60-120s ghost
-      // retention, so re-hosting a room silently left the host with no P2P at
-      // all. The host now announces its real ID in every heartbeat and others
-      // dial that. Role changes no longer invalidate the ID either.
+      // Discovery MUST NOT depend on the ntfy relay. v2.5.10 made the relay the
+      // only way to learn the host's peer id, so when ntfy was unreachable no
+      // device ever found the room at all. The room creator claims a well-known
+      // id derived from the room code; everyone else dials it directly.
+      //
+      // The id is tied to who created the room, NOT to hider/seeker, so role
+      // swaps and rematches cannot invalidate it. The 60-120s ghost-id problem
+      // that made us abandon this in v2.5.0 is handled two ways now: leaveRoom
+      // destroys the peer (releasing the id immediately), and an unavailable-id
+      // error retries until the ghost expires.
       const codeClean = this.roomCode.toLowerCase().trim();
-      this.myPeerId = `hotspot_${codeClean}_${this.playerId}`;
+      this.myPeerId = this.isRoomHost
+        ? this.getHostPeerId()
+        : `hotspot_${codeClean}_${this.playerId}`;
 
       this.peer = new Peer(this.myPeerId);
 
       this.peer.on('open', () => {
         this.updateSyncStatus(true);
+        // Dial the host immediately — no relay round-trip needed.
+        if (!this.isRoomHost) this.ensureHostConnection();
         this.sendHeartbeat();
       });
 
@@ -202,16 +239,64 @@ class HotspotApp {
       });
 
       this.peer.on('error', (err) => {
-        // Unique IDs make collisions near-impossible, but if the broker still
-        // refuses the ID, take a fresh one rather than dying silently.
-        if (err && err.type === 'unavailable-id') {
-          this.myPeerId = `hotspot_${codeClean}_${this.playerId}_${Math.random().toString(36).slice(2, 6)}`;
-          try { if (this.peer) this.peer.destroy(); } catch(e) {}
-          this.peer = null;
-          setTimeout(() => this.initPeerSync(), 1500);
+        const type = err && err.type;
+
+        if (type === 'unavailable-id') {
+          if (this.isRoomHost) {
+            // A ghost registration from a previous session of THIS room code.
+            // It expires on its own; keep retrying rather than silently losing
+            // the well-known id, which every other device is dialing.
+            this.hostIdRetries = (this.hostIdRetries || 0) + 1;
+            if (this.hostIdRetries <= 40) {
+              try { if (this.peer) this.peer.destroy(); } catch(e) {}
+              this.peer = null;
+              setTimeout(() => this.initPeerSync(), 3000);
+            }
+          } else {
+            this.myPeerId = `hotspot_${codeClean}_${this.playerId}_${Math.random().toString(36).slice(2, 6)}`;
+            try { if (this.peer) this.peer.destroy(); } catch(e) {}
+            this.peer = null;
+            setTimeout(() => this.initPeerSync(), 1500);
+          }
+          return;
         }
+
+        // peer-unavailable just means the host is not up yet; the 3s retry in
+        // ensureHostConnection will keep trying.
+        this.updateSyncStatus(this.peerCount() > 0);
       });
     } catch(e) {}
+  }
+
+  // Abort relay requests quickly. When ntfy is blocked the TCP connect never
+  // completes, so without this a hung fetch accumulates every 3 seconds.
+  cloudFetch(url, opts) {
+    const o = Object.assign({}, opts || {});
+    try {
+      if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
+        o.signal = AbortSignal.timeout(6000);
+      }
+    } catch(e) {}
+    return fetch(url, o);
+  }
+
+  getHostPeerId() {
+    if (!this.roomCode) return null;
+    return `hotspot_${this.roomCode.toLowerCase().trim()}_host`;
+  }
+
+  peerCount() {
+    if (!this.peerConnections) return 0;
+    return Object.values(this.peerConnections).filter(c => c && c.open).length;
+  }
+
+  // Non-hosts keep trying to reach the host until the DataChannel is open.
+  ensureHostConnection() {
+    if (this.isRoomHost || !this.roomCode || !this.peer) return;
+    const hostId = this.getHostPeerId();
+    const existing = this.peerConnections ? this.peerConnections[hostId] : null;
+    if (existing && existing.open) return;
+    this.connectToPeerId(hostId);
   }
 
   // Dial the hider's announced peer ID. Seekers AND spectators both need this;
@@ -354,7 +439,7 @@ class HotspotApp {
     if (!includeCloud) return;
 
     try {
-      fetch(`https://ntfy.sh/${topic}`, {
+      this.cloudFetch(`https://ntfy.sh/${topic}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -383,7 +468,7 @@ class HotspotApp {
     this.broadcastPeer(data);
 
     try {
-      fetch(`https://ntfy.sh/${topic}`, {
+      this.cloudFetch(`https://ntfy.sh/${topic}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -400,7 +485,7 @@ class HotspotApp {
   pollCloudMessages(topic) {
     if (!topic) return;
     try {
-      fetch(`https://ntfy.sh/${topic}/json?poll=1&since=15s`)
+      this.cloudFetch(`https://ntfy.sh/${topic}/json?poll=1&since=15s`)
         .then(res => {
           if (!res || !res.ok) {
             const code = res ? res.status : 0;
@@ -443,9 +528,10 @@ class HotspotApp {
         if (data.boundaryRadius) this.boundaryRadius = data.boundaryRadius;
         if (data.matchDurationSeconds) this.matchDurationSeconds = data.matchDurationSeconds;
 
-        // If I am the Host (Hider), relay this player's heartbeat to all connected Seekers!
-        // This ensures all Seekers see each other on their screen in real-time.
-        if (this.role === 'hider' && data.senderId !== this.playerId) {
+        // The room creator is the mesh hub and relays every heartbeat to all
+        // other connected devices, so seekers see each other. Keyed on host,
+        // not on role, so a role swap does not silently kill the relay.
+        if (this.isRoomHost && data.senderId !== this.playerId) {
           this.broadcastPeer(data);
         }
 
@@ -601,6 +687,8 @@ class HotspotApp {
     this.gameMode = mode;
     this.matchDurationSeconds = parseInt(matchDurationSec, 10) || 300;
     this.roomCode = this.generateRoomCode();
+    this.isRoomHost = true;   // owns the well-known peer id for this room
+    this.hostIdRetries = 0;
     this.joinTime = Date.now();
     this.currentRoundId = null;
     this.seenRoundIds = {};
@@ -675,6 +763,8 @@ class HotspotApp {
 
     this.roomCode = null;
     this.currentRoundId = null;
+    this.isRoomHost = false;
+    this.hostIdRetries = 0;
     this.isSoloDrill = false;
     this.gameState = 'lobby';
     this.players = {};
@@ -824,6 +914,7 @@ class HotspotApp {
 
     this.isSoloDrill = false;
     this.roomCode = code.toUpperCase().trim();
+    this.isRoomHost = false;
     this.joinTime = Date.now();
     this.currentRoundId = null;
     this.seenRoundIds = {};
