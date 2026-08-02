@@ -215,7 +215,7 @@ class HotspotApp {
   }
 
   // Dial the hider's announced peer ID. Seekers AND spectators both need this;
-  // previously spectators never connected at all and ran God View on the slow,
+  // previously spectators never connected at all and ran the spectator map on the slow,
   // rate-limited cloud relay alone.
   connectToPeerId(peerId) {
     if (!this.peer || !peerId || peerId === this.myPeerId) return;
@@ -324,6 +324,11 @@ class HotspotApp {
     const currentGeo = (window.hotspotGeo && window.hotspotGeo.currentPosition) ? window.hotspotGeo.currentPosition : null;
     const pos = this.myPosition || currentGeo;
 
+    // Spectators are not on the field and must never broadcast a position. A
+    // laptop without GPS falls back to a hardcoded default, which would drop a
+    // phantom player on the map and stretch everyone's view to fit it.
+    const isSpectator = (this.role === 'spectator');
+
     const data = {
       type: 'HEARTBEAT',
       senderId: this.playerId,
@@ -334,9 +339,9 @@ class HotspotApp {
         id: this.playerId,
         name: this.playerName,
         role: this.role,
-        lat: pos ? pos.lat : null,
-        lng: pos ? pos.lng : null,
-        accuracy: pos ? (pos.accuracy || 25) : 25
+        lat: isSpectator ? null : (pos ? pos.lat : null),
+        lng: isSpectator ? null : (pos ? pos.lng : null),
+        accuracy: isSpectator ? null : (pos ? (pos.accuracy || 25) : 25)
       },
       headStartSeconds: this.headStartSeconds,
       boundaryRadius: this.boundaryRadius
@@ -1171,7 +1176,10 @@ class HotspotApp {
     });
 
     const warnBox = document.getElementById('gps-warning-banner');
-    if (warnBox) {
+    if (warnBox && this.role === 'spectator') {
+      // Watching from a laptop with no GPS is a supported setup, not a fault.
+      warnBox.style.display = 'none';
+    } else if (warnBox) {
       if (pos.isProtocolWarning) {
         warnBox.innerText = '⚠️ Opened as local file — GPS requires HTTPS web server.';
         warnBox.style.display = 'block';
@@ -1207,10 +1215,17 @@ class HotspotApp {
 
   onGpsError(errMessage) {
     const warnBox = document.getElementById('gps-warning-banner');
-    if (warnBox) {
-      warnBox.innerText = `📍 Tap to Allow GPS Access: ${errMessage}`;
-      warnBox.style.display = 'block';
+    if (!warnBox) return;
+
+    // A spectator does not need a location fix — watching from a laptop or a
+    // desktop with no GPS is a normal way to run the game, not an error.
+    if (this.role === 'spectator') {
+      warnBox.style.display = 'none';
+      return;
     }
+
+    warnBox.innerText = `📍 Tap to Allow GPS Access: ${errMessage}`;
+    warnBox.style.display = 'block';
   }
 
   recordTrackPoint(playerId, name, role, pos) {

@@ -1,6 +1,6 @@
 /**
  * HOTSPOT - Leaflet Map Engine
- * Powers Spectator (God View) & Post-game Track Replay
+ * Powers Spectator View & Post-game Track Replay
  */
 
 class HotspotReplay {
@@ -38,7 +38,7 @@ class HotspotReplay {
 
   setUserPanned(panned) {
     this.userHasPanned = panned;
-    // Both the God View and the replay screen carry a recenter button.
+    // Both the spectator and replay screens carry a recenter button.
     document.querySelectorAll('.map-recenter-btn').forEach(btn => {
       btn.style.display = panned ? 'block' : 'none';
     });
@@ -55,7 +55,7 @@ class HotspotReplay {
 
   // Draw the yard limit on the map. Players in the field only get a numeric
   // "room left" readout, so this is the one place the limit is actually visible
-  // as a shape — useful for a parent running the game from God View.
+  // as a shape — useful for a parent running the game from the spectator map.
   setBoundary(centerPos, radiusFeet) {
     if (!this.map || typeof L === 'undefined') return;
 
@@ -147,6 +147,8 @@ class HotspotReplay {
     const bounds = [];
 
     Object.values(playersData).forEach(player => {
+      // Spectators watch; they are not pieces on the board.
+      if (player.role === 'spectator') return;
       if (!player.lat || !player.lng) return;
 
       const latlng = [player.lat, player.lng];
