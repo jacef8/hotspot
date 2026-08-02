@@ -339,6 +339,18 @@ class HotspotApp {
       return;
     }
 
+    if (data.type === 'HIDER_ABANDONED') {
+      if (this.gameState === 'active' || this.gameState === 'headstart') {
+        this.stopPulseLoop();
+        if (this.headStartTimer) clearInterval(this.headStartTimer);
+        window.hotspotAudio.speak(`Attention! Hider ${data.name || ''} left the hunt. Game canceled!`);
+        alert(`⚠️ HIDER LEFT THE HUNT!\n\nHider (${data.name || 'Hider'}) has abandoned the match.`);
+        this.showScreen('home-screen');
+        try { this.leaveRoom(); } catch(e) {}
+      }
+      return;
+    }
+
     if (data.type === 'TAG') {
       this.applyTag(data);
       return;
@@ -479,6 +491,14 @@ class HotspotApp {
   }
 
   leaveRoom() {
+    if (this.role === 'hider' && this.roomCode && (this.gameState === 'headstart' || this.gameState === 'active')) {
+      this.broadcastCloud({
+        type: 'HIDER_ABANDONED',
+        roundId: this.currentRoundId,
+        name: this.playerName
+      });
+    }
+
     if (this.eventSource) {
       try { this.eventSource.close(); } catch(e) {}
       this.eventSource = null;
@@ -859,6 +879,29 @@ class HotspotApp {
         const hiderPlayer = Object.values(this.players).find(p => p.role === 'hider');
         if (hiderPlayer && hiderPlayer.lat) {
           hiderPos = { lat: hiderPlayer.lat, lng: hiderPlayer.lng };
+        }
+
+        // Connection loss detection: notify Seekers if Hider stops sending heartbeats
+        if (hiderPlayer && hiderPlayer.lastSeen) {
+          const silentMs = Date.now() - hiderPlayer.lastSeen;
+          if (silentMs > 35000) {
+            this.stopPulseLoop();
+            if (this.headStartTimer) clearInterval(this.headStartTimer);
+            window.hotspotAudio.speak("Hider connection lost completely. Hunt canceled!");
+            alert("⚠️ HIDER DISCONNECTED!\n\nHider signal was lost for over 35 seconds. Hunt canceled.");
+            this.showScreen('home-screen');
+            try { this.leaveRoom(); } catch(e) {}
+            return;
+          } else if (silentMs > 18000) {
+            const bandLabel = document.getElementById('seeker-band-label');
+            if (bandLabel) bandLabel.innerText = '⚠️ HIDER OFFLINE';
+            if (!this.hiderWarnSpoken) {
+              this.hiderWarnSpoken = true;
+              window.hotspotAudio.speak("Warning! Hider connection lost. Waiting for signal.");
+            }
+          } else {
+            this.hiderWarnSpoken = false;
+          }
         }
       }
 
