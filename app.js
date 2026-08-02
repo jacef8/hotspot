@@ -2,6 +2,7 @@
  * HOTSPOT - Main Game Engine & Controller
  * Standard US Customary Units (Feet & Yards).
  * 100% Bulletproof HTTPS 1-Second Heartbeat Cloud Sync Engine (Port 443).
+ * Dynamic v2.4.1 Isolated Topic Channels & Storage Wipe.
  */
 
 window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || null;
@@ -51,7 +52,18 @@ class HotspotApp {
     this.currentDistance = 999;
     this.lastPulseTime = 0;
 
+    this.clearStaleCache();
     this.startGpsTracking(); // Immediate GPS start
+  }
+
+  clearStaleCache() {
+    try {
+      sessionStorage.clear();
+      // Keep only stats in localStorage
+      const stats = localStorage.getItem('hotspot_stats');
+      localStorage.clear();
+      if (stats) localStorage.setItem('hotspot_stats', stats);
+    } catch(e) {}
   }
 
   requestGpsPermissionDirectly() {
@@ -64,7 +76,8 @@ class HotspotApp {
   // --- 100% BULLETPROOF HTTPS 1-SECOND HEARTBEAT CLOUD SYNC ---
   initCloudSync() {
     if (!this.roomCode) return;
-    const topic = 'hotspot_room_' + this.roomCode.toLowerCase();
+    // v2.4.1 Isolated Topic channel to guarantee zero cached messages from older runs
+    const topic = 'hotspot_v241_room_' + this.roomCode.toLowerCase();
 
     // 1. Clear existing timers and streams
     if (this.eventSource) {
@@ -101,7 +114,7 @@ class HotspotApp {
 
   sendHeartbeat() {
     if (!this.roomCode) return;
-    const topic = 'hotspot_room_' + this.roomCode.toLowerCase();
+    const topic = 'hotspot_v241_room_' + this.roomCode.toLowerCase();
 
     const data = {
       type: 'HEARTBEAT',
@@ -132,7 +145,7 @@ class HotspotApp {
     if (!this.roomCode) return;
     data.senderId = this.playerId;
     data.timestamp = Date.now();
-    const topic = 'hotspot_room_' + this.roomCode.toLowerCase();
+    const topic = 'hotspot_v241_room_' + this.roomCode.toLowerCase();
 
     try {
       fetch(`https://ntfy.sh/${topic}`, {
@@ -145,7 +158,7 @@ class HotspotApp {
 
   pollCloudMessages(topic) {
     try {
-      fetch(`https://ntfy.sh/${topic}/json?poll=1&since=3s`)
+      fetch(`https://ntfy.sh/${topic}/json?poll=1&since=2s`)
         .then(res => res.text())
         .then(text => {
           if (!text) return;
