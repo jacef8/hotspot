@@ -330,7 +330,6 @@ class HotspotApp {
         const remaining = Math.max(0, duration - elapsed);
         this.headStartRemaining = remaining;
 
-        // Update all headstart display elements on screen
         document.querySelectorAll('.headstart-counter').forEach(el => {
           el.innerText = `⏳ HEAD START: ${remaining}s`;
         });
@@ -455,36 +454,37 @@ class HotspotApp {
   updateProximityEngine() {
     if (!this.myPosition) return;
 
-    let hiderPos = null;
-
-    if (this.isSoloDrill) {
-      hiderPos = window.hotspotGeo.soloHiderPosition;
-    } else {
-      const hiderPlayer = this.players[this.hiderId];
-      if (hiderPlayer && hiderPlayer.lat) {
-        hiderPos = { lat: hiderPlayer.lat, lng: hiderPlayer.lng };
-      }
-    }
-
-    if (this.decoyPos) {
-      hiderPos = this.decoyPos;
-    }
-
-    if (!hiderPos) return;
-
-    const bufferedHiderPos = window.hotspotGeo.getBufferedPosition(this.myPosition, hiderPos);
-
-    const distMeters = window.hotspotGeo.calculateDistance(
-      this.myPosition.lat, this.myPosition.lng,
-      bufferedHiderPos.lat, bufferedHiderPos.lng
-    );
-
-    this.currentDistance = distMeters;
-
-    const bandInfo = window.hotspotGeo.getDistanceBand(distMeters);
-    this.currentBand = bandInfo.band;
-
+    // ================= SEEKER PROXIMITY CALCULATIONS =================
     if (this.role === 'seeker') {
+      let hiderPos = null;
+
+      if (this.isSoloDrill) {
+        hiderPos = window.hotspotGeo.soloHiderPosition;
+      } else {
+        const hiderPlayer = this.players[this.hiderId];
+        if (hiderPlayer && hiderPlayer.lat) {
+          hiderPos = { lat: hiderPlayer.lat, lng: hiderPlayer.lng };
+        }
+      }
+
+      if (this.decoyPos) {
+        hiderPos = this.decoyPos;
+      }
+
+      if (!hiderPos) return;
+
+      const bufferedHiderPos = window.hotspotGeo.getBufferedPosition(this.myPosition, hiderPos);
+
+      const distMeters = window.hotspotGeo.calculateDistance(
+        this.myPosition.lat, this.myPosition.lng,
+        bufferedHiderPos.lat, bufferedHiderPos.lng
+      );
+
+      this.currentDistance = distMeters;
+
+      const bandInfo = window.hotspotGeo.getDistanceBand(distMeters);
+      this.currentBand = bandInfo.band;
+
       const pulseRing = document.getElementById('seeker-pulse-ring');
       const bandLabel = document.getElementById('seeker-band-label');
 
@@ -516,19 +516,36 @@ class HotspotApp {
           arrow.style.transform = `rotate(${bearing}deg)`;
         }
       }
+
+      // Check Tag Radius (8m)
+      if (distMeters <= 8 && this.gameState === 'active') {
+        this.triggerTag(this.playerId, this.playerName, this.hiderId);
+      }
     }
 
+    // ================= HIDER RADAR (DISTANCE TO CLOSEST SEEKER) =================
     if (this.role === 'hider') {
       const distEl = document.getElementById('hider-nearest-dist');
-      if (distEl) distEl.innerText = `${Math.round(distMeters)}m`;
+      const seekerPlayers = Object.values(this.players).filter(p => p.role === 'seeker' && p.lat && p.lng);
+
+      if (seekerPlayers.length > 0) {
+        const distances = seekerPlayers.map(s => {
+          return window.hotspotGeo.calculateDistance(
+            this.myPosition.lat, this.myPosition.lng,
+            s.lat, s.lng
+          );
+        });
+
+        const closestDist = Math.min(...distances);
+        if (distEl) distEl.innerText = `${Math.round(closestDist)}m`;
+      } else {
+        if (distEl) distEl.innerText = '--m';
+      }
     }
 
+    // ================= SPECTATOR GOD VIEW =================
     if (this.role === 'spectator') {
       window.hotspotReplay.updateSpectatorView(this.players);
-    }
-
-    if (distMeters <= 8 && this.gameState === 'active') {
-      this.triggerTag(this.playerId, this.playerName, this.hiderId);
     }
   }
 
