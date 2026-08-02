@@ -1,0 +1,10 @@
+{
+  "name": "HOTSPOT — Proximity Tag & Hunt",
+  "short_name": "HOTSPOT",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#080C14",
+  "theme_color": "#080C14",
+  "description": "Extreme yard tag and real-world proximity manhunt web app."
+}
