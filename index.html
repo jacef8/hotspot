@@ -180,7 +180,7 @@
 
       <div class="card" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
         <div class="input-group">
-          <label class="input-label">6-Character Room Code</label>
+          <label class="input-label">Room Code (4 or 6 characters)</label>
           <input type="text" id="join-code-input" class="text-input" maxlength="6" placeholder="e.g. K7RQ4M" style="text-transform: uppercase; font-size: 22px; text-align: center; letter-spacing: 4px;" onkeydown="if(event.key==='Enter') window.joinRoomAction()">
         </div>
 
@@ -343,11 +343,12 @@
       const code = codeEl ? codeEl.value : '';
       const nick = nickEl ? nickEl.value : 'Chaser';
       
-      if (!code || code.trim().length !== 6) {
-        alert('Please type in the full 6-character Room Code from the host!');
+      const cleanCode = code ? code.trim() : '';
+      if (!cleanCode || (cleanCode.length !== 4 && cleanCode.length !== 6)) {
+        alert('Please type in the Room Code from the host!');
         return;
       }
-      window.hotspotApp.joinRoom(code, nick, 'seeker');
+      window.hotspotApp.joinRoom(cleanCode, nick, 'seeker');
     };
 
     window.joinSpectatorAction = function() {

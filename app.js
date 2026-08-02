@@ -527,14 +527,17 @@ class HotspotApp {
   }
 
   goHome() {
-    this.leaveRoom();
     this.showScreen('home-screen');
+    try {
+      this.leaveRoom();
+    } catch(e) {}
     this.updateSeasonStatsDisplay();
   }
 
   joinRoom(code, nickname, role = 'seeker') {
-    if (!code || code.trim().length !== 6) {
-      alert('Please enter the full 6-character room code.');
+    const cleanCode = code ? code.trim() : '';
+    if (!cleanCode || (cleanCode.length !== 4 && cleanCode.length !== 6)) {
+      alert('Please enter the room code from the host.');
       return;
     }
 
