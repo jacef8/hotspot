@@ -1,7 +1,7 @@
 /**
  * HOTSPOT - Main Game Engine & Controller
  * Standard US Customary Units (Feet & Yards).
- * PeerJS WebRTC Cloud Sync & Android GPS Permission Engine.
+ * MQTT over WebSockets Real-Time Cloud Sync & Android GPS Permission Engine.
  */
 
 window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || null;
@@ -9,9 +9,7 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || null;
 class HotspotApp {
   constructor() {
     this.db = null;
-    this.peer = null;
-    this.peerConns = [];
-    this.hostConn = null;
+    this.mqttClient = null;
 
     this.roomCode = null;
     this.playerId = 'player_' + Math.random().toString(36).substr(2, 6);
@@ -74,112 +72,107 @@ class HotspotApp {
     }
   }
 
-  // --- PEERJS WEBRTC REAL-TIME SYNC ---
-  initHostPeer() {
-    if (typeof Peer === 'undefined') return;
+  // --- MQTT OVER WEBSOCKETS REAL-TIME CLOUD SYNC ---
+  initMqttSync() {
+    if (typeof mqtt === 'undefined' || !this.roomCode) return;
     try {
-      if (this.peer) this.peer.destroy();
-      const peerId = 'hotspot_' + this.roomCode;
-      this.peer = new Peer(peerId);
+      if (this.mqttClient) {
+        try { this.mqttClient.end(); } catch(e) {}
+      }
 
-      this.peer.on('open', () => {
-        console.log('Host Peer open:', peerId);
+      const topic = 'hotspot/room/' + this.roomCode;
+
+      this.mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
+        clientId: 'hotspot_' + this.playerId + '_' + Math.random().toString(36).substr(2, 4),
+        keepalive: 30,
+        clean: true,
+        reconnectPeriod: 2000
       });
 
-      this.peer.on('connection', (conn) => {
-        this.peerConns.push(conn);
+      this.mqttClient.on('connect', () => {
+        console.log('Connected to MQTT Cloud Sync topic:', topic);
+        this.mqttClient.subscribe(topic);
 
-        conn.on('data', (data) => {
-          this.handlePeerData(data, conn);
+        // Announce presence to room
+        this.broadcastMqtt({
+          type: 'PLAYER_JOIN',
+          senderId: this.playerId,
+          player: {
+            id: this.playerId,
+            name: this.playerName,
+            role: this.role,
+            lat: this.myPosition ? this.myPosition.lat : null,
+            lng: this.myPosition ? this.myPosition.lng : null,
+            accuracy: this.myPosition ? this.myPosition.accuracy : 25
+          }
         });
+      });
 
-        conn.on('close', () => {
-          this.peerConns = this.peerConns.filter(c => c !== conn);
-        });
-
-        conn.send({
-          type: 'ROOM_SNAPSHOT',
-          players: this.players,
-          hiderId: this.hiderId,
-          gameState: this.gameState,
-          headStartSeconds: this.headStartSeconds,
-          boundaryRadius: this.boundaryRadius,
-          gameMode: this.gameMode
-        });
+      this.mqttClient.on('message', (t, message) => {
+        try {
+          const data = JSON.parse(message.toString());
+          this.handleMqttMessage(data);
+        } catch(e) {}
       });
     } catch(e) {
-      console.warn('PeerJS Host init warning:', e);
+      console.warn('MQTT init warning:', e);
     }
   }
 
-  initClientPeer() {
-    if (typeof Peer === 'undefined') return;
-    try {
-      if (this.peer) this.peer.destroy();
-      this.peer = new Peer();
-
-      this.peer.on('open', () => {
-        const hostPeerId = 'hotspot_' + this.roomCode;
-        this.hostConn = this.peer.connect(hostPeerId);
-
-        this.hostConn.on('open', () => {
-          this.hostConn.send({
-            type: 'JOIN_PLAYER',
-            player: {
-              id: this.playerId,
-              name: this.playerName,
-              role: this.role,
-              lat: this.myPosition ? this.myPosition.lat : null,
-              lng: this.myPosition ? this.myPosition.lng : null
-            }
-          });
-        });
-
-        this.hostConn.on('data', (data) => {
-          this.handlePeerData(data, this.hostConn);
-        });
-      });
-    } catch(e) {
-      console.warn('PeerJS Client init warning:', e);
+  broadcastMqtt(data) {
+    if (this.mqttClient && this.mqttClient.connected && this.roomCode) {
+      try {
+        data.senderId = this.playerId;
+        this.mqttClient.publish('hotspot/room/' + this.roomCode, JSON.stringify(data));
+      } catch(e) {}
     }
   }
 
-  handlePeerData(data, conn) {
-    if (!data) return;
+  handleMqttMessage(data) {
+    if (!data || data.senderId === this.playerId) return;
 
-    if (data.type === 'JOIN_PLAYER' || data.type === 'UPDATE_PLAYER') {
+    if (data.type === 'PLAYER_JOIN' || data.type === 'PLAYER_UPDATE') {
       const p = data.player;
-      this.players[p.id] = { ...this.players[p.id], ...p };
-      this.updateLobbyList();
-      
-      if (this.role === 'hider' && this.peerConns.length > 0) {
-        this.broadcastToAllPeers({ type: 'ROOM_SNAPSHOT', players: this.players, gameState: this.gameState });
+      if (p && p.id) {
+        this.players[p.id] = { ...this.players[p.id], ...p };
+        this.updateLobbyList();
+
+        // Host responds with room snapshot
+        if (this.role === 'hider') {
+          this.broadcastMqtt({
+            type: 'ROOM_SNAPSHOT',
+            players: this.players,
+            hiderId: this.hiderId,
+            gameState: this.gameState,
+            headStartSeconds: this.headStartSeconds,
+            boundaryRadius: this.boundaryRadius,
+            gameMode: this.gameMode
+          });
+        }
       }
     } else if (data.type === 'ROOM_SNAPSHOT') {
-      this.players = data.players || this.players;
+      this.players = { ...this.players, ...data.players };
       if (data.hiderId) this.hiderId = data.hiderId;
-      if (data.gameState && data.gameState !== this.gameState) {
-        this.gameState = data.gameState;
-        this.handleGameStateChange(this.gameState, data);
-      }
       this.updateLobbyList();
-    } else if (data.type === 'GAME_STATE') {
-      if (data.gameState !== this.gameState) {
+
+      // Only sync state if match is ALREADY live
+      if (data.gameState && (data.gameState === 'headstart' || data.gameState === 'active') && this.gameState === 'lobby') {
         this.gameState = data.gameState;
         this.handleGameStateChange(this.gameState, data);
       }
-    }
-  }
-
-  broadcastToAllPeers(data) {
-    if (this.hostConn && this.hostConn.open) {
-      try { this.hostConn.send(data); } catch(e) {}
-    }
-    this.peerConns.forEach(conn => {
-      if (conn && conn.open) {
-        try { conn.send(data); } catch(e) {}
+    } else if (data.type === 'START_HEADSTART') {
+      this.gameState = 'headstart';
+      this.handleGameStateChange('headstart', data);
+    } else if (data.type === 'HIDER_READY_EARLY') {
+      this.gameState = 'active';
+      this.handleGameStateChange('active', data);
+    } else if (data.type === 'POS_UPDATE') {
+      if (data.playerId && this.players[data.playerId]) {
+        this.players[data.playerId].lat = data.lat;
+        this.players[data.playerId].lng = data.lng;
+        this.players[data.playerId].accuracy = data.accuracy;
       }
-    });
+    }
   }
 
   toggleSound() {
@@ -274,7 +267,7 @@ class HotspotApp {
     this.updateLobbyList();
     this.showScreen('lobby-screen');
 
-    this.initHostPeer();
+    this.initMqttSync();
 
     window.hotspotAudio.speak(`Hunt created. Code is ${this.roomCode.split('').join(' ')}`);
 
@@ -321,7 +314,7 @@ class HotspotApp {
     this.updateLobbyList();
     this.showScreen('lobby-screen');
 
-    this.initClientPeer();
+    this.initMqttSync();
 
     window.hotspotAudio.speak(`Joined hunt ${this.roomCode.split('').join(' ')}`);
 
@@ -358,8 +351,8 @@ class HotspotApp {
       this.players[this.playerId].role = this.role;
     }
 
-    this.broadcastToAllPeers({
-      type: 'UPDATE_PLAYER',
+    this.broadcastMqtt({
+      type: 'PLAYER_UPDATE',
       player: { id: this.playerId, name: this.playerName, role: this.role }
     });
 
@@ -392,7 +385,7 @@ class HotspotApp {
         this.boundaryRadius = data.boundaryRadius || 250;
         this.updateLobbyList();
 
-        if (data.gameState !== this.gameState) {
+        if (data.gameState !== this.gameState && data.gameState !== 'lobby') {
           this.gameState = data.gameState;
           this.handleGameStateChange(this.gameState, data);
         }
@@ -450,11 +443,11 @@ class HotspotApp {
       this.yardCenterPos = { lat: this.myPosition.lat, lng: this.myPosition.lng };
     }
 
-    this.broadcastToAllPeers({
-      type: 'GAME_STATE',
-      gameState: 'headstart',
+    this.broadcastMqtt({
+      type: 'START_HEADSTART',
       headStartStartTime: startTime,
-      headStartSeconds: this.headStartSeconds
+      headStartSeconds: this.headStartSeconds,
+      yardCenterPos: this.yardCenterPos
     });
 
     if (this.db) {
@@ -482,7 +475,7 @@ class HotspotApp {
       this.headStartTimer = null;
     }
 
-    this.broadcastToAllPeers({ type: 'GAME_STATE', gameState: 'active' });
+    this.broadcastMqtt({ type: 'HIDER_READY_EARLY' });
 
     if (this.db) {
       try { this.db.ref(`rooms/${this.roomCode}`).update({ gameState: 'active' }); } catch (e) {}
@@ -542,7 +535,7 @@ class HotspotApp {
           window.hotspotAudio.speak('PACK RELEASED! HUNT IS LIVE!');
 
           if (this.role === 'hider') {
-            this.broadcastToAllPeers({ type: 'GAME_STATE', gameState: 'active' });
+            this.broadcastMqtt({ type: 'HIDER_READY_EARLY' });
             if (this.db) {
               try { this.db.ref(`rooms/${this.roomCode}`).update({ gameState: 'active' }); } catch (e) {}
             }
@@ -624,9 +617,12 @@ class HotspotApp {
       this.players[this.playerId].accuracy = pos.accuracy;
     }
 
-    this.broadcastToAllPeers({
-      type: 'UPDATE_PLAYER',
-      player: { id: this.playerId, name: this.playerName, role: this.role, lat: pos.lat, lng: pos.lng, accuracy: pos.accuracy }
+    this.broadcastMqtt({
+      type: 'POS_UPDATE',
+      playerId: this.playerId,
+      lat: pos.lat,
+      lng: pos.lng,
+      accuracy: pos.accuracy
     });
 
     if (this.db && this.roomCode) {
