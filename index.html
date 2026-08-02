@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.5.13</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.5.14</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -22,7 +22,7 @@
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=2.5.13">
+  <link rel="stylesheet" href="style.css?v=2.5.14">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -64,7 +64,7 @@
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="brand-subtitle">Extreme Yard Tag & Proximity Hunt</div>
         <div style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
-          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800;">v2.5.13</span>
+          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800;">v2.5.14</span>
           <span id="cloud-sync-status" style="font-size: 11px; color: var(--text-muted); font-weight: 600; text-align: center; letter-spacing: 0.5px;">
             🌐 hotspot-app-yardtag.web.app
           </span>
@@ -129,7 +129,7 @@
 
       <div class="card" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
         <div class="input-group">
-          <label class="input-label">Head Start Duration</label>
+          <label class="input-label">Hiding Time (before seekers are released)</label>
           <select id="setup-headstart" class="select-input">
             <option value="30">30 Seconds</option>
             <option value="60" selected>60 Seconds (Standard)</option>
@@ -271,7 +271,7 @@
       </div>
       <div style="text-align: center; padding: 2px 0;">
         <div id="headstart-banner-seeker" class="headstart-counter" style="font-size: 14px; font-weight: 800; color: var(--accent-amber); letter-spacing: 1px;">
-          ⏳ HIDER HEAD START: 60s
+          ⏳ HIDER IS HIDING: 60s
         </div>
         <div id="match-timer-seeker" style="font-size: 13px; font-weight: 800; color: var(--accent-cyan); margin-top: 2px;">
           ⏱️ MATCH TIME: 5:00
@@ -287,7 +287,7 @@
           <svg id="bearing-arrow" class="bearing-arrow" viewBox="0 0 24 24" fill="none" stroke="#00F0FF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="12 2 19 21 12 17 5 21 12 2"></polygon>
           </svg>
-          <div id="seeker-band-label" class="seeker-band-label">COLD</div>
+          <div id="seeker-band-label" class="seeker-band-label">STAND BY</div>
           <div id="seeker-dist-readout" style="font-size: 20px; font-weight: 800; color: var(--text-light); margin-top: 4px; text-align: center; line-height: 1.2;">--</div>
         </div>
       </div>
@@ -316,7 +316,7 @@
         <div class="role-badge hider-role-badge">👑 YOU ARE THE HIDER</div>
       </div>
       <div style="text-align: center;">
-        <div class="brand-subtitle">HEAD START COUNTDOWN</div>
+        <div class="brand-subtitle">HIDING TIME REMAINING</div>
         <div id="hider-timer-display" class="headstart-counter" style="font-size: 32px; font-weight: 900; color: var(--accent-amber);">60s</div>
         <div id="match-timer-hider" style="font-size: 14px; font-weight: 800; color: var(--accent-cyan); margin-top: 4px;">
           ⏱️ MATCH TIME: 5:00
@@ -500,15 +500,15 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=2.5.13"></script>
-  <script src="geo.js?v=2.5.13"></script>
-  <script src="replay.js?v=2.5.13"></script>
-  <script src="app.js?v=2.5.13"></script>
+  <script src="audio.js?v=2.5.14"></script>
+  <script src="geo.js?v=2.5.14"></script>
+  <script src="replay.js?v=2.5.14"></script>
+  <script src="app.js?v=2.5.14"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=2.5.13').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=2.5.14').catch(() => {});
       });
     }
 

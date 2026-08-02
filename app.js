@@ -803,6 +803,7 @@ class HotspotApp {
     if (readyBtn) readyBtn.style.display = '';
 
     this.triggerSmokeVisual(false);
+    this.blankSeekerRadar();
   }
 
   // "Winner becomes hider" used to be announced and then thrown away, because
@@ -853,6 +854,7 @@ class HotspotApp {
     const readyBtn = document.getElementById('btn-hider-ready');
     if (readyBtn) readyBtn.style.display = '';
     this.triggerSmokeVisual(false);
+    this.blankSeekerRadar();
 
     // Roles were already rotated locally when the tag landed; publish the new
     // one so every roster agrees before the next round starts.
@@ -1091,7 +1093,12 @@ class HotspotApp {
         window.hotspotReplay.initMap('spectator-map');
       }
 
-      window.hotspotAudio.speak(`Turn the pack loose! Hider gets ${duration} seconds head start!`);
+      // No proximity information while the hider is still hiding. The radar
+      // used to sit on a stale COLD/HOT reading during the countdown, which
+      // leaks a hint before the hunt has even started.
+      this.blankSeekerRadar();
+
+      window.hotspotAudio.speak(`Hider has ${duration} seconds to hide!`);
 
       if (this.headStartTimer) clearInterval(this.headStartTimer);
 
@@ -1101,7 +1108,7 @@ class HotspotApp {
         this.headStartRemaining = remaining;
 
         document.querySelectorAll('.headstart-counter').forEach(el => {
-          el.innerText = `⏳ HEAD START: ${remaining}s`;
+          el.innerText = `⏳ HIDING TIME: ${remaining}s`;
         });
 
         const hiderCounter = document.getElementById('hider-timer-display');
@@ -1291,7 +1298,7 @@ class HotspotApp {
     this.recordTrackPoint(this.playerId, this.playerName, this.role, pos);
 
     // Also run boundary feedback here, not just in the pulse loop — the hider is
-    // moving during the head start, which is exactly when they stray.
+    // moving during the hiding time, which is exactly when they stray.
     if (this.gameState === 'headstart' || this.gameState === 'active') {
       this.updateBoundaryWarning();
     }
@@ -1326,6 +1333,32 @@ class HotspotApp {
       this.matchTrackHistory.push(track);
     }
     track.points.push({ lat: pos.lat, lng: pos.lng, accuracy: pos.accuracy, timestamp: Date.now() });
+  }
+
+  // Neutral radar: no band, no distance, no colour cue. Used while the hider
+  // is still hiding, so nothing about their whereabouts is on screen yet.
+  blankSeekerRadar() {
+    this.currentBand = null;
+    this.currentDistance = null;
+
+    const bandLabel = document.getElementById('seeker-band-label');
+    if (bandLabel) bandLabel.innerText = 'STAND BY';
+
+    const distEl = document.getElementById('seeker-dist-readout');
+    if (distEl) distEl.innerHTML = '';
+
+    const pulseRing = document.getElementById('seeker-pulse-ring');
+    if (pulseRing) {
+      pulseRing.style.borderColor = '#64748B';
+      pulseRing.style.boxShadow = 'none';
+      pulseRing.style.animationDuration = '2200ms';
+    }
+
+    // Let the first real band of the round announce itself.
+    if (window.hotspotAudio) {
+      window.hotspotAudio.lastSpokenBand = null;
+      window.hotspotAudio.lastAnnouncedBand = null;
+    }
   }
 
   startPulseLoop() {
