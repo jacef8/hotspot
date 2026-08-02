@@ -650,6 +650,11 @@ class HotspotApp {
     if (readyBtn) readyBtn.style.display = '';
 
     this.triggerSmokeVisual(false);
+
+    if (screenId === 'lobby-screen') {
+      const nickInput = document.getElementById('lobby-nickname-input');
+      if (nickInput && this.playerName) nickInput.value = this.playerName;
+    }
   }
 
   goHome() {
@@ -669,6 +674,24 @@ class HotspotApp {
       this.updateSeasonStatsDisplay();
       window.hotspotAudio.speak('Season records reset! New Season started.');
     }
+  }
+
+  updateLobbyNickname() {
+    const el = document.getElementById('lobby-nickname-input');
+    const newName = el ? el.value.trim() : '';
+    if (!newName) {
+      alert('Please enter a nickname.');
+      return;
+    }
+
+    this.playerName = newName;
+    if (this.players[this.playerId]) {
+      this.players[this.playerId].name = newName;
+    }
+
+    this.sendHeartbeat();
+    this.updateLobbyList();
+    window.hotspotAudio.speak(`Name updated to ${newName}`);
   }
 
   joinRoom(code, nickname, role = 'seeker') {
