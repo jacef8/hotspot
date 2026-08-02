@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.5.3</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.5.4</title>
 
   <!-- PWA Full-Screen Native App Meta Tags -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -20,7 +20,7 @@
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=2.5.3">
+  <link rel="stylesheet" href="style.css?v=2.5.4">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -62,7 +62,7 @@
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="brand-subtitle">Extreme Yard Tag & Proximity Hunt</div>
         <div style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
-          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800;">v2.5.3</span>
+          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800;">v2.5.4</span>
           <span id="cloud-sync-status" style="font-size: 11px; color: var(--text-muted); font-weight: 600; text-align: center; letter-spacing: 0.5px;">
             🌐 hotspot-app-yardtag.web.app
           </span>
@@ -93,7 +93,12 @@
       </div>
 
       <div class="card" style="margin-bottom: 0;">
-        <div class="card-title">🏆 Season Records</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <div class="card-title" style="margin-bottom: 0;">🏆 Season Records</div>
+          <button class="btn btn-secondary" style="width: auto; padding: 3px 8px; font-size: 11px; margin: 0; border-color: var(--accent-amber); color: var(--accent-amber);" onclick="window.hotspotApp.resetSeasonRecords()">
+            🔄 Reset Season
+          </button>
+        </div>
         <div class="stats-grid">
           <div class="stat-box">
             <div class="stat-val" id="stat-total-hunts">0</div>
@@ -108,6 +113,9 @@
             <div class="stat-lbl">Longest Hide</div>
           </div>
         </div>
+        <button class="btn btn-secondary" style="margin-top: 10px; margin-bottom: 0; font-size: 12px; border-color: var(--accent-cyan); color: var(--accent-cyan);" onclick="window.showPwaInstallGuide()">
+          📲 Install App to Home Screen (Full Screen)
+        </button>
       </div>
     </div>
 
@@ -406,13 +414,27 @@
       }
       window.hotspotApp.joinRoom(code, 'Spectator', 'spectator');
     };
+
+    window.showPwaInstallGuide = function() {
+      alert(
+        "📲 HOW TO INSTALL HOTSPOT APP TO YOUR HOME SCREEN:\n\n" +
+        "• iPhone / iOS (Safari):\n" +
+        "  1. Tap the Share button (box with arrow ⎋) at the bottom.\n" +
+        "  2. Scroll down and tap 'Add to Home Screen' (➕).\n\n" +
+        "• Android (Chrome):\n" +
+        "  1. Tap the 3-dots menu (⋮) in top right.\n" +
+        "  2. Tap 'Add to Home screen' or 'Install app'.\n\n" +
+        "✨ WHY INSTALL?\n" +
+        "Removes browser URL bars, runs full-screen, and prevents accidental page swipes while running!"
+      );
+    };
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=2.5.3"></script>
-  <script src="geo.js?v=2.5.3"></script>
-  <script src="replay.js?v=2.5.3"></script>
-  <script src="app.js?v=2.5.3"></script>
+  <script src="audio.js?v=2.5.4"></script>
+  <script src="geo.js?v=2.5.4"></script>
+  <script src="replay.js?v=2.5.4"></script>
+  <script src="app.js?v=2.5.4"></script>
 
   <script>
     document.addEventListener('DOMContentLoaded', () => {

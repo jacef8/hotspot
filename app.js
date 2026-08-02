@@ -660,6 +660,17 @@ class HotspotApp {
     this.updateSeasonStatsDisplay();
   }
 
+  resetSeasonRecords() {
+    if (confirm('🏆 Start New Season?\n\nThis will reset your Total Hunts, Fastest Tag, and Longest Hide records back to zero.')) {
+      this.seasonStats = { totalHunts: 0, fastestTagMs: null, longestHideMs: 0 };
+      try {
+        localStorage.removeItem('hotspot_stats');
+      } catch(e) {}
+      this.updateSeasonStatsDisplay();
+      window.hotspotAudio.speak('Season records reset! New Season started.');
+    }
+  }
+
   joinRoom(code, nickname, role = 'seeker') {
     const cleanCode = code ? code.trim() : '';
     if (!cleanCode || (cleanCode.length !== 4 && cleanCode.length !== 6)) {
