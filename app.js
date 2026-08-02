@@ -393,6 +393,12 @@ class HotspotApp {
         if (data.boundaryRadius) this.boundaryRadius = data.boundaryRadius;
         if (data.matchDurationSeconds) this.matchDurationSeconds = data.matchDurationSeconds;
 
+        // If I am the Host (Hider), relay this player's heartbeat to all connected Seekers!
+        // This ensures all Seekers see each other on their screen in real-time.
+        if (this.role === 'hider' && data.senderId !== this.playerId) {
+          this.broadcastPeer(data);
+        }
+
         // Record every player's track, not just our own, so the replay has
         // something to draw for the rest of the field.
         if ((this.gameState === 'headstart' || this.gameState === 'active') && p.lat && p.lng) {
@@ -730,23 +736,47 @@ class HotspotApp {
 
     if (hiderContainer) {
       hiderContainer.innerHTML = hidersList.map(p => `
-        <div class="player-badge hider">
-          <span class="name">👑 ${p.name} ${p.id === this.playerId ? '<b style="color:var(--accent-cyan);">(YOU)</b>' : ''}</span>
+        <div class="player-badge hider" style="border: 2px solid var(--accent-amber); background: rgba(245, 158, 11, 0.15); padding: 10px 14px; border-radius: 10px; display: flex; align-items: center; justify-content: space-between;">
+          <span class="name" style="font-weight: 800; font-size: 15px; color: #FFF;">
+            👑 ${p.name} <span style="font-size: 11px; background: var(--accent-amber); color: #000; padding: 2px 6px; border-radius: 8px; font-weight: 900; margin-left: 6px;">HOST</span> ${p.id === this.playerId ? '<b style="color:var(--accent-cyan);">(YOU)</b>' : ''}
+          </span>
+          <span style="font-size: 11px; color: var(--accent-amber); font-weight: 800; letter-spacing: 0.5px;">SOLE HIDER</span>
         </div>
-      `).join('') || '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:6px;">No Hider Selected</div>';
+      `).join('') || '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:10px;">Waiting for Host to claim Hider...</div>';
     }
 
     if (seekerContainer) {
       seekerContainer.innerHTML = seekersList.map(p => `
-        <div class="player-badge seeker">
-          <span class="name">🏃 ${p.name} ${p.id === this.playerId ? '<b style="color:var(--accent-cyan);">(YOU)</b>' : ''}</span>
+        <div class="player-badge seeker" style="border: 1px solid var(--accent-cyan); background: rgba(0, 240, 255, 0.08); padding: 8px 12px; border-radius: 8px; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
+          <span class="name" style="font-weight: 700; font-size: 14px; color: #FFF;">
+            🎯 ${p.name} ${p.id === this.playerId ? '<b style="color:var(--accent-cyan);">(YOU)</b>' : ''}
+          </span>
+          <span style="font-size: 11px; color: var(--accent-cyan); font-weight: 700;">SEEKER</span>
         </div>
-      `).join('') || '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:6px;">No Seekers Joined Yet</div>';
+      `).join('') || '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:10px;">No Seekers Joined Yet</div>';
+    }
+
+    // Host-Only Start Button Guard: Seekers cannot start the round!
+    const startBtn = document.getElementById('btn-start-round');
+    const waitMsg = document.getElementById('lobby-wait-msg');
+
+    if (this.role === 'hider') {
+      if (startBtn) startBtn.style.display = 'block';
+      if (waitMsg) waitMsg.style.display = 'none';
+    } else {
+      if (startBtn) startBtn.style.display = 'none';
+      if (waitMsg) waitMsg.style.display = 'block';
     }
   }
 
   // --- GAME START & HEADSTART TIMING ENGINE ---
   startHeadstart() {
+    // Only the Host (Hider) can start the round!
+    if (this.role !== 'hider') {
+      alert('Only the Host (Hider) can start the round!');
+      return;
+    }
+
     const startTime = Date.now();
     this.headStartStartTime = startTime;
 
