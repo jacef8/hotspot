@@ -141,7 +141,10 @@ class HotspotApp {
       };
 
       this.eventSource.onerror = () => {
-        this.updateSyncStatus(false, 'stream dropped');
+        // SSE auto-reconnects natively. Only flag sync status if connection closes completely.
+        if (this.eventSource && this.eventSource.readyState === EventSource.CLOSED) {
+          this.updateSyncStatus(false, 'stream disconnected');
+        }
       };
     } catch(e) {}
 
@@ -193,6 +196,9 @@ class HotspotApp {
     if (!this.roomCode || this.isSoloDrill) return;
     const topic = this.getTopic();
 
+    const currentGeo = (window.hotspotGeo && window.hotspotGeo.currentPosition) ? window.hotspotGeo.currentPosition : null;
+    const pos = this.myPosition || currentGeo;
+
     const data = {
       type: 'HEARTBEAT',
       senderId: this.playerId,
@@ -202,9 +208,9 @@ class HotspotApp {
         id: this.playerId,
         name: this.playerName,
         role: this.role,
-        lat: this.myPosition ? this.myPosition.lat : null,
-        lng: this.myPosition ? this.myPosition.lng : null,
-        accuracy: this.myPosition ? this.myPosition.accuracy : 25
+        lat: pos ? pos.lat : null,
+        lng: pos ? pos.lng : null,
+        accuracy: pos ? (pos.accuracy || 25) : 25
       },
       headStartSeconds: this.headStartSeconds,
       boundaryRadius: this.boundaryRadius
@@ -439,13 +445,16 @@ class HotspotApp {
     this.hiderId = this.playerId;
     this.gameState = 'lobby';
 
+    const currentGeo = (window.hotspotGeo && window.hotspotGeo.currentPosition) ? window.hotspotGeo.currentPosition : null;
+    const pos = this.myPosition || currentGeo;
+
     this.players = {
       [this.playerId]: {
         id: this.playerId,
         name: this.playerName,
         role: 'hider',
-        lat: this.myPosition ? this.myPosition.lat : null,
-        lng: this.myPosition ? this.myPosition.lng : null
+        lat: pos ? pos.lat : null,
+        lng: pos ? pos.lng : null
       }
     };
 
@@ -551,13 +560,16 @@ class HotspotApp {
     this.role = role;
     this.gameState = 'lobby';
 
+    const currentGeo = (window.hotspotGeo && window.hotspotGeo.currentPosition) ? window.hotspotGeo.currentPosition : null;
+    const pos = this.myPosition || currentGeo;
+
     this.players = {
       [this.playerId]: {
         id: this.playerId,
         name: this.playerName,
         role: this.role,
-        lat: this.myPosition ? this.myPosition.lat : null,
-        lng: this.myPosition ? this.myPosition.lng : null
+        lat: pos ? pos.lat : null,
+        lng: pos ? pos.lng : null
       }
     };
 
