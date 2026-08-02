@@ -26,6 +26,7 @@ class HotspotApp {
     this.isSoloDrill = false;
     this.players = {};
     this.hiderId = null;
+    this.channel = null;
 
     this.myPosition = { lat: 37.774929, lng: -122.419416, accuracy: 8, timestamp: Date.now() };
 
@@ -49,7 +50,7 @@ class HotspotApp {
     this.lastPulseTime = 0;
 
     this.initFirebase();
-    this.startGpsTracking(); // Start GPS tracking immediately so GPS fix is ready before round starts!
+    this.startGpsTracking(); // Start GPS tracking immediately!
   }
 
   initFirebase() {
@@ -63,6 +64,43 @@ class HotspotApp {
       } catch (e) {
         console.warn('Firebase init error, using Local mode:', e);
       }
+    }
+  }
+
+  setupBroadcastRelay() {
+    if (!this.roomCode) return;
+    try {
+      if (this.channel) this.channel.close();
+      this.channel = new BroadcastChannel('hotspot_' + this.roomCode);
+      this.channel.onmessage = (evt) => {
+        if (evt.data && evt.data.type === 'PLAYER_UPDATE') {
+          const p = evt.data.player;
+          this.players[p.id] = { ...this.players[p.id], ...p };
+          this.updateLobbyList();
+        } else if (evt.data && evt.data.type === 'GAME_STATE') {
+          if (evt.data.gameState !== this.gameState) {
+            this.gameState = evt.data.gameState;
+            this.handleGameStateChange(this.gameState, evt.data);
+          }
+        }
+      };
+    } catch (e) {}
+  }
+
+  broadcastPlayerUpdate() {
+    if (this.channel) {
+      try {
+        this.channel.postMessage({
+          type: 'PLAYER_UPDATE',
+          player: {
+            id: this.playerId,
+            name: this.playerName,
+            role: this.role,
+            lat: this.myPosition ? this.myPosition.lat : null,
+            lng: this.myPosition ? this.myPosition.lng : null
+          }
+        });
+      } catch(e) {}
     }
   }
 
@@ -154,6 +192,8 @@ class HotspotApp {
       }
     };
 
+    this.setupBroadcastRelay();
+
     if (this.db) {
       this.db.ref('rooms/' + this.roomCode).set({
         code: this.roomCode,
@@ -184,19 +224,21 @@ class HotspotApp {
     this.role = role;
     this.gameState = 'lobby';
 
+    this.setupBroadcastRelay();
+
     if (this.db) {
       const roomRef = this.db.ref('rooms/' + this.roomCode);
       roomRef.once('value', snapshot => {
         if (!snapshot.exists()) {
-          alert('Room code not found! Check code and try again.');
-          return;
+          // If RTDB doesn't exist yet, create it locally & push
+          this.hiderId = this.playerId;
+        } else {
+          const data = snapshot.val();
+          this.hiderId = data.hiderId || this.hiderId;
+          this.gameMode = data.gameMode || 'classic';
+          this.headStartSeconds = data.headStartSeconds || 60;
+          this.boundaryRadius = data.boundaryRadius || 75;
         }
-
-        const data = snapshot.val();
-        this.hiderId = data.hiderId;
-        this.gameMode = data.gameMode || 'classic';
-        this.headStartSeconds = data.headStartSeconds || 60;
-        this.boundaryRadius = data.boundaryRadius || 75;
 
         roomRef.child('players/' + this.playerId).set({
           id: this.playerId,
@@ -207,6 +249,7 @@ class HotspotApp {
         });
 
         this.listenToRoom();
+        this.broadcastPlayerUpdate();
         document.getElementById('lobby-code-display').innerText = this.roomCode;
         this.updateLobbyList();
         this.showScreen('lobby-screen');
@@ -219,6 +262,7 @@ class HotspotApp {
         lat: this.myPosition ? this.myPosition.lat : null,
         lng: this.myPosition ? this.myPosition.lng : null
       };
+      this.broadcastPlayerUpdate();
       document.getElementById('lobby-code-display').innerText = this.roomCode;
       this.updateLobbyList();
       this.showScreen('lobby-screen');
@@ -237,6 +281,7 @@ class HotspotApp {
         this.db.ref(`rooms/${this.roomCode}`).update({ hiderId: this.playerId });
       }
     }
+    this.broadcastPlayerUpdate();
     this.updateLobbyList();
     window.hotspotAudio.speak(`Switched role to ${this.role.toUpperCase()}`);
   }
@@ -481,6 +526,7 @@ class HotspotApp {
       });
     }
 
+    this.broadcastPlayerUpdate();
     this.recordTrackPoint(this.playerId, this.playerName, this.role, pos);
   }
 
