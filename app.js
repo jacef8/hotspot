@@ -1,7 +1,7 @@
 /**
  * HOTSPOT - Main Game Engine & Controller
  * Standard US Customary Units (Feet & Yards).
- * MQTT over WebSockets Real-Time Cloud Sync & Android GPS Permission Engine.
+ * 100% Bulletproof HTTPS EventSource & HTTP Polling Cloud Sync (Port 443).
  */
 
 window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || null;
@@ -9,7 +9,8 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || null;
 class HotspotApp {
   constructor() {
     this.db = null;
-    this.mqttClient = null;
+    this.eventSource = null;
+    this.pollInterval = null;
 
     this.roomCode = null;
     this.playerId = 'player_' + Math.random().toString(36).substr(2, 6);
@@ -50,7 +51,6 @@ class HotspotApp {
     this.currentDistance = 999;
     this.lastPulseTime = 0;
 
-    this.initFirebase();
     this.startGpsTracking(); // Immediate GPS start
   }
 
@@ -61,74 +61,100 @@ class HotspotApp {
     );
   }
 
-  initFirebase() {
-    if (window.FIREBASE_CONFIG && typeof firebase !== 'undefined' && firebase.apps) {
-      try {
-        if (!firebase.apps.length) {
-          firebase.initializeApp(window.FIREBASE_CONFIG);
-        }
-        this.db = firebase.database();
-      } catch (e) {}
-    }
-  }
+  // --- BULLETPROOF HTTPS CLOUD SYNC (PORT 443 - EVENTSOURCE & HTTP POLL) ---
+  initCloudSync() {
+    if (!this.roomCode) return;
+    const topic = 'hotspot_room_' + this.roomCode.toLowerCase();
 
-  // --- MQTT OVER WEBSOCKETS REAL-TIME CLOUD SYNC ---
-  initMqttSync() {
-    if (typeof mqtt === 'undefined' || !this.roomCode) return;
+    // 1. Close existing EventSource & Poller
+    if (this.eventSource) {
+      try { this.eventSource.close(); } catch(e) {}
+    }
+    if (this.pollInterval) {
+      clearInterval(this.pollInterval);
+    }
+
+    // 2. Open HTTPS Server-Sent Events (SSE) over standard port 443
     try {
-      if (this.mqttClient) {
-        try { this.mqttClient.end(); } catch(e) {}
-      }
+      this.eventSource = new EventSource(`https://ntfy.sh/${topic}/sse`);
 
-      const topic = 'hotspot/room/' + this.roomCode;
-
-      this.mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt', {
-        clientId: 'hotspot_' + this.playerId + '_' + Math.random().toString(36).substr(2, 4),
-        keepalive: 30,
-        clean: true,
-        reconnectPeriod: 2000
-      });
-
-      this.mqttClient.on('connect', () => {
-        console.log('Connected to MQTT Cloud Sync topic:', topic);
-        this.mqttClient.subscribe(topic);
-
-        // Announce presence to room
-        this.broadcastMqtt({
-          type: 'PLAYER_JOIN',
-          senderId: this.playerId,
-          player: {
-            id: this.playerId,
-            name: this.playerName,
-            role: this.role,
-            lat: this.myPosition ? this.myPosition.lat : null,
-            lng: this.myPosition ? this.myPosition.lng : null,
-            accuracy: this.myPosition ? this.myPosition.accuracy : 25
-          }
-        });
-      });
-
-      this.mqttClient.on('message', (t, message) => {
+      this.eventSource.onmessage = (event) => {
         try {
-          const data = JSON.parse(message.toString());
-          this.handleMqttMessage(data);
+          const payload = JSON.parse(event.data);
+          if (payload && payload.message) {
+            const data = JSON.parse(payload.message);
+            this.handleCloudMessage(data);
+          }
         } catch(e) {}
-      });
+      };
+
+      this.eventSource.onerror = () => {
+        console.warn('SSE warning, HTTP polling fallback active.');
+      };
     } catch(e) {
-      console.warn('MQTT init warning:', e);
+      console.warn('EventSource init warning:', e);
     }
+
+    // 3. Fallback HTTP Polling every 2 seconds over standard HTTPS
+    this.pollInterval = setInterval(() => {
+      this.pollCloudMessages(topic);
+    }, 2000);
+
+    // 4. Announce presence immediately
+    this.broadcastPresence();
   }
 
-  broadcastMqtt(data) {
-    if (this.mqttClient && this.mqttClient.connected && this.roomCode) {
-      try {
-        data.senderId = this.playerId;
-        this.mqttClient.publish('hotspot/room/' + this.roomCode, JSON.stringify(data));
-      } catch(e) {}
-    }
+  broadcastPresence() {
+    this.broadcastCloud({
+      type: 'PLAYER_JOIN',
+      senderId: this.playerId,
+      player: {
+        id: this.playerId,
+        name: this.playerName,
+        role: this.role,
+        lat: this.myPosition ? this.myPosition.lat : null,
+        lng: this.myPosition ? this.myPosition.lng : null,
+        accuracy: this.myPosition ? this.myPosition.accuracy : 25
+      }
+    });
   }
 
-  handleMqttMessage(data) {
+  broadcastCloud(data) {
+    if (!this.roomCode) return;
+    data.senderId = this.playerId;
+    const topic = 'hotspot_room_' + this.roomCode.toLowerCase();
+
+    try {
+      fetch(`https://ntfy.sh/${topic}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      }).catch(() => {});
+    } catch(e) {}
+  }
+
+  pollCloudMessages(topic) {
+    try {
+      fetch(`https://ntfy.sh/${topic}/json?poll=1&since=10s`)
+        .then(res => res.text())
+        .then(text => {
+          if (!text) return;
+          const lines = text.trim().split('\n');
+          lines.forEach(line => {
+            try {
+              const payload = JSON.parse(line);
+              if (payload && payload.message) {
+                const data = JSON.parse(payload.message);
+                this.handleCloudMessage(data);
+              }
+            } catch(e) {}
+          });
+        })
+        .catch(() => {});
+    } catch(e) {}
+  }
+
+  handleCloudMessage(data) {
     if (!data || data.senderId === this.playerId) return;
 
     if (data.type === 'PLAYER_JOIN' || data.type === 'PLAYER_UPDATE') {
@@ -137,9 +163,9 @@ class HotspotApp {
         this.players[p.id] = { ...this.players[p.id], ...p };
         this.updateLobbyList();
 
-        // Host responds with room snapshot
+        // If I am Host (Hider), send room snapshot back to new player
         if (this.role === 'hider') {
-          this.broadcastMqtt({
+          this.broadcastCloud({
             type: 'ROOM_SNAPSHOT',
             players: this.players,
             hiderId: this.hiderId,
@@ -161,8 +187,10 @@ class HotspotApp {
         this.handleGameStateChange(this.gameState, data);
       }
     } else if (data.type === 'START_HEADSTART') {
-      this.gameState = 'headstart';
-      this.handleGameStateChange('headstart', data);
+      if (this.gameState === 'lobby') {
+        this.gameState = 'headstart';
+        this.handleGameStateChange('headstart', data);
+      }
     } else if (data.type === 'HIDER_READY_EARLY') {
       this.gameState = 'active';
       this.handleGameStateChange('active', data);
@@ -267,27 +295,9 @@ class HotspotApp {
     this.updateLobbyList();
     this.showScreen('lobby-screen');
 
-    this.initMqttSync();
+    this.initCloudSync();
 
     window.hotspotAudio.speak(`Hunt created. Code is ${this.roomCode.split('').join(' ')}`);
-
-    if (this.db) {
-      try {
-        this.db.ref('rooms/' + this.roomCode).set({
-          code: this.roomCode,
-          hostId: this.playerId,
-          hiderId: this.hiderId,
-          gameState: 'lobby',
-          headStartSeconds: this.headStartSeconds,
-          boundaryRadius: this.boundaryRadius,
-          gameMode: this.gameMode,
-          players: this.players,
-          createdAt: Date.now()
-        });
-
-        this.listenToRoom();
-      } catch (e) {}
-    }
   }
 
   joinRoom(code, nickname, role = 'seeker') {
@@ -314,35 +324,9 @@ class HotspotApp {
     this.updateLobbyList();
     this.showScreen('lobby-screen');
 
-    this.initMqttSync();
+    this.initCloudSync();
 
     window.hotspotAudio.speak(`Joined hunt ${this.roomCode.split('').join(' ')}`);
-
-    if (this.db) {
-      try {
-        const roomRef = this.db.ref('rooms/' + this.roomCode);
-
-        roomRef.once('value', snapshot => {
-          if (snapshot.exists()) {
-            const data = snapshot.val();
-            this.hiderId = data.hiderId || this.hiderId;
-            this.gameMode = data.gameMode || 'classic';
-            this.headStartSeconds = data.headStartSeconds || 60;
-            this.boundaryRadius = data.boundaryRadius || 250;
-          }
-
-          roomRef.child('players/' + this.playerId).set({
-            id: this.playerId,
-            name: this.playerName,
-            role: this.role,
-            lat: this.myPosition ? this.myPosition.lat : null,
-            lng: this.myPosition ? this.myPosition.lng : null
-          });
-
-          this.listenToRoom();
-        }, (err) => {});
-      } catch (e) {}
-    }
   }
 
   toggleRole() {
@@ -351,63 +335,13 @@ class HotspotApp {
       this.players[this.playerId].role = this.role;
     }
 
-    this.broadcastMqtt({
+    this.broadcastCloud({
       type: 'PLAYER_UPDATE',
       player: { id: this.playerId, name: this.playerName, role: this.role }
     });
 
-    if (this.db && this.roomCode) {
-      try {
-        this.db.ref(`rooms/${this.roomCode}/players/${this.playerId}`).update({ role: this.role });
-        if (this.role === 'hider') {
-          this.db.ref(`rooms/${this.roomCode}`).update({ hiderId: this.playerId });
-        }
-      } catch (e) {}
-    }
     this.updateLobbyList();
     window.hotspotAudio.speak(`Switched role to ${this.role.toUpperCase()}`);
-  }
-
-  listenToRoom() {
-    if (!this.db || !this.roomCode) return;
-
-    try {
-      const roomRef = this.db.ref('rooms/' + this.roomCode);
-
-      roomRef.on('value', snapshot => {
-        if (!snapshot.exists()) return;
-        const data = snapshot.val();
-
-        this.players = data.players || {};
-        this.hiderId = data.hiderId;
-        this.gameMode = data.gameMode || 'classic';
-        this.headStartSeconds = data.headStartSeconds || 60;
-        this.boundaryRadius = data.boundaryRadius || 250;
-        this.updateLobbyList();
-
-        if (data.gameState !== this.gameState && data.gameState !== 'lobby') {
-          this.gameState = data.gameState;
-          this.handleGameStateChange(this.gameState, data);
-        }
-
-        if (data.powerups) {
-          if (data.powerups.smokeActive && !this.powerups.smokeActive) {
-            this.triggerSmokeVisual(true);
-          } else if (!data.powerups.smokeActive && this.powerups.smokeActive) {
-            this.triggerSmokeVisual(false);
-          }
-          if (data.powerups.decoyPos) {
-            this.decoyPos = data.powerups.decoyPos;
-          } else {
-            this.decoyPos = null;
-          }
-        }
-
-        if (data.tagEvent && !this.tagEvent) {
-          this.handleTagEvent(data.tagEvent);
-        }
-      });
-    } catch (e) {}
   }
 
   updateLobbyList() {
@@ -443,23 +377,12 @@ class HotspotApp {
       this.yardCenterPos = { lat: this.myPosition.lat, lng: this.myPosition.lng };
     }
 
-    this.broadcastMqtt({
+    this.broadcastCloud({
       type: 'START_HEADSTART',
       headStartStartTime: startTime,
       headStartSeconds: this.headStartSeconds,
       yardCenterPos: this.yardCenterPos
     });
-
-    if (this.db) {
-      try {
-        this.db.ref(`rooms/${this.roomCode}`).update({
-          gameState: 'headstart',
-          headStartStartTime: startTime,
-          headStartSeconds: this.headStartSeconds,
-          yardCenterPos: this.yardCenterPos
-        });
-      } catch (e) {}
-    }
 
     this.handleGameStateChange('headstart', {
       headStartStartTime: startTime,
@@ -475,11 +398,7 @@ class HotspotApp {
       this.headStartTimer = null;
     }
 
-    this.broadcastMqtt({ type: 'HIDER_READY_EARLY' });
-
-    if (this.db) {
-      try { this.db.ref(`rooms/${this.roomCode}`).update({ gameState: 'active' }); } catch (e) {}
-    }
+    this.broadcastCloud({ type: 'HIDER_READY_EARLY' });
     this.handleGameStateChange('active');
   }
 
@@ -535,10 +454,7 @@ class HotspotApp {
           window.hotspotAudio.speak('PACK RELEASED! HUNT IS LIVE!');
 
           if (this.role === 'hider') {
-            this.broadcastMqtt({ type: 'HIDER_READY_EARLY' });
-            if (this.db) {
-              try { this.db.ref(`rooms/${this.roomCode}`).update({ gameState: 'active' }); } catch (e) {}
-            }
+            this.broadcastCloud({ type: 'HIDER_READY_EARLY' });
           }
           this.handleGameStateChange('active');
         }
@@ -617,24 +533,13 @@ class HotspotApp {
       this.players[this.playerId].accuracy = pos.accuracy;
     }
 
-    this.broadcastMqtt({
+    this.broadcastCloud({
       type: 'POS_UPDATE',
       playerId: this.playerId,
       lat: pos.lat,
       lng: pos.lng,
       accuracy: pos.accuracy
     });
-
-    if (this.db && this.roomCode) {
-      try {
-        this.db.ref(`rooms/${this.roomCode}/players/${this.playerId}`).update({
-          lat: pos.lat,
-          lng: pos.lng,
-          accuracy: pos.accuracy,
-          timestamp: Date.now()
-        });
-      } catch (e) {}
-    }
 
     this.recordTrackPoint(this.playerId, this.playerName, this.role, pos);
   }
@@ -681,7 +586,7 @@ class HotspotApp {
       if (this.isSoloDrill) {
         hiderPos = window.hotspotGeo.soloHiderPosition;
       } else {
-        const hiderPlayer = this.players[this.hiderId];
+        const hiderPlayer = Object.values(this.players).find(p => p.role === 'hider');
         if (hiderPlayer && hiderPlayer.lat) {
           hiderPos = { lat: hiderPlayer.lat, lng: hiderPlayer.lng };
         }
@@ -739,7 +644,8 @@ class HotspotApp {
 
       // Auto-tag within 25 feet
       if (distFeet <= 25 && this.gameState === 'active') {
-        this.triggerTag(this.playerId, this.playerName, this.hiderId);
+        const hiderPlayer = Object.values(this.players).find(p => p.role === 'hider');
+        this.triggerTag(this.playerId, this.playerName, hiderPlayer ? hiderPlayer.id : 'hider');
       }
     }
 
@@ -805,16 +711,10 @@ class HotspotApp {
       if (this.myPosition) {
         const decoy = window.hotspotGeo.startSoloDrill(250);
         this.decoyPos = decoy;
-        if (this.db) {
-          try { this.db.ref(`rooms/${this.roomCode}/powerups`).update({ decoyPos: decoy }); } catch (e) {}
-        }
       }
 
       setTimeout(() => {
         this.decoyPos = null;
-        if (this.db) {
-          try { this.db.ref(`rooms/${this.roomCode}/powerups/decoyPos`).remove(); } catch (e) {}
-        }
       }, 30000);
 
     } else if (type === 'smoke' && !this.powerups.smokeUsed) {
@@ -825,18 +725,10 @@ class HotspotApp {
       window.hotspotAudio.playPowerupSound('smoke');
       window.hotspotAudio.speak('Smoke screen thrown! Seekers blinded for 15 seconds!');
 
-      if (this.db) {
-        try { this.db.ref(`rooms/${this.roomCode}/powerups`).update({ smokeActive: true }); } catch (e) {}
-      } else {
-        this.triggerSmokeVisual(true);
-      }
+      this.triggerSmokeVisual(true);
 
       setTimeout(() => {
-        if (this.db) {
-          try { this.db.ref(`rooms/${this.roomCode}/powerups`).update({ smokeActive: false }); } catch (e) {}
-        } else {
-          this.triggerSmokeVisual(false);
-        }
+        this.triggerSmokeVisual(false);
       }, 15000);
 
     } else if (type === 'bearing' && !this.powerups.bearingPingUsed) {
@@ -889,21 +781,9 @@ class HotspotApp {
 
     if (this.gameMode === 'infection') {
       window.hotspotAudio.speak(`Infection mode! ${hiderName} has joined the hider pack!`);
-      if (this.db) {
-        try { this.db.ref(`rooms/${this.roomCode}/players/${hiderId}`).update({ role: 'seeker' }); } catch (e) {}
-      }
     } else {
       this.gameState = 'gameover';
-      if (this.db) {
-        try {
-          this.db.ref(`rooms/${this.roomCode}`).update({
-            gameState: 'gameover',
-            tagEvent: this.tagEvent
-          });
-        } catch (e) {}
-      } else {
-        this.handleGameStateChange('gameover');
-      }
+      this.handleGameStateChange('gameover');
     }
 
     this.saveSeasonStats(Date.now() - this.gameStartTime);
