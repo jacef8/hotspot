@@ -2,7 +2,7 @@
  * HOTSPOT - Main Game Engine & Controller
  * Integrates Firebase RTDB, Game State, Solo Drill, Powerups, Proximity Engine,
  * Voice Announcer, Haptic Vibe, Spectator, and Replay.
- * Includes Yard Boundary Geofencing & Silent Hider Mode.
+ * Includes Yard Boundary Geofencing, Silent Hider Mode, & Hider Flash/Vibe Alert.
  */
 
 window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || null;
@@ -17,7 +17,7 @@ class HotspotApp {
     this.gameMode = 'classic'; // 'classic' | 'infection'
     this.gameState = 'lobby'; // 'lobby' | 'headstart' | 'active' | 'gameover'
     this.headStartSeconds = 60;
-    this.boundaryRadius = 75; // Yard boundary limit in meters (75m default)
+    this.boundaryRadius = 75;
     this.yardCenterPos = null;
 
     this.headStartTimer = null;
@@ -397,12 +397,29 @@ class HotspotApp {
     } else if (newState === 'active') {
       this.gameStartTime = Date.now();
       if (this.headStartTimer) clearInterval(this.headStartTimer);
+
       document.querySelectorAll('.headstart-counter').forEach(el => el.innerText = '🔥 HUNT IS LIVE!');
       const hiderCounter = document.getElementById('hider-timer-display');
       if (hiderCounter) hiderCounter.innerText = 'LIVE!';
 
       const readyBtn = document.getElementById('btn-hider-ready');
       if (readyBtn) readyBtn.style.display = 'none';
+
+      // HIDER SILENT STEALTH ALERT (Flash & Double Burst Vibration)
+      if (this.role === 'hider') {
+        if ('vibrate' in navigator) {
+          try {
+            // Distinct 3-burst pulse pattern: Vibrate-Pause-Vibrate-Pause-Vibrate
+            navigator.vibrate([300, 150, 300, 150, 300]);
+          } catch (e) {}
+        }
+
+        const hiderScreen = document.getElementById('hider-screen');
+        if (hiderScreen) {
+          hiderScreen.classList.add('flash-screen');
+          setTimeout(() => hiderScreen.classList.remove('flash-screen'), 1500);
+        }
+      }
 
       this.startPulseLoop();
     } else if (newState === 'gameover') {
@@ -494,7 +511,6 @@ class HotspotApp {
   updateProximityEngine() {
     if (!this.myPosition) return;
 
-    // ================= SEEKER PROXIMITY CALCULATIONS =================
     if (this.role === 'seeker') {
       let hiderPos = null;
 
@@ -562,7 +578,6 @@ class HotspotApp {
       }
     }
 
-    // ================= HIDER RADAR & YARD BOUNDARY GEOFENCING =================
     if (this.role === 'hider') {
       const distEl = document.getElementById('hider-nearest-dist');
       const seekerPlayers = Object.values(this.players).filter(p => p.role === 'seeker' && p.lat && p.lng);
@@ -581,7 +596,6 @@ class HotspotApp {
         if (distEl) distEl.innerText = '--m';
       }
 
-      // Check Yard Boundary Limit
       const boundaryBanner = document.getElementById('hider-boundary-alert');
       if (this.yardCenterPos && this.boundaryRadius > 0 && boundaryBanner) {
         const distFromCenter = window.hotspotGeo.calculateDistance(
@@ -603,7 +617,6 @@ class HotspotApp {
       }
     }
 
-    // ================= SPECTATOR GOD VIEW =================
     if (this.role === 'spectator') {
       window.hotspotReplay.updateSpectatorView(this.players);
     }

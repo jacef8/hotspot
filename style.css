@@ -65,6 +65,17 @@ html, body {
   z-index: 100;
 }
 
+/* Screen Flash Alert for Hider when round starts */
+@keyframes hider-flash {
+  0% { background-color: var(--primary-blaze); }
+  40% { background-color: #FFF; }
+  100% { background-color: transparent; }
+}
+
+.flash-screen {
+  animation: hider-flash 1.5s ease-out;
+}
+
 /* Top Bar */
 .top-bar {
   display: flex;
@@ -251,7 +262,7 @@ html, body {
   flex: 1;
   position: relative;
   margin: 6px 0;
-  pointer-events: none; /* Make container click-through */
+  pointer-events: none;
 }
 
 .pulse-ring-outer {
