@@ -2,7 +2,6 @@
  * HOTSPOT - Main Game Engine & Controller
  * Integrates Firebase RTDB, Game State, Solo Drill, Powerups, Proximity Engine,
  * Voice Announcer, Haptic Vibe, Spectator, and Replay.
- * Includes Yard Boundary Geofencing, Silent Hider Mode, & Hider Flash/Vibe Alert.
  */
 
 window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || null;
@@ -50,6 +49,7 @@ class HotspotApp {
     this.lastPulseTime = 0;
 
     this.initFirebase();
+    this.startGpsTracking(); // Start GPS tracking immediately so GPS fix is ready before round starts!
   }
 
   initFirebase() {
@@ -97,7 +97,6 @@ class HotspotApp {
 
     window.hotspotAudio.speak('Solo Drill initialized! Virtual hider planted 100 meters out.');
 
-    this.startGpsTracking();
     this.showScreen('seeker-screen');
     
     const soloControls = document.getElementById('solo-controls-card');
@@ -146,7 +145,13 @@ class HotspotApp {
     this.gameState = 'lobby';
 
     this.players = {
-      [this.playerId]: { id: this.playerId, name: this.playerName, role: 'hider' }
+      [this.playerId]: {
+        id: this.playerId,
+        name: this.playerName,
+        role: 'hider',
+        lat: this.myPosition ? this.myPosition.lat : null,
+        lng: this.myPosition ? this.myPosition.lng : null
+      }
     };
 
     if (this.db) {
@@ -196,7 +201,9 @@ class HotspotApp {
         roomRef.child('players/' + this.playerId).set({
           id: this.playerId,
           name: this.playerName,
-          role: this.role
+          role: this.role,
+          lat: this.myPosition ? this.myPosition.lat : null,
+          lng: this.myPosition ? this.myPosition.lng : null
         });
 
         this.listenToRoom();
@@ -205,7 +212,13 @@ class HotspotApp {
         this.showScreen('lobby-screen');
       });
     } else {
-      this.players[this.playerId] = { id: this.playerId, name: this.playerName, role: this.role };
+      this.players[this.playerId] = {
+        id: this.playerId,
+        name: this.playerName,
+        role: this.role,
+        lat: this.myPosition ? this.myPosition.lat : null,
+        lng: this.myPosition ? this.myPosition.lng : null
+      };
       document.getElementById('lobby-code-display').innerText = this.roomCode;
       this.updateLobbyList();
       this.showScreen('lobby-screen');
@@ -339,8 +352,6 @@ class HotspotApp {
       const duration = (roomData && roomData.headStartSeconds) ? roomData.headStartSeconds : this.headStartSeconds;
       if (roomData && roomData.yardCenterPos) this.yardCenterPos = roomData.yardCenterPos;
 
-      this.startGpsTracking();
-
       if (this.role === 'hider') {
         this.showScreen('hider-screen');
       } else if (this.role === 'seeker') {
@@ -405,11 +416,9 @@ class HotspotApp {
       const readyBtn = document.getElementById('btn-hider-ready');
       if (readyBtn) readyBtn.style.display = 'none';
 
-      // HIDER SILENT STEALTH ALERT (Flash & Double Burst Vibration)
       if (this.role === 'hider') {
         if ('vibrate' in navigator) {
           try {
-            // Distinct 3-burst pulse pattern: Vibrate-Pause-Vibrate-Pause-Vibrate
             navigator.vibrate([300, 150, 300, 150, 300]);
           } catch (e) {}
         }
@@ -447,7 +456,7 @@ class HotspotApp {
     }
 
     document.querySelectorAll('.accuracy-tag').forEach(el => {
-      el.innerText = `±${Math.round(pos.accuracy)}m`;
+      el.innerText = `🎯 GPS: ±${Math.round(pos.accuracy)}m`;
     });
 
     const warnBox = document.getElementById('gps-warning-banner');

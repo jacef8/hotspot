@@ -11,9 +11,17 @@
   <!-- Custom Stylesheet -->
   <link rel="stylesheet" href="style.css">
 
-  <!-- Optional Firebase Config Block Paste Target -->
+  <!-- Production Firebase Configuration -->
   <script>
-    window.FIREBASE_CONFIG = null;
+    window.FIREBASE_CONFIG = {
+      apiKey: "AIzaSyBxUL47Px9Y-X3lJViLYGuVeuA9PVE5P5E",
+      authDomain: "hotspot-app-yardtag.firebaseapp.com",
+      databaseURL: "https://hotspot-app-yardtag-default-rtdb.firebaseio.com",
+      projectId: "hotspot-app-yardtag",
+      storageBucket: "hotspot-app-yardtag.firebasestorage.app",
+      messagingSenderId: "439506643972",
+      appId: "1:439506643972:web:3da9762948d142897f9951"
+    };
   </script>
 
   <!-- Firebase Compat Libraries -->
@@ -29,7 +37,7 @@
 
     <!-- Top Navigation / Sound Bar -->
     <div class="top-bar">
-      <span class="accuracy-tag" style="font-size: 10px; color: var(--text-muted); font-weight: 700;">GPS: Searching...</span>
+      <span class="accuracy-tag" style="font-size: 10px; color: var(--accent-cyan); font-weight: 700;">GPS: Searching...</span>
       <div style="display: flex; gap: 6px;">
         <button class="icon-btn" onclick="window.hotspotApp.toggleSound()" id="sound-btn">🔊 Voice</button>
         <button class="icon-btn" onclick="window.hotspotApp.showScreen('home-screen')">🏠 Home</button>
