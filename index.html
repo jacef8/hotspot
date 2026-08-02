@@ -127,21 +127,24 @@
       </button>
     </div>
 
-    <!-- ==================== SCREEN 3: LOBBY ==================== -->
+    <!-- ==================== SCREEN 3: LOBBY (ULTRA CLEAR ROLES) ==================== -->
     <div id="lobby-screen" class="screen">
       <div class="brand-header">
         <div class="brand-subtitle">ROOM CODE</div>
         <div id="lobby-code-display" class="brand-title" style="font-size: 44px; color: var(--accent-cyan); text-shadow: 0 0 20px rgba(0, 240, 255, 0.5);">----</div>
       </div>
 
-      <div class="card" style="flex: 1;">
-        <div class="card-title">Pack Members</div>
-        <div id="lobby-player-list" class="player-list">
-          <div class="player-badge hider">
-            <span class="role-icon">👑 HIDER</span>
-            <span class="name">Host</span>
-          </div>
-        </div>
+      <!-- Role Toggle Button -->
+      <button class="btn btn-secondary" style="border-color: var(--accent-cyan);" onclick="window.hotspotApp.toggleRole()">
+        🔄 Switch Role (Hider ↔ Seeker)
+      </button>
+
+      <div class="card" style="flex: 1; overflow: hidden; display: flex; flex-direction: column;">
+        <div class="card-title" style="color: var(--primary-blaze);">👑 THE HIDER</div>
+        <div id="lobby-hider-list" style="margin-bottom: 12px;"></div>
+
+        <div class="card-title" style="color: var(--accent-cyan);">🏃 THE SEEKER PACK</div>
+        <div id="lobby-seeker-list" class="player-list" style="flex: 1;"></div>
       </div>
 
       <button class="btn btn-primary" onclick="window.hotspotApp.startHeadstart()">
@@ -210,6 +213,16 @@
             <polygon points="12 2 19 21 12 17 5 21 12 2"></polygon>
           </svg>
           <div id="seeker-band-label" class="seeker-band-label">COLD</div>
+        </div>
+      </div>
+
+      <!-- Solo Drill Indoor Test Controls -->
+      <div id="solo-controls-card" class="card" style="display: none; margin-bottom: 8px;">
+        <div class="card-title">🧪 Solo Test Controls (Simulate Movement)</div>
+        <div style="display: flex; gap: 6px;">
+          <button class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(-25)">🚶 Walk -25m</button>
+          <button class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(25)">🏃 Move +25m</button>
+          <button class="btn btn-primary" style="flex: 1; font-size: 11px; padding: 8px; background: var(--danger-red);" onclick="window.hotspotApp.instantTagSoloHider()">🎯 Tag Hider</button>
         </div>
       </div>
 

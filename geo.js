@@ -7,13 +7,11 @@
 class HotspotGeo {
   constructor() {
     this.watchId = null;
-    this.currentPosition = null;
-    this.accuracy = null;
+    this.currentPosition = { lat: 37.774929, lng: -122.419416, timestamp: Date.now() }; // Default fallback
+    this.accuracy = 8;
     this.positionHistory = [];
-    this.lagBuffer = []; // Buffer for >50m 5-second lag
-    this.lastEmittedPosition = null;
+    this.lagBuffer = [];
     this.soloHiderPosition = null;
-    this.soloInterval = null;
     this.onPositionUpdate = null;
     this.onError = null;
     this.isProtocolWarning = false;
@@ -28,12 +26,18 @@ class HotspotGeo {
     }
   }
 
-  /**
-   * Start tracking user GPS coordinates
-   */
   startTracking(onUpdate, onError) {
     this.onPositionUpdate = onUpdate;
     this.onError = onError;
+
+    // Immediately trigger an initial position update with fallback position
+    if (this.onPositionUpdate && this.currentPosition) {
+      this.onPositionUpdate({
+        ...this.currentPosition,
+        accuracy: this.accuracy,
+        isProtocolWarning: this.isProtocolWarning
+      });
+    }
 
     if (!('geolocation' in navigator)) {
       if (this.onError) this.onError('Geolocation is not supported by this browser.');
@@ -103,11 +107,8 @@ class HotspotGeo {
     if (this.onError) this.onError(msg);
   }
 
-  /**
-   * Haversine formula to compute distance in meters between two lat/lng pairs
-   */
   calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371e3; // Earth radius in meters
+    const R = 6371e3;
     const φ1 = (lat1 * Math.PI) / 180;
     const φ2 = (lat2 * Math.PI) / 180;
     const Δφ = ((lat2 - lat1) * Math.PI) / 180;
@@ -118,12 +119,9 @@ class HotspotGeo {
       Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-    return R * c; // Distance in meters
+    return R * c;
   }
 
-  /**
-   * Calculate initial bearing from point A to point B in degrees (0..360)
-   */
   calculateBearing(lat1, lon1, lat2, lon2) {
     const φ1 = (lat1 * Math.PI) / 180;
     const φ2 = (lat2 * Math.PI) / 180;
@@ -136,10 +134,6 @@ class HotspotGeo {
     return ((θ * 180) / Math.PI + 360) % 360;
   }
 
-  /**
-   * Map distance to band name
-   * Cold (>60m), Struck (35-60m), Trailing (20-35m), Baying (8-20m), Treed (<8m)
-   */
   getDistanceBand(meters) {
     if (meters > 60) return { band: 'COLD', label: 'COLD', color: '#64748B', pulseMs: 1600 };
     if (meters > 35) return { band: 'STRUCK', label: 'STRUCK', color: '#06B6D4', pulseMs: 1100 };
@@ -148,10 +142,6 @@ class HotspotGeo {
     return { band: 'TREED', label: 'TREED / TAGGED', color: '#EF4444', pulseMs: 180 };
   }
 
-  /**
-   * Buffer position updates when beyond 50m (5-second lag rule)
-   * Live updates inside 50m
-   */
   getBufferedPosition(rawPos, realTimeHiderPos) {
     if (!rawPos || !realTimeHiderPos) return rawPos;
 
@@ -161,48 +151,40 @@ class HotspotGeo {
     );
 
     const now = Date.now();
-
-    // Store in lag buffer
     this.lagBuffer.push({ ...realTimeHiderPos, timestamp: now });
-
-    // Keep buffer trimmed
     this.lagBuffer = this.lagBuffer.filter(p => now - p.timestamp <= 10000);
 
     if (rawDist > 50) {
-      // Return position from 5 seconds ago if available
       const targetTime = now - 5000;
       const delayedPoint = this.lagBuffer.find(p => p.timestamp >= targetTime) || this.lagBuffer[0] || realTimeHiderPos;
       return delayedPoint;
     } else {
-      // Inside 50m: LIVE updates!
       return realTimeHiderPos;
     }
   }
 
-  /**
-   * Trigger device vibration matching pulse rate
-   */
   vibratePulse(pulseMs) {
     if ('vibrate' in navigator) {
       try {
         const duration = Math.min(100, Math.max(30, Math.floor(pulseMs * 0.25)));
         navigator.vibrate(duration);
-      } catch (e) {
-        // Haptics ignore if restricted
-      }
+      } catch (e) {}
     }
   }
 
   /**
-   * Solo Drill: Plant a virtual hider ~100m out in a random direction
+   * Solo Drill: Plant a virtual hider ~distanceMeters out
    */
   startSoloDrill(distanceMeters = 100) {
     if (!this.currentPosition) {
-      // Default to central park coordinates if no GPS fix yet
       this.currentPosition = { lat: 37.774929, lng: -122.419416, timestamp: Date.now() };
     }
 
-    const bearingDeg = Math.floor(Math.random() * 360);
+    return this.setSoloHiderDistance(distanceMeters);
+  }
+
+  setSoloHiderDistance(distanceMeters) {
+    const bearingDeg = 45; // Fixed 45 degree bearing for deterministic test movement
     const bearingRad = (bearingDeg * Math.PI) / 180;
 
     const R = 6371e3;
@@ -223,18 +205,25 @@ class HotspotGeo {
       lat: (lat2 * 180) / Math.PI,
       lng: (lon2 * 180) / Math.PI,
       timestamp: Date.now(),
-      isVirtual: true
+      isVirtual: true,
+      currentDistMeters: distanceMeters
     };
 
     return this.soloHiderPosition;
   }
 
-  stopSoloDrill() {
-    this.soloHiderPosition = null;
-    if (this.soloInterval) {
-      clearInterval(this.soloInterval);
-      this.soloInterval = null;
-    }
+  moveSoloHiderCloser(deltaMeters = 25) {
+    if (!this.soloHiderPosition) this.startSoloDrill(100);
+    const currentDist = this.soloHiderPosition.currentDistMeters || 100;
+    const newDist = Math.max(2, currentDist - deltaMeters);
+    return this.setSoloHiderDistance(newDist);
+  }
+
+  moveSoloHiderAway(deltaMeters = 25) {
+    if (!this.soloHiderPosition) this.startSoloDrill(100);
+    const currentDist = this.soloHiderPosition.currentDistMeters || 100;
+    const newDist = Math.min(200, currentDist + deltaMeters);
+    return this.setSoloHiderDistance(newDist);
   }
 }
 

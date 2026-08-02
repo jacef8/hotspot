@@ -29,7 +29,7 @@ html, body {
   width: 100%;
   height: 100%;
   height: 100dvh;
-  overflow: hidden; /* Prevent scrolling entirely */
+  overflow: hidden;
   background-color: var(--bg-dark);
   color: var(--text-main);
   font-family: var(--font-family);
@@ -62,6 +62,7 @@ html, body {
   border-bottom: 1px solid rgba(239, 68, 68, 0.5);
   display: none;
   flex-shrink: 0;
+  z-index: 100;
 }
 
 /* Top Bar */
@@ -71,21 +72,26 @@ html, body {
   justify-content: space-between;
   padding: 8px 16px 4px;
   flex-shrink: 0;
+  z-index: 60;
+  position: relative;
 }
 
 .icon-btn {
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   color: var(--text-main);
-  padding: 6px 10px;
+  padding: 6px 12px;
   border-radius: 8px;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   cursor: pointer;
+  z-index: 60;
+  position: relative;
+  pointer-events: auto;
 }
 
 .icon-btn:active {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.3);
 }
 
 /* Screens */
@@ -98,6 +104,8 @@ html, body {
   overflow: hidden;
   justify-content: space-between;
   animation: fadeIn 0.25s ease-out;
+  position: relative;
+  z-index: 10;
 }
 
 .screen.active {
@@ -145,6 +153,8 @@ html, body {
   padding: 12px 14px;
   margin-bottom: 8px;
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  position: relative;
+  z-index: 20;
 }
 
 .card-title {
@@ -173,12 +183,15 @@ html, body {
 .text-input, .select-input {
   width: 100%;
   background: rgba(8, 12, 20, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
   color: var(--text-main);
   padding: 10px 12px;
   border-radius: 8px;
   font-size: 15px;
   outline: none;
+  position: relative;
+  z-index: 30;
+  pointer-events: auto;
 }
 
 /* Buttons */
@@ -198,6 +211,13 @@ html, body {
   gap: 8px;
   margin-bottom: 8px;
   flex-shrink: 0;
+  position: relative;
+  z-index: 50;
+  pointer-events: auto;
+}
+
+.btn:active {
+  transform: scale(0.97);
 }
 
 .btn:last-child {
@@ -211,9 +231,9 @@ html, body {
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
   color: var(--text-main);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 .btn-solo {
@@ -222,7 +242,7 @@ html, body {
   box-shadow: 0 4px 16px rgba(0, 240, 255, 0.3);
 }
 
-/* Seeker Pulse Ring Display (Scales dynamically with viewport) */
+/* Seeker Pulse Ring Display */
 .seeker-radar-container {
   display: flex;
   flex-direction: column;
@@ -231,6 +251,7 @@ html, body {
   flex: 1;
   position: relative;
   margin: 6px 0;
+  pointer-events: none; /* Make container click-through */
 }
 
 .pulse-ring-outer {
@@ -245,6 +266,7 @@ html, body {
   position: relative;
   animation: pulse-ring 1.6s infinite ease-out;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  pointer-events: auto;
 }
 
 @keyframes pulse-ring {
@@ -304,7 +326,7 @@ html, body {
 }
 
 .btn-powerup {
-  background: rgba(255, 85, 0, 0.15);
+  background: rgba(255, 85, 0, 0.18);
   border: 1px solid var(--primary-blaze);
   color: var(--text-main);
   padding: 10px;
@@ -312,6 +334,14 @@ html, body {
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
+  z-index: 50;
+  position: relative;
+  pointer-events: auto;
+}
+
+.btn-powerup:active {
+  transform: scale(0.96);
+  background: rgba(255, 85, 0, 0.35);
 }
 
 /* Stats Grid */
@@ -352,7 +382,6 @@ html, body {
   border: 1px solid var(--card-border);
 }
 
-/* Player List scrollable inside card if needed */
 .player-list {
   max-height: 120px;
   overflow-y: auto;

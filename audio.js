@@ -12,24 +12,50 @@ class HotspotAudio {
     this.audioCtx = null;
     this.lastSpokenBand = null;
     this.lastSpokenTime = 0;
+    this.unlocked = false;
+
+    this.setupUnlockListeners();
+  }
+
+  setupUnlockListeners() {
+    const unlock = () => {
+      this.initAudioContext();
+      if (this.audioCtx && this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume();
+      }
+      this.unlocked = true;
+      // Silent speech trigger to unlock Web Speech API on iOS
+      if (this.synth && this.speechEnabled) {
+        try {
+          const u = new SpeechSynthesisUtterance('');
+          u.volume = 0;
+          this.synth.speak(u);
+        } catch (e) {}
+      }
+    };
+
+    ['click', 'touchstart', 'touchend', 'keydown'].forEach(evt => {
+      window.addEventListener(evt, unlock, { once: true, capture: true });
+    });
   }
 
   initAudioContext() {
     if (!this.audioCtx) {
-      const AudioCtx = window.AudioContext || window.webkitAudioContext;
-      if (AudioCtx) {
-        this.audioCtx = new AudioCtx();
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx) {
+          this.audioCtx = new AudioCtx();
+        }
+      } catch (e) {
+        console.warn('AudioContext creation error:', e);
       }
-    }
-    if (this.audioCtx && this.audioCtx.state === 'suspended') {
-      this.audioCtx.resume();
     }
   }
 
   toggleSpeech(enable) {
     this.speechEnabled = enable !== undefined ? enable : !this.speechEnabled;
     if (!this.speechEnabled && this.synth) {
-      this.synth.cancel();
+      try { this.synth.cancel(); } catch(e) {}
     }
     return this.speechEnabled;
   }
@@ -39,45 +65,40 @@ class HotspotAudio {
     return this.audioFxEnabled;
   }
 
-  /**
-   * Speak a voice prompt using Web Speech API
-   * @param {string} text - Message to speak
-   * @param {number} rate - Speech rate multiplier
-   * @param {number} pitch - Speech pitch
-   */
   speak(text, rate = 1.1, pitch = 1.0) {
     if (!this.speechEnabled || !this.synth) return;
-    this.initAudioContext();
+    try {
+      this.initAudioContext();
+      if (this.audioCtx && this.audioCtx.state === 'suspended') {
+        this.audioCtx.resume();
+      }
 
-    // Cancel current speech to prevent queue build-up during fast movement
-    this.synth.cancel();
+      this.synth.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = rate;
-    utterance.pitch = pitch;
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = rate;
+      utterance.pitch = pitch;
 
-    // Pick an English voice if available
-    const voices = this.synth.getVoices();
-    const engVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('US')));
-    if (engVoice) utterance.voice = engVoice;
+      const voices = this.synth.getVoices();
+      const engVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('US')));
+      if (engVoice) utterance.voice = engVoice;
 
-    this.synth.speak(utterance);
+      this.synth.speak(utterance);
+    } catch (e) {
+      console.warn('Speech synthesis failed:', e);
+    }
   }
 
-  /**
-   * Play a synthetic pulse beep scaling frequency and pitch with distance band
-   * @param {string} band - 'COLD' | 'STRUCK' | 'TRAILING' | 'BAYING' | 'TREED'
-   */
   playPulseBeep(band) {
     if (!this.audioFxEnabled) return;
-    this.initAudioContext();
-    if (!this.audioCtx) return;
-
     try {
+      this.initAudioContext();
+      if (!this.audioCtx || this.audioCtx.state === 'suspended') return;
+
       const osc = this.audioCtx.createOscillator();
       const gain = this.audioCtx.createGain();
 
-      let freq = 220; // Cold
+      let freq = 220;
       let duration = 0.12;
 
       if (band === 'STRUCK') { freq = 349.23; duration = 0.10; }
@@ -97,16 +118,16 @@ class HotspotAudio {
       osc.start();
       osc.stop(this.audioCtx.currentTime + duration);
     } catch (e) {
-      console.warn('Audio FX play failed:', e);
+      console.warn('Pulse beep failed:', e);
     }
   }
 
   playPowerupSound(type) {
     if (!this.audioFxEnabled) return;
-    this.initAudioContext();
-    if (!this.audioCtx) return;
-
     try {
+      this.initAudioContext();
+      if (!this.audioCtx || this.audioCtx.state === 'suspended') return;
+
       const osc = this.audioCtx.createOscillator();
       const gain = this.audioCtx.createGain();
       const now = this.audioCtx.currentTime;
@@ -141,10 +162,10 @@ class HotspotAudio {
 
   playCountdownBeep(isFinal = false) {
     if (!this.audioFxEnabled) return;
-    this.initAudioContext();
-    if (!this.audioCtx) return;
-
     try {
+      this.initAudioContext();
+      if (!this.audioCtx || this.audioCtx.state === 'suspended') return;
+
       const osc = this.audioCtx.createOscillator();
       const gain = this.audioCtx.createGain();
       const now = this.audioCtx.currentTime;
@@ -165,10 +186,10 @@ class HotspotAudio {
 
   playTagScream() {
     if (!this.audioFxEnabled) return;
-    this.initAudioContext();
-    if (!this.audioCtx) return;
-
     try {
+      this.initAudioContext();
+      if (!this.audioCtx || this.audioCtx.state === 'suspended') return;
+
       const now = this.audioCtx.currentTime;
       const osc = this.audioCtx.createOscillator();
       const gain = this.audioCtx.createGain();

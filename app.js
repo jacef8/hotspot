@@ -4,7 +4,6 @@
  * Voice Announcer, Haptic Vibe, Spectator, and Replay.
  */
 
-// Firebase Configuration block paste target
 window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || null;
 
 class HotspotApp {
@@ -23,9 +22,10 @@ class HotspotApp {
     this.isSoloDrill = false;
     this.players = {};
     this.hiderId = null;
-    this.myPosition = null;
 
-    // Powerups State
+    // Default immediate position fallback (Central Park coordinates if GPS pending)
+    this.myPosition = { lat: 37.774929, lng: -122.419416, accuracy: 8, timestamp: Date.now() };
+
     this.powerups = {
       decoyUsed: false,
       smokeUsed: false,
@@ -40,25 +40,17 @@ class HotspotApp {
     this.smokeTimeout = null;
     this.bearingTimeout = null;
 
-    // Match tracking log for post-game replay
     this.matchTrackHistory = [];
     this.tagEvent = null;
     this.gameStartTime = 0;
 
-    // Pulse animation loop
     this.pulseInterval = null;
     this.currentBand = 'COLD';
     this.currentDistance = 999;
+    this.lastPulseTime = 0;
 
     this.initFirebase();
-  }
-
-  toggleSound() {
-    const speechEnabled = window.hotspotAudio.toggleSpeech();
-    const btn = document.getElementById('sound-btn');
-    if (btn) {
-      btn.innerText = speechEnabled ? '🔊 Voice' : '🔇 Muted';
-    }
+    this.bindDOMEvents();
   }
 
   initFirebase() {
@@ -75,11 +67,24 @@ class HotspotApp {
     }
   }
 
-  // View management
+  toggleSound() {
+    const speechEnabled = window.hotspotAudio.toggleSpeech();
+    const btn = document.getElementById('sound-btn');
+    if (btn) {
+      btn.innerText = speechEnabled ? '🔊 Voice' : '🔇 Muted';
+    }
+  }
+
   showScreen(screenId) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     const target = document.getElementById(screenId);
     if (target) target.classList.add('active');
+  }
+
+  bindDOMEvents() {
+    document.addEventListener('DOMContentLoaded', () => {
+      this.updateSeasonStatsDisplay();
+    });
   }
 
   // --- SOLO DRILL MODE ---
@@ -97,11 +102,41 @@ class HotspotApp {
     };
     this.hiderId = 'solo_hider';
 
-    window.hotspotAudio.speak('Solo Drill initialized! Virtual hider planted 100 meters out. Turn the pack loose!');
+    window.hotspotAudio.speak('Solo Drill initialized! Virtual hider planted 100 meters out.');
 
     this.startGpsTracking();
     this.showScreen('seeker-screen');
+    
+    // Enable solo controls UI
+    const soloControls = document.getElementById('solo-controls-card');
+    if (soloControls) soloControls.style.display = 'block';
+
     this.startPulseLoop();
+  }
+
+  moveSoloHider(deltaMeters) {
+    if (!this.isSoloDrill) return;
+    let hiderPos;
+    if (deltaMeters < 0) {
+      hiderPos = window.hotspotGeo.moveSoloHiderCloser(Math.abs(deltaMeters));
+    } else {
+      hiderPos = window.hotspotGeo.moveSoloHiderAway(deltaMeters);
+    }
+
+    if (this.players['solo_hider']) {
+      this.players['solo_hider'].lat = hiderPos.lat;
+      this.players['solo_hider'].lng = hiderPos.lng;
+    }
+    window.hotspotAudio.speak(`Virtual hider moved to ${Math.round(hiderPos.currentDistMeters)} meters`);
+  }
+
+  instantTagSoloHider() {
+    if (!this.isSoloDrill) return;
+    const hiderPos = window.hotspotGeo.setSoloHiderDistance(4);
+    if (this.players['solo_hider']) {
+      this.players['solo_hider'].lat = hiderPos.lat;
+      this.players['solo_hider'].lng = hiderPos.lng;
+    }
   }
 
   // --- MULTIPLAYER ROOM SETUP ---
@@ -170,11 +205,27 @@ class HotspotApp {
         this.showScreen('lobby-screen');
       });
     } else {
-      // Local fallback mode
       this.players[this.playerId] = { id: this.playerId, name: this.playerName, role: this.role };
       document.getElementById('lobby-code-display').innerText = this.roomCode;
+      this.updateLobbyList();
       this.showScreen('lobby-screen');
     }
+  }
+
+  toggleRole() {
+    this.role = this.role === 'hider' ? 'seeker' : 'hider';
+    if (this.players[this.playerId]) {
+      this.players[this.playerId].role = this.role;
+    }
+
+    if (this.db && this.roomCode) {
+      this.db.ref(`rooms/${this.roomCode}/players/${this.playerId}`).update({ role: this.role });
+      if (this.role === 'hider') {
+        this.db.ref(`rooms/${this.roomCode}`).update({ hiderId: this.playerId });
+      }
+    }
+    this.updateLobbyList();
+    window.hotspotAudio.speak(`Switched role to ${this.role.toUpperCase()}`);
   }
 
   listenToRoom() {
@@ -196,7 +247,6 @@ class HotspotApp {
         this.handleGameStateChange(this.gameState);
       }
 
-      // Check powerups
       if (data.powerups) {
         if (data.powerups.smokeActive && !this.powerups.smokeActive) {
           this.triggerSmokeVisual(true);
@@ -217,15 +267,29 @@ class HotspotApp {
   }
 
   updateLobbyList() {
-    const container = document.getElementById('lobby-player-list');
-    if (!container) return;
+    const hidersList = Object.values(this.players).filter(p => p.role === 'hider');
+    const seekersList = Object.values(this.players).filter(p => p.role === 'seeker');
 
-    container.innerHTML = Object.values(this.players).map(p => `
-      <div class="player-badge ${p.role}">
-        <span class="role-icon">${p.role === 'hider' ? '👑 HIDER' : '🏃 SEEKER'}</span>
-        <span class="name">${p.name}</span>
-      </div>
-    `).join('');
+    const hiderContainer = document.getElementById('lobby-hider-list');
+    const seekerContainer = document.getElementById('lobby-seeker-list');
+
+    if (hiderContainer) {
+      hiderContainer.innerHTML = hidersList.map(p => `
+        <div class="player-badge hider">
+          <span class="role-icon">👑 HIDER</span>
+          <span class="name">${p.name} ${p.id === this.playerId ? '<span class="you-badge">(YOU)</span>' : ''}</span>
+        </div>
+      `).join('') || '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:6px;">No Hider Selected</div>';
+    }
+
+    if (seekerContainer) {
+      seekerContainer.innerHTML = seekersList.map(p => `
+        <div class="player-badge seeker">
+          <span class="role-icon">🏃 SEEKER</span>
+          <span class="name">${p.name} ${p.id === this.playerId ? '<span class="you-badge">(YOU)</span>' : ''}</span>
+        </div>
+      `).join('') || '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:6px;">No Seekers Joined Yet</div>';
+    }
   }
 
   // --- GAME START & HEADSTART ---
@@ -293,7 +357,6 @@ class HotspotApp {
     }
   }
 
-  // --- GPS TRACKING & PROXIMITY ENGINE ---
   startGpsTracking() {
     window.hotspotGeo.startTracking(
       (pos) => this.onGpsUpdate(pos),
@@ -304,7 +367,6 @@ class HotspotApp {
   onGpsUpdate(pos) {
     this.myPosition = pos;
 
-    // Display GPS diagnostics
     document.querySelectorAll('.accuracy-tag').forEach(el => {
       el.innerText = `±${Math.round(pos.accuracy)}m`;
     });
@@ -322,7 +384,6 @@ class HotspotApp {
       }
     }
 
-    // Sync position to Firebase
     if (this.db && this.roomCode) {
       this.db.ref(`rooms/${this.roomCode}/players/${this.playerId}`).update({
         lat: pos.lat,
@@ -332,7 +393,6 @@ class HotspotApp {
       });
     }
 
-    // Append to local history for track replay
     this.recordTrackPoint(this.playerId, this.playerName, this.role, pos);
   }
 
@@ -359,7 +419,6 @@ class HotspotApp {
 
     this.pulseInterval = setInterval(() => {
       if (this.gameState !== 'active') return;
-
       this.updateProximityEngine();
     }, 250);
   }
@@ -374,7 +433,6 @@ class HotspotApp {
   updateProximityEngine() {
     if (!this.myPosition) return;
 
-    // Get hider position
     let hiderPos = null;
 
     if (this.isSoloDrill) {
@@ -386,14 +444,12 @@ class HotspotApp {
       }
     }
 
-    // If decoy active, spoof hider position!
     if (this.decoyPos) {
       hiderPos = this.decoyPos;
     }
 
     if (!hiderPos) return;
 
-    // Apply 5s signal lag rule if > 50m
     const bufferedHiderPos = window.hotspotGeo.getBufferedPosition(this.myPosition, hiderPos);
 
     const distMeters = window.hotspotGeo.calculateDistance(
@@ -406,7 +462,6 @@ class HotspotApp {
     const bandInfo = window.hotspotGeo.getDistanceBand(distMeters);
     this.currentBand = bandInfo.band;
 
-    // Update Seeker UI (Pulse Ring & Text)
     if (this.role === 'seeker') {
       const pulseRing = document.getElementById('seeker-pulse-ring');
       const bandLabel = document.getElementById('seeker-band-label');
@@ -419,7 +474,6 @@ class HotspotApp {
         pulseRing.style.animationDuration = `${bandInfo.pulseMs}ms`;
       }
 
-      // Haptic Vibe & Audio Beep on pulse interval
       const now = Date.now();
       if (!this.lastPulseTime || now - this.lastPulseTime >= bandInfo.pulseMs) {
         this.lastPulseTime = now;
@@ -427,10 +481,8 @@ class HotspotApp {
         window.hotspotAudio.playPulseBeep(bandInfo.band);
       }
 
-      // Voice Announcer on band progression
       window.hotspotAudio.announceBandChange(bandInfo.band);
 
-      // Bearing Ping update if active
       if (this.powerups.bearingActive) {
         const bearing = window.hotspotGeo.calculateBearing(
           this.myPosition.lat, this.myPosition.lng,
@@ -444,18 +496,15 @@ class HotspotApp {
       }
     }
 
-    // Update Hider UI (Proximity Meter)
     if (this.role === 'hider') {
       const distEl = document.getElementById('hider-nearest-dist');
       if (distEl) distEl.innerText = `${Math.round(distMeters)}m`;
     }
 
-    // Update Spectator UI
     if (this.role === 'spectator') {
       window.hotspotReplay.updateSpectatorView(this.players);
     }
 
-    // Check Tag Condition (Tag Radius = 8 meters)
     if (distMeters <= 8 && this.gameState === 'active') {
       this.triggerTag(this.playerId, this.playerName, this.hiderId);
     }
@@ -463,12 +512,14 @@ class HotspotApp {
 
   // --- POWERUPS ---
   usePowerup(type) {
-    if (type === 'decoy' && !this.powerups.decoyUsed && this.role === 'hider') {
+    if (type === 'decoy' && !this.powerups.decoyUsed) {
       this.powerups.decoyUsed = true;
+      const btn = document.getElementById('btn-powerup-decoy');
+      if (btn) btn.disabled = true;
+
       window.hotspotAudio.playPowerupSound('decoy');
       window.hotspotAudio.speak('Decoy deployed! Fake hot signal active for 30 seconds!');
 
-      // Plant decoy ~80m away from current position
       if (this.myPosition) {
         const decoy = window.hotspotGeo.startSoloDrill(80);
         this.decoyPos = decoy;
@@ -484,8 +535,11 @@ class HotspotApp {
         }
       }, 30000);
 
-    } else if (type === 'smoke' && !this.powerups.smokeUsed && this.role === 'hider') {
+    } else if (type === 'smoke' && !this.powerups.smokeUsed) {
       this.powerups.smokeUsed = true;
+      const btn = document.getElementById('btn-powerup-smoke');
+      if (btn) btn.disabled = true;
+
       window.hotspotAudio.playPowerupSound('smoke');
       window.hotspotAudio.speak('Smoke screen thrown! Seekers blinded for 15 seconds!');
 
@@ -503,9 +557,12 @@ class HotspotApp {
         }
       }, 15000);
 
-    } else if (type === 'bearing' && !this.powerups.bearingPingUsed && this.role === 'seeker') {
+    } else if (type === 'bearing' && !this.powerups.bearingPingUsed) {
       this.powerups.bearingPingUsed = true;
       this.powerups.bearingActive = true;
+      const btn = document.getElementById('btn-bearing-ping');
+      if (btn) btn.disabled = true;
+
       window.hotspotAudio.playPowerupSound('bearing');
       window.hotspotAudio.speak('Bearing Ping active! Live compass arrow for 3 seconds!');
 
@@ -524,13 +581,12 @@ class HotspotApp {
 
     if (active) {
       if (pulseRing) pulseRing.classList.add('smoke-blind');
-      if (bandLabel) bandLabel.innerText = '💨 SMOKE SCREEN (DEAD SIGNAL)';
+      if (bandLabel) bandLabel.innerText = '💨 SMOKE SCREEN';
     } else {
       if (pulseRing) pulseRing.classList.remove('smoke-blind');
     }
   }
 
-  // --- TAG & ENDGAME ---
   triggerTag(seekerId, seekerName, hiderId) {
     if (this.gameState !== 'active') return;
 
@@ -550,13 +606,11 @@ class HotspotApp {
     };
 
     if (this.gameMode === 'infection') {
-      // Infection mode: tagged seeker becomes hider, pack grows!
       window.hotspotAudio.speak(`Infection mode! ${hiderName} has joined the hider pack!`);
       if (this.db) {
         this.db.ref(`rooms/${this.roomCode}/players/${hiderId}`).update({ role: 'hider' });
       }
     } else {
-      // Classic mode: Game Over!
       this.gameState = 'gameover';
       if (this.db) {
         this.db.ref(`rooms/${this.roomCode}`).update({
