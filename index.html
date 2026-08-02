@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.5.14</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.5.15</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -22,7 +22,7 @@
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=2.5.14">
+  <link rel="stylesheet" href="style.css?v=2.5.15">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -64,7 +64,7 @@
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="brand-subtitle">Extreme Yard Tag & Proximity Hunt</div>
         <div style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
-          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800;">v2.5.14</span>
+          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800;">v2.5.15</span>
           <span id="cloud-sync-status" style="font-size: 11px; color: var(--text-muted); font-weight: 600; text-align: center; letter-spacing: 0.5px;">
             🌐 hotspot-app-yardtag.web.app
           </span>
@@ -377,8 +377,8 @@
     <!-- ==================== SCREEN 9: POST-GAME REPLAY ==================== -->
     <div id="replay-screen" class="screen">
       <div class="brand-header" style="margin-bottom: 6px;">
-        <h2 class="brand-title" style="font-size: 24px; color: var(--primary-blaze);">TAGGED!</h2>
-        <div class="brand-subtitle">Post-Match Track Replay</div>
+        <h2 id="replay-headline" class="brand-title" style="font-size: 24px; color: var(--primary-blaze);">ROUND OVER</h2>
+        <div id="replay-subhead" class="brand-subtitle">Post-Match Track Replay</div>
       </div>
 
       <div id="replay-map"></div>
@@ -500,15 +500,15 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=2.5.14"></script>
-  <script src="geo.js?v=2.5.14"></script>
-  <script src="replay.js?v=2.5.14"></script>
-  <script src="app.js?v=2.5.14"></script>
+  <script src="audio.js?v=2.5.15"></script>
+  <script src="geo.js?v=2.5.15"></script>
+  <script src="replay.js?v=2.5.15"></script>
+  <script src="app.js?v=2.5.15"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=2.5.14').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=2.5.15').catch(() => {});
       });
     }
 

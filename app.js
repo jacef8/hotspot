@@ -972,6 +972,14 @@ class HotspotApp {
 
   updateLobbyList() {
     this.prunePlayers();
+
+    // Rebuilding both roster lists via innerHTML on every incoming heartbeat
+    // was pure DOM churn during a live hunt, when the lobby is not even on
+    // screen — heartbeats arrive at GPS-tick rate and the host relays everyone
+    // else's too, so this ran many times a second for nothing.
+    const lobbyVisible = document.getElementById('lobby-screen');
+    if (!lobbyVisible || !lobbyVisible.classList.contains('active')) return;
+
     const now = Date.now();
     // Keep active players seen in last 15s
     const activePlayers = Object.values(this.players).filter(p => !p.lastSeen || now - p.lastSeen <= 15000);
@@ -1172,6 +1180,23 @@ class HotspotApp {
       this.stopPulseLoop();
       if (this.headStartTimer) clearInterval(this.headStartTimer);
       if (this.matchTimer) clearInterval(this.matchTimer);
+
+      // The headline was hardcoded "TAGGED!", so a round that ended on the
+      // clock — with nobody caught at all — still announced a tag.
+      const headline = document.getElementById('replay-headline');
+      const subhead = document.getElementById('replay-subhead');
+      if (headline) {
+        if (this.tagEvent && this.tagEvent.seekerName) {
+          headline.innerText = 'TAGGED!';
+          headline.style.color = 'var(--primary-blaze)';
+          if (subhead) subhead.innerText = `${this.tagEvent.seekerName} caught ${this.tagEvent.hiderName}`;
+        } else {
+          headline.innerText = 'HIDER SURVIVED!';
+          headline.style.color = 'var(--accent-cyan)';
+          if (subhead) subhead.innerText = 'Time expired — nobody was caught';
+        }
+      }
+
       this.showScreen('replay-screen');
       if (window.hotspotReplay) {
         window.hotspotReplay.loadReplayData(this.matchTrackHistory, this.tagEvent);
@@ -1332,7 +1357,20 @@ class HotspotApp {
       track = { playerId, name, role, points: [] };
       this.matchTrackHistory.push(track);
     }
-    track.points.push({ lat: pos.lat, lng: pos.lng, accuracy: pos.accuracy, timestamp: Date.now() });
+
+    const now = Date.now();
+
+    // This is called from both the GPS watcher and every incoming heartbeat, so
+    // the same player was logged many times a second and the array grew without
+    // limit for the whole match. One point per second per player is plenty for
+    // a replay trail.
+    const last = track.points[track.points.length - 1];
+    if (last && now - last.timestamp < 1000) return;
+
+    track.points.push({ lat: pos.lat, lng: pos.lng, accuracy: pos.accuracy, timestamp: now });
+
+    // Hard ceiling so a long match cannot exhaust memory on a phone.
+    if (track.points.length > 2000) track.points.splice(0, track.points.length - 2000);
   }
 
   // Neutral radar: no band, no distance, no colour cue. Used while the hider
@@ -1422,7 +1460,32 @@ class HotspotApp {
         hiderPos = this.decoyPos;
       }
 
-      if (!hiderPos) return;
+      // A reading is only meaningful if the hider's position is actually
+      // arriving. Previously, with no position or a stale one, the loop just
+      // returned and left whatever band was last on screen — which is how two
+      // phones standing together ended up showing WARM and COLD.
+      const hiderFixAgeMs = (!this.isSoloDrill && hiderPlayerForAcc && hiderPlayerForAcc.lastSeen)
+        ? (Date.now() - hiderPlayerForAcc.lastSeen)
+        : 0;
+
+      if (!hiderPos || hiderFixAgeMs > 8000) {
+        const bandLabel = document.getElementById('seeker-band-label');
+        const distEl = document.getElementById('seeker-dist-readout');
+        const pulseRing = document.getElementById('seeker-pulse-ring');
+        if (bandLabel && !this.powerups.smokeActive) bandLabel.innerText = 'NO SIGNAL';
+        if (distEl) {
+          distEl.innerHTML = hiderPos
+            ? `<span style="font-size:.55em;opacity:.8;">last fix ${Math.round(hiderFixAgeMs / 1000)}s ago</span>`
+            : '<span style="font-size:.55em;opacity:.8;">waiting for hider…</span>';
+        }
+        if (pulseRing) {
+          pulseRing.style.borderColor = '#64748B';
+          pulseRing.style.boxShadow = 'none';
+          pulseRing.style.animationDuration = '2200ms';
+        }
+        this.currentBand = null;
+        return;
+      }
 
       const bufferedHiderPos = window.hotspotGeo.getBufferedPosition(this.myPosition, hiderPos);
 
