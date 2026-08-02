@@ -480,9 +480,9 @@ class HotspotApp {
   }
 
   generateRoomCode() {
-    // 32-char alphabet with no 0/O/1/I ambiguity. 32^6 ≈ 1.07 billion codes,
-    // which is what keeps the public ntfy.sh topic from being enumerable.
-    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    // 27-char unambiguous alphabet.
+    // Strictly excludes confusing character pairs: 0/O, 1/I/L, and 2/Z.
+    const alphabet = 'ABCDEFGHJKMNPQRSTVWX3456789';
     let out = '';
     for (let i = 0; i < 6; i++) {
       out += alphabet.charAt(Math.floor(Math.random() * alphabet.length));
