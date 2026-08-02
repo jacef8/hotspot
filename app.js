@@ -767,11 +767,11 @@ class HotspotApp {
       `).join('') || '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:10px;">No Seekers Joined Yet</div>';
     }
 
-    // Host-Only Start Button Guard: Seekers cannot start the round!
+    // Host & Spectator Start Button Guard: Hider and Spectator (Parent) can start round!
     const startBtn = document.getElementById('btn-start-round');
     const waitMsg = document.getElementById('lobby-wait-msg');
 
-    if (this.role === 'hider') {
+    if (this.role === 'hider' || this.role === 'spectator') {
       if (startBtn) startBtn.style.display = 'block';
       if (waitMsg) waitMsg.style.display = 'none';
     } else {
@@ -782,9 +782,9 @@ class HotspotApp {
 
   // --- GAME START & HEADSTART TIMING ENGINE ---
   startHeadstart() {
-    // Only the Host (Hider) can start the round!
-    if (this.role !== 'hider') {
-      alert('Only the Host (Hider) can start the round!');
+    // Both Hider (Host) and Spectator (Parent) can start the round!
+    if (this.role !== 'hider' && this.role !== 'spectator') {
+      alert('Only the Host or Spectator (Parent) can start the round!');
       return;
     }
 
@@ -1376,6 +1376,13 @@ class HotspotApp {
     if (iWasTagged) this.role = 'seeker'; // unmute the caught hider for the callout
     window.hotspotAudio.playTagScream();
     window.hotspotAudio.speak(`TREED AND TAGGED! ${tag.seekerName} caught ${tag.hiderName}!`);
+
+    // Winner Becomes Hider Rotation: The Seeker who made the tag becomes Hider for next round!
+    if (this.playerId === tag.seekerId) {
+      this.role = 'hider';
+      window.hotspotAudio.speak(`YOU TAGGED THE HIDER! You are the new Hider for the next hunt!`);
+      alert(`🎉 YOU TAGGED THE HIDER!\n\nAwesome catch! You are the Hider for the next round!`);
+    }
 
     this.gameState = 'gameover';
     this.saveSeasonStats(Date.now() - this.gameStartTime);
