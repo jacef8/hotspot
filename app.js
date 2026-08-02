@@ -97,7 +97,6 @@ class HotspotApp {
           this.peerConns = this.peerConns.filter(c => c !== conn);
         });
 
-        // Send current room snapshot to newly connected client
         conn.send({
           type: 'ROOM_SNAPSHOT',
           players: this.players,
@@ -153,7 +152,6 @@ class HotspotApp {
       this.players[p.id] = { ...this.players[p.id], ...p };
       this.updateLobbyList();
       
-      // If host, broadcast updated players to all connected clients
       if (this.role === 'hider' && this.peerConns.length > 0) {
         this.broadcastToAllPeers({ type: 'ROOM_SNAPSHOT', players: this.players, gameState: this.gameState });
       }
@@ -429,8 +427,7 @@ class HotspotApp {
     if (hiderContainer) {
       hiderContainer.innerHTML = hidersList.map(p => `
         <div class="player-badge hider">
-          <span class="role-icon">👑 HIDER</span>
-          <span class="name">${p.name} ${p.id === this.playerId ? '<b style="color:var(--accent-cyan);">(YOU)</b>' : ''}</span>
+          <span class="name">👑 ${p.name} ${p.id === this.playerId ? '<b style="color:var(--accent-cyan);">(YOU)</b>' : ''}</span>
         </div>
       `).join('') || '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:6px;">No Hider Selected</div>';
     }
@@ -438,8 +435,7 @@ class HotspotApp {
     if (seekerContainer) {
       seekerContainer.innerHTML = seekersList.map(p => `
         <div class="player-badge seeker">
-          <span class="role-icon">🏃 SEEKER</span>
-          <span class="name">${p.name} ${p.id === this.playerId ? '<b style="color:var(--accent-cyan);">(YOU)</b>' : ''}</span>
+          <span class="name">🏃 ${p.name} ${p.id === this.playerId ? '<b style="color:var(--accent-cyan);">(YOU)</b>' : ''}</span>
         </div>
       `).join('') || '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:6px;">No Seekers Joined Yet</div>';
     }
