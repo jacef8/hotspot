@@ -27,17 +27,22 @@
   <!-- Firebase Compat Libraries -->
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+  <!-- PeerJS Real-Time Multi-Phone Cloud Sync -->
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 <body>
 
   <div id="app-container">
 
     <!-- Environment / GPS Diagnostic Banner -->
-    <div id="gps-warning-banner" class="warning-banner"></div>
+    <div id="gps-warning-banner" class="warning-banner" onclick="window.hotspotApp.requestGpsPermissionDirectly()">
+      📍 Tap to Enable GPS Location Access (Required)
+    </div>
 
     <!-- Top Navigation / Sound Bar -->
     <div class="top-bar">
-      <span class="accuracy-tag" style="font-size: 10px; color: var(--accent-cyan); font-weight: 700;">🎯 GPS: Searching...</span>
+      <span class="accuracy-tag" style="font-size: 10px; color: var(--accent-cyan); font-weight: 700; cursor: pointer;" onclick="window.hotspotApp.requestGpsPermissionDirectly()">🎯 GPS: Searching...</span>
       <div style="display: flex; gap: 6px;">
         <button class="icon-btn" onclick="window.hotspotApp.toggleSound()" id="sound-btn">🔊 Voice</button>
         <button class="icon-btn" onclick="window.hotspotApp.showScreen('home-screen')">🏠 Home</button>

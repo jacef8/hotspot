@@ -1,8 +1,7 @@
 /**
  * HOTSPOT - Main Game Engine & Controller
  * Standard US Customary Units (Feet & Yards).
- * Integrates Firebase RTDB, Game State, Solo Drill, Powerups, Proximity Engine,
- * Voice Announcer, Haptic Vibe, Spectator, and Replay.
+ * PeerJS WebRTC Cloud Sync & Android GPS Permission Engine.
  */
 
 window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || null;
@@ -10,6 +9,10 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || null;
 class HotspotApp {
   constructor() {
     this.db = null;
+    this.peer = null;
+    this.peerConns = [];
+    this.hostConn = null;
+
     this.roomCode = null;
     this.playerId = 'player_' + Math.random().toString(36).substr(2, 6);
     this.playerName = 'Runner_' + Math.floor(Math.random() * 899 + 100);
@@ -17,7 +20,7 @@ class HotspotApp {
     this.gameMode = 'classic'; // 'classic' | 'infection'
     this.gameState = 'lobby'; // 'lobby' | 'headstart' | 'active' | 'gameover'
     this.headStartSeconds = 60;
-    this.boundaryRadius = 250; // Yard boundary limit in Feet (default 250ft)
+    this.boundaryRadius = 250; // Feet
     this.yardCenterPos = null;
 
     this.headStartTimer = null;
@@ -27,7 +30,6 @@ class HotspotApp {
     this.isSoloDrill = false;
     this.players = {};
     this.hiderId = null;
-    this.channel = null;
 
     this.myPosition = { lat: 37.774929, lng: -122.419416, accuracy: 25, timestamp: Date.now() };
 
@@ -51,7 +53,14 @@ class HotspotApp {
     this.lastPulseTime = 0;
 
     this.initFirebase();
-    this.startGpsTracking(); // Start GPS tracking immediately!
+    this.startGpsTracking(); // Immediate GPS start
+  }
+
+  requestGpsPermissionDirectly() {
+    window.hotspotGeo.startTracking(
+      (pos) => this.onGpsUpdate(pos),
+      (err) => this.onGpsError(err)
+    );
   }
 
   initFirebase() {
@@ -61,48 +70,118 @@ class HotspotApp {
           firebase.initializeApp(window.FIREBASE_CONFIG);
         }
         this.db = firebase.database();
-        console.log('Firebase initialized successfully.');
-      } catch (e) {
-        console.warn('Firebase init error, using Local mode:', e);
+      } catch (e) {}
+    }
+  }
+
+  // --- PEERJS WEBRTC REAL-TIME SYNC ---
+  initHostPeer() {
+    if (typeof Peer === 'undefined') return;
+    try {
+      if (this.peer) this.peer.destroy();
+      const peerId = 'hotspot_' + this.roomCode;
+      this.peer = new Peer(peerId);
+
+      this.peer.on('open', () => {
+        console.log('Host Peer open:', peerId);
+      });
+
+      this.peer.on('connection', (conn) => {
+        this.peerConns.push(conn);
+
+        conn.on('data', (data) => {
+          this.handlePeerData(data, conn);
+        });
+
+        conn.on('close', () => {
+          this.peerConns = this.peerConns.filter(c => c !== conn);
+        });
+
+        // Send current room snapshot to newly connected client
+        conn.send({
+          type: 'ROOM_SNAPSHOT',
+          players: this.players,
+          hiderId: this.hiderId,
+          gameState: this.gameState,
+          headStartSeconds: this.headStartSeconds,
+          boundaryRadius: this.boundaryRadius,
+          gameMode: this.gameMode
+        });
+      });
+    } catch(e) {
+      console.warn('PeerJS Host init warning:', e);
+    }
+  }
+
+  initClientPeer() {
+    if (typeof Peer === 'undefined') return;
+    try {
+      if (this.peer) this.peer.destroy();
+      this.peer = new Peer();
+
+      this.peer.on('open', () => {
+        const hostPeerId = 'hotspot_' + this.roomCode;
+        this.hostConn = this.peer.connect(hostPeerId);
+
+        this.hostConn.on('open', () => {
+          this.hostConn.send({
+            type: 'JOIN_PLAYER',
+            player: {
+              id: this.playerId,
+              name: this.playerName,
+              role: this.role,
+              lat: this.myPosition ? this.myPosition.lat : null,
+              lng: this.myPosition ? this.myPosition.lng : null
+            }
+          });
+        });
+
+        this.hostConn.on('data', (data) => {
+          this.handlePeerData(data, this.hostConn);
+        });
+      });
+    } catch(e) {
+      console.warn('PeerJS Client init warning:', e);
+    }
+  }
+
+  handlePeerData(data, conn) {
+    if (!data) return;
+
+    if (data.type === 'JOIN_PLAYER' || data.type === 'UPDATE_PLAYER') {
+      const p = data.player;
+      this.players[p.id] = { ...this.players[p.id], ...p };
+      this.updateLobbyList();
+      
+      // If host, broadcast updated players to all connected clients
+      if (this.role === 'hider' && this.peerConns.length > 0) {
+        this.broadcastToAllPeers({ type: 'ROOM_SNAPSHOT', players: this.players, gameState: this.gameState });
+      }
+    } else if (data.type === 'ROOM_SNAPSHOT') {
+      this.players = data.players || this.players;
+      if (data.hiderId) this.hiderId = data.hiderId;
+      if (data.gameState && data.gameState !== this.gameState) {
+        this.gameState = data.gameState;
+        this.handleGameStateChange(this.gameState, data);
+      }
+      this.updateLobbyList();
+    } else if (data.type === 'GAME_STATE') {
+      if (data.gameState !== this.gameState) {
+        this.gameState = data.gameState;
+        this.handleGameStateChange(this.gameState, data);
       }
     }
   }
 
-  setupBroadcastRelay() {
-    if (!this.roomCode) return;
-    try {
-      if (this.channel) this.channel.close();
-      this.channel = new BroadcastChannel('hotspot_' + this.roomCode);
-      this.channel.onmessage = (evt) => {
-        if (evt.data && evt.data.type === 'PLAYER_UPDATE') {
-          const p = evt.data.player;
-          this.players[p.id] = { ...this.players[p.id], ...p };
-          this.updateLobbyList();
-        } else if (evt.data && evt.data.type === 'GAME_STATE') {
-          if (evt.data.gameState !== this.gameState) {
-            this.gameState = evt.data.gameState;
-            this.handleGameStateChange(this.gameState, evt.data);
-          }
-        }
-      };
-    } catch (e) {}
-  }
-
-  broadcastPlayerUpdate() {
-    if (this.channel) {
-      try {
-        this.channel.postMessage({
-          type: 'PLAYER_UPDATE',
-          player: {
-            id: this.playerId,
-            name: this.playerName,
-            role: this.role,
-            lat: this.myPosition ? this.myPosition.lat : null,
-            lng: this.myPosition ? this.myPosition.lng : null
-          }
-        });
-      } catch(e) {}
+  broadcastToAllPeers(data) {
+    if (this.hostConn && this.hostConn.open) {
+      try { this.hostConn.send(data); } catch(e) {}
     }
+    this.peerConns.forEach(conn => {
+      if (conn && conn.open) {
+        try { conn.send(data); } catch(e) {}
+      }
+    });
   }
 
   toggleSound() {
@@ -193,11 +272,11 @@ class HotspotApp {
       }
     };
 
-    this.setupBroadcastRelay();
-
     document.getElementById('lobby-code-display').innerText = this.roomCode;
     this.updateLobbyList();
     this.showScreen('lobby-screen');
+
+    this.initHostPeer();
 
     window.hotspotAudio.speak(`Hunt created. Code is ${this.roomCode.split('').join(' ')}`);
 
@@ -216,9 +295,7 @@ class HotspotApp {
         });
 
         this.listenToRoom();
-      } catch (e) {
-        console.warn('Firebase room creation error:', e);
-      }
+      } catch (e) {}
     }
   }
 
@@ -242,11 +319,11 @@ class HotspotApp {
       lng: this.myPosition ? this.myPosition.lng : null
     };
 
-    this.setupBroadcastRelay();
-
     document.getElementById('lobby-code-display').innerText = this.roomCode;
     this.updateLobbyList();
     this.showScreen('lobby-screen');
+
+    this.initClientPeer();
 
     window.hotspotAudio.speak(`Joined hunt ${this.roomCode.split('').join(' ')}`);
 
@@ -272,15 +349,9 @@ class HotspotApp {
           });
 
           this.listenToRoom();
-        }, (err) => {
-          console.warn('Firebase snapshot error:', err);
-        });
-      } catch (e) {
-        console.warn('Firebase join error:', e);
-      }
+        }, (err) => {});
+      } catch (e) {}
     }
-
-    this.broadcastPlayerUpdate();
   }
 
   toggleRole() {
@@ -288,6 +359,11 @@ class HotspotApp {
     if (this.players[this.playerId]) {
       this.players[this.playerId].role = this.role;
     }
+
+    this.broadcastToAllPeers({
+      type: 'UPDATE_PLAYER',
+      player: { id: this.playerId, name: this.playerName, role: this.role }
+    });
 
     if (this.db && this.roomCode) {
       try {
@@ -297,7 +373,6 @@ class HotspotApp {
         }
       } catch (e) {}
     }
-    this.broadcastPlayerUpdate();
     this.updateLobbyList();
     window.hotspotAudio.speak(`Switched role to ${this.role.toUpperCase()}`);
   }
@@ -341,9 +416,7 @@ class HotspotApp {
           this.handleTagEvent(data.tagEvent);
         }
       });
-    } catch (e) {
-      console.warn('listenToRoom error:', e);
-    }
+    } catch (e) {}
   }
 
   updateLobbyList() {
@@ -381,6 +454,13 @@ class HotspotApp {
       this.yardCenterPos = { lat: this.myPosition.lat, lng: this.myPosition.lng };
     }
 
+    this.broadcastToAllPeers({
+      type: 'GAME_STATE',
+      gameState: 'headstart',
+      headStartStartTime: startTime,
+      headStartSeconds: this.headStartSeconds
+    });
+
     if (this.db) {
       try {
         this.db.ref(`rooms/${this.roomCode}`).update({
@@ -390,13 +470,13 @@ class HotspotApp {
           yardCenterPos: this.yardCenterPos
         });
       } catch (e) {}
-    } else {
-      this.handleGameStateChange('headstart', {
-        headStartStartTime: startTime,
-        headStartSeconds: this.headStartSeconds,
-        yardCenterPos: this.yardCenterPos
-      });
     }
+
+    this.handleGameStateChange('headstart', {
+      headStartStartTime: startTime,
+      headStartSeconds: this.headStartSeconds,
+      yardCenterPos: this.yardCenterPos
+    });
   }
 
   hiderReadyEarly() {
@@ -406,13 +486,12 @@ class HotspotApp {
       this.headStartTimer = null;
     }
 
+    this.broadcastToAllPeers({ type: 'GAME_STATE', gameState: 'active' });
+
     if (this.db) {
-      try {
-        this.db.ref(`rooms/${this.roomCode}`).update({ gameState: 'active' });
-      } catch (e) {}
-    } else {
-      this.handleGameStateChange('active');
+      try { this.db.ref(`rooms/${this.roomCode}`).update({ gameState: 'active' }); } catch (e) {}
     }
+    this.handleGameStateChange('active');
   }
 
   handleGameStateChange(newState, roomData = null) {
@@ -466,11 +545,13 @@ class HotspotApp {
           window.hotspotAudio.playCountdownBeep(true);
           window.hotspotAudio.speak('PACK RELEASED! HUNT IS LIVE!');
 
-          if (this.role === 'hider' && this.db) {
-            try { this.db.ref(`rooms/${this.roomCode}`).update({ gameState: 'active' }); } catch (e) {}
-          } else if (!this.db) {
-            this.handleGameStateChange('active');
+          if (this.role === 'hider') {
+            this.broadcastToAllPeers({ type: 'GAME_STATE', gameState: 'active' });
+            if (this.db) {
+              try { this.db.ref(`rooms/${this.roomCode}`).update({ gameState: 'active' }); } catch (e) {}
+            }
           }
+          this.handleGameStateChange('active');
         }
       }, 1000);
 
@@ -531,7 +612,7 @@ class HotspotApp {
     const warnBox = document.getElementById('gps-warning-banner');
     if (warnBox) {
       if (pos.isProtocolWarning) {
-        warnBox.innerText = '⚠️ Opened as local file — GPS requires HTTPS web server (e.g. Railway, Vercel).';
+        warnBox.innerText = '⚠️ Opened as local file — GPS requires HTTPS web server.';
         warnBox.style.display = 'block';
       } else if (pos.accuracy > 50) {
         warnBox.innerText = `⚠️ Weak GPS Fix (±${Math.round(pos.accuracy)}ft) — Move out from under heavy tree canopy!`;
@@ -540,6 +621,17 @@ class HotspotApp {
         warnBox.style.display = 'none';
       }
     }
+
+    if (this.players[this.playerId]) {
+      this.players[this.playerId].lat = pos.lat;
+      this.players[this.playerId].lng = pos.lng;
+      this.players[this.playerId].accuracy = pos.accuracy;
+    }
+
+    this.broadcastToAllPeers({
+      type: 'UPDATE_PLAYER',
+      player: { id: this.playerId, name: this.playerName, role: this.role, lat: pos.lat, lng: pos.lng, accuracy: pos.accuracy }
+    });
 
     if (this.db && this.roomCode) {
       try {
@@ -552,14 +644,13 @@ class HotspotApp {
       } catch (e) {}
     }
 
-    this.broadcastPlayerUpdate();
     this.recordTrackPoint(this.playerId, this.playerName, this.role, pos);
   }
 
   onGpsError(errMessage) {
     const warnBox = document.getElementById('gps-warning-banner');
     if (warnBox) {
-      warnBox.innerText = `❌ ${errMessage}`;
+      warnBox.innerText = `📍 Tap to Allow GPS Access: ${errMessage}`;
       warnBox.style.display = 'block';
     }
   }
