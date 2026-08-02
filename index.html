@@ -135,14 +135,7 @@
         </div>
       </div>
 
-      <button class="btn btn-primary" onclick="
-        const hs = document.getElementById('setup-headstart').value;
-        const gm = document.getElementById('setup-gamemode').value;
-        const b = document.getElementById('setup-boundary').value;
-        const name = document.getElementById('host-nickname').value;
-        window.hotspotApp.playerName = name;
-        window.hotspotApp.createRoom(hs, gm, b);
-      ">
+      <button class="btn btn-primary" onclick="window.createRoomAction()">
         Create Room & Get Code
       </button>
     </div>
@@ -181,20 +174,16 @@
       <div class="card" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
         <div class="input-group">
           <label class="input-label">4-Letter Room Code</label>
-          <input type="text" id="join-code-input" class="text-input" placeholder="e.g. X7K2" style="text-transform: uppercase; font-size: 22px; text-align: center; letter-spacing: 4px;">
+          <input type="text" id="join-code-input" class="text-input" placeholder="e.g. X7K2" style="text-transform: uppercase; font-size: 22px; text-align: center; letter-spacing: 4px;" onkeydown="if(event.key==='Enter') window.joinRoomAction()">
         </div>
 
         <div class="input-group">
           <label class="input-label">Your Nickname</label>
-          <input type="text" id="join-nickname-input" class="text-input" placeholder="Chaser" value="Chaser1">
+          <input type="text" id="join-nickname-input" class="text-input" placeholder="Chaser" value="Chaser1" onkeydown="if(event.key==='Enter') window.joinRoomAction()">
         </div>
       </div>
 
-      <button class="btn btn-primary" onclick="
-        const code = document.getElementById('join-code-input').value;
-        const nick = document.getElementById('join-nickname-input').value;
-        window.hotspotApp.joinRoom(code, nick, 'seeker');
-      ">
+      <button id="btn-enter-hunt" class="btn btn-primary" onclick="window.joinRoomAction()" ontouchstart="window.joinRoomAction()">
         Enter Hunt
       </button>
     </div>
@@ -208,14 +197,11 @@
       <div class="card" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
         <div class="input-group">
           <label class="input-label">4-Letter Room Code</label>
-          <input type="text" id="spectator-code-input" class="text-input" placeholder="e.g. X7K2" style="text-transform: uppercase; font-size: 22px; text-align: center;">
+          <input type="text" id="spectator-code-input" class="text-input" placeholder="e.g. X7K2" style="text-transform: uppercase; font-size: 22px; text-align: center;" onkeydown="if(event.key==='Enter') window.joinSpectatorAction()">
         </div>
       </div>
 
-      <button class="btn btn-primary" onclick="
-        const code = document.getElementById('spectator-code-input').value;
-        window.hotspotApp.joinRoom(code, 'Spectator', 'spectator');
-      ">
+      <button class="btn btn-primary" onclick="window.joinSpectatorAction()">
         Launch Spectator Map
       </button>
     </div>
@@ -332,6 +318,41 @@
     </div>
 
   </div>
+
+  <!-- Global Action Helper Functions -->
+  <script>
+    window.createRoomAction = function() {
+      const hs = document.getElementById('setup-headstart').value;
+      const gm = document.getElementById('setup-gamemode').value;
+      const b = document.getElementById('setup-boundary').value;
+      const name = document.getElementById('host-nickname').value || 'Host';
+      window.hotspotApp.playerName = name;
+      window.hotspotApp.createRoom(hs, gm, b);
+    };
+
+    window.joinRoomAction = function() {
+      const codeEl = document.getElementById('join-code-input');
+      const nickEl = document.getElementById('join-nickname-input');
+      const code = codeEl ? codeEl.value : '';
+      const nick = nickEl ? nickEl.value : 'Chaser';
+      
+      if (!code || !code.trim()) {
+        alert('Please type in the 4-letter Room Code from the host!');
+        return;
+      }
+      window.hotspotApp.joinRoom(code, nick, 'seeker');
+    };
+
+    window.joinSpectatorAction = function() {
+      const codeEl = document.getElementById('spectator-code-input');
+      const code = codeEl ? codeEl.value : '';
+      if (!code || !code.trim()) {
+        alert('Please enter a room code.');
+        return;
+      }
+      window.hotspotApp.joinRoom(code, 'Spectator', 'spectator');
+    };
+  </script>
 
   <!-- Scripts -->
   <script src="audio.js"></script>

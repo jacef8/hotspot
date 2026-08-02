@@ -1,8 +1,7 @@
 /**
  * HOTSPOT - Geolocation Engine & Math Utilities
+ * Optimized for Android & iOS mobile browsers.
  * Standard US Customary Units (Feet & Yards).
- * Handles GPS tracking, Haversine distances, 15s lag buffering >165ft,
- * Solo drill simulation, GPS accuracy diagnostics, and Haptic feedback.
  */
 
 class HotspotGeo {
@@ -44,21 +43,32 @@ class HotspotGeo {
       return;
     }
 
+    const options = {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 3000
+    };
+
+    // Explicitly call getCurrentPosition FIRST to force Android permission prompt & instant fix!
+    try {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => this.handlePosSuccess(pos),
+        (err) => this.handlePosError(err),
+        options
+      );
+    } catch(e) {}
+
     if (this.watchId !== null) {
       navigator.geolocation.clearWatch(this.watchId);
     }
 
-    const options = {
-      enableHighAccuracy: true,
-      timeout: 15000,
-      maximumAge: 0
-    };
-
-    this.watchId = navigator.geolocation.watchPosition(
-      (pos) => this.handlePosSuccess(pos),
-      (err) => this.handlePosError(err),
-      options
-    );
+    try {
+      this.watchId = navigator.geolocation.watchPosition(
+        (pos) => this.handlePosSuccess(pos),
+        (err) => this.handlePosError(err),
+        options
+      );
+    } catch(e) {}
   }
 
   stopTracking() {
@@ -69,9 +79,11 @@ class HotspotGeo {
   }
 
   handlePosSuccess(pos) {
+    if (!pos || !pos.coords) return;
+
     const lat = pos.coords.latitude;
     const lng = pos.coords.longitude;
-    const accuracyMeters = pos.coords.accuracy;
+    const accuracyMeters = pos.coords.accuracy || 8;
     const accuracyFeet = Math.round(accuracyMeters * 3.28084);
     const timestamp = pos.timestamp || Date.now();
 
@@ -93,11 +105,11 @@ class HotspotGeo {
 
   handlePosError(err) {
     let msg = 'Unable to get location.';
-    if (err.code === err.PERMISSION_DENIED) {
+    if (err && err.code === 1) { // PERMISSION_DENIED
       msg = 'GPS Permission Denied. Please enable Location access in browser settings.';
-    } else if (err.code === err.POSITION_UNAVAILABLE) {
+    } else if (err && err.code === 2) { // POSITION_UNAVAILABLE
       msg = 'Location unavailable. Ensure GPS / Location is turned ON.';
-    } else if (err.code === err.TIMEOUT) {
+    } else if (err && err.code === 3) { // TIMEOUT
       msg = 'Location request timed out. Searching for GPS satellites...';
     }
 
@@ -177,14 +189,10 @@ class HotspotGeo {
     }
   }
 
-  /**
-   * Solo Drill: Plant a virtual hider ~distanceFeet out (default 300ft)
-   */
   startSoloDrill(distanceFeet = 300) {
     if (!this.currentPosition) {
       this.currentPosition = { lat: 37.774929, lng: -122.419416, timestamp: Date.now() };
     }
-
     return this.setSoloHiderDistance(distanceFeet);
   }
 
