@@ -67,12 +67,14 @@ class HotspotApp {
     this.startGpsTracking(); // Immediate GPS start
   }
 
+  // Clear only this app's transient room state. The old version wiped ALL of
+  // localStorage on every boot and restored one key, which would silently eat
+  // any setting added later.
   clearStaleCache() {
     try {
       sessionStorage.clear();
-      const stats = localStorage.getItem('hotspot_stats');
-      localStorage.clear();
-      if (stats) localStorage.setItem('hotspot_stats', stats);
+      ['hotspot_room', 'hotspot_session', 'hotspot_players', 'hotspot_state']
+        .forEach(k => localStorage.removeItem(k));
     } catch(e) {}
   }
 
@@ -180,39 +182,72 @@ class HotspotApp {
 
       this.peerConnections = {};
 
+      // The peer ID is unique per device and carries NO role. A well-known
+      // `<code>_hider` ID collided with the public broker's 60-120s ghost
+      // retention, so re-hosting a room silently left the host with no P2P at
+      // all. The host now announces its real ID in every heartbeat and others
+      // dial that. Role changes no longer invalidate the ID either.
       const codeClean = this.roomCode.toLowerCase().trim();
-      const myPeerId = (this.role === 'hider') 
-        ? `hotspot_${codeClean}_hider` 
-        : `hotspot_${codeClean}_${this.playerId}`;
+      this.myPeerId = `hotspot_${codeClean}_${this.playerId}`;
 
-      this.peer = new Peer(myPeerId);
+      this.peer = new Peer(this.myPeerId);
 
       this.peer.on('open', () => {
         this.updateSyncStatus(true);
-        if (this.role === 'seeker') {
-          this.connectToHiderPeer();
-        }
+        this.sendHeartbeat();
       });
 
       this.peer.on('connection', (conn) => {
         this.setupPeerDataConnection(conn);
       });
 
-      this.peer.on('error', () => {
-        if (this.role === 'seeker') {
-          setTimeout(() => this.connectToHiderPeer(), 2500);
+      this.peer.on('error', (err) => {
+        // Unique IDs make collisions near-impossible, but if the broker still
+        // refuses the ID, take a fresh one rather than dying silently.
+        if (err && err.type === 'unavailable-id') {
+          this.myPeerId = `hotspot_${codeClean}_${this.playerId}_${Math.random().toString(36).slice(2, 6)}`;
+          try { if (this.peer) this.peer.destroy(); } catch(e) {}
+          this.peer = null;
+          setTimeout(() => this.initPeerSync(), 1500);
         }
       });
     } catch(e) {}
   }
 
-  connectToHiderPeer() {
-    if (!this.peer || !this.roomCode) return;
-    const hiderPeerId = `hotspot_${this.roomCode.toLowerCase().trim()}_hider`;
+  // Dial the hider's announced peer ID. Seekers AND spectators both need this;
+  // previously spectators never connected at all and ran God View on the slow,
+  // rate-limited cloud relay alone.
+  connectToPeerId(peerId) {
+    if (!this.peer || !peerId || peerId === this.myPeerId) return;
+    if (this.peerConnections && this.peerConnections[peerId]) return;
+    if (this.pendingPeerDials && this.pendingPeerDials[peerId]) return;
+
+    this.pendingPeerDials = this.pendingPeerDials || {};
+    this.pendingPeerDials[peerId] = true;
+
     try {
-      const conn = this.peer.connect(hiderPeerId, { reliable: true });
+      const conn = this.peer.connect(peerId, { reliable: true });
       this.setupPeerDataConnection(conn);
     } catch(e) {}
+
+    setTimeout(() => {
+      if (this.pendingPeerDials) delete this.pendingPeerDials[peerId];
+    }, 5000);
+  }
+
+  destroyPeer() {
+    if (this.peerConnections) {
+      Object.values(this.peerConnections).forEach((conn) => {
+        try { conn.close(); } catch(e) {}
+      });
+    }
+    this.peerConnections = {};
+    this.pendingPeerDials = {};
+    if (this.peer) {
+      try { this.peer.destroy(); } catch(e) {}
+      this.peer = null;
+    }
+    this.myPeerId = null;
   }
 
   setupPeerDataConnection(conn) {
@@ -279,7 +314,10 @@ class HotspotApp {
     this.handleCloudMessage(data);
   }
 
-  sendHeartbeat() {
+  // includeCloud=false sends only over the P2P DataChannel. GPS ticks use that
+  // path: they fire several times a second, and POSTing each one to the public
+  // relay is what was burning the ntfy.sh rate limit and causing the 429s.
+  sendHeartbeat(includeCloud = true) {
     if (!this.roomCode || this.isSoloDrill) return;
     const topic = this.getTopic();
 
@@ -291,6 +329,7 @@ class HotspotApp {
       senderId: this.playerId,
       timestamp: Date.now(),
       roundId: this.currentRoundId,
+      peerId: this.myPeerId || null,
       player: {
         id: this.playerId,
         name: this.playerName,
@@ -306,7 +345,9 @@ class HotspotApp {
     // 1. Send directly over WebRTC Peer-to-Peer DataChannel (0ms delay, 0 rate limits)
     this.broadcastPeer(data);
 
-    // 2. Publish to cloud relay as backup
+    // 2. Publish to cloud relay as backup — throttled, unlike the P2P path.
+    if (!includeCloud) return;
+
     try {
       fetch(`https://ntfy.sh/${topic}`, {
         method: 'POST',
@@ -387,6 +428,10 @@ class HotspotApp {
 
         if (p.role === 'hider') {
           this.hiderId = p.id;
+          // Everyone who is not the hider dials the hider, forming the mesh hub.
+          if (this.role !== 'hider' && data.peerId) {
+            this.connectToPeerId(data.peerId);
+          }
         }
 
         if (data.headStartSeconds) this.headStartSeconds = data.headStartSeconds;
@@ -449,6 +494,11 @@ class HotspotApp {
 
     if (data.type === 'TAG') {
       this.applyTag(data);
+      return;
+    }
+
+    if (data.type === 'REMATCH') {
+      this.applyRematch();
       return;
     }
 
@@ -608,7 +658,15 @@ class HotspotApp {
       clearInterval(this.headStartTimer);
       this.headStartTimer = null;
     }
+    if (this.matchTimer) {
+      clearInterval(this.matchTimer);
+      this.matchTimer = null;
+    }
     this.stopPulseLoop();
+
+    // Tear the WebRTC peer down. Leaving it alive kept a stale registration on
+    // the broker under the old room and leaked a connection per room joined.
+    this.destroyPeer();
 
     this.roomCode = null;
     this.currentRoundId = null;
@@ -650,11 +708,69 @@ class HotspotApp {
     if (readyBtn) readyBtn.style.display = '';
 
     this.triggerSmokeVisual(false);
+  }
 
-    if (screenId === 'lobby-screen') {
-      const nickInput = document.getElementById('lobby-nickname-input');
-      if (nickInput && this.playerName) nickInput.value = this.playerName;
+  // "Winner becomes hider" used to be announced and then thrown away, because
+  // the round simply ended and the next createRoom/joinRoom overwrote the role.
+  // A rematch keeps the room and the players and replays with rotated roles.
+  rematch() {
+    if (!this.roomCode || this.isSoloDrill) {
+      alert('Rematch is only available in a multiplayer room.');
+      return;
     }
+    if (this.role !== 'hider' && this.role !== 'spectator') {
+      alert('Only the new Hider or the Spectator (Parent) can start the rematch.');
+      return;
+    }
+    this.broadcastCloud({ type: 'REMATCH' });
+    this.applyRematch();
+  }
+
+  applyRematch() {
+    if (!this.roomCode) return;
+
+    if (this.headStartTimer) { clearInterval(this.headStartTimer); this.headStartTimer = null; }
+    if (this.matchTimer) { clearInterval(this.matchTimer); this.matchTimer = null; }
+    this.stopPulseLoop();
+
+    this.gameState = 'lobby';
+    this.currentRoundId = null;
+    this.taggedHiderIds = {};
+    this.tagEvent = null;
+    this.matchTrackHistory = [];
+    this.decoyPos = null;
+    this.outOfBoundsSpoken = false;
+    this.yardCenterPos = null;
+
+    this.powerups = {
+      decoyUsed: false,
+      smokeUsed: false,
+      bearingPingUsed: false,
+      decoyActive: false,
+      smokeActive: false,
+      bearingActive: false
+    };
+    ['btn-powerup-decoy', 'btn-powerup-smoke', 'btn-bearing-ping'].forEach((id) => {
+      const b = document.getElementById(id);
+      if (b) b.disabled = false;
+    });
+
+    const readyBtn = document.getElementById('btn-hider-ready');
+    if (readyBtn) readyBtn.style.display = '';
+    this.triggerSmokeVisual(false);
+
+    // Roles were already rotated locally when the tag landed; publish the new
+    // one so every roster agrees before the next round starts.
+    if (this.players[this.playerId]) this.players[this.playerId].role = this.role;
+
+    const codeEl = document.getElementById('lobby-code-display');
+    if (codeEl) codeEl.innerText = this.roomCode;
+
+    this.updateLobbyList();
+    this.showScreen('lobby-screen');
+    this.sendHeartbeat();
+
+    window.hotspotAudio.speak(`Rematch ready! You are the ${this.role}.`);
   }
 
   goHome() {
@@ -696,8 +812,8 @@ class HotspotApp {
 
   joinRoom(code, nickname, role = 'seeker') {
     const cleanCode = code ? code.trim() : '';
-    if (!cleanCode || (cleanCode.length !== 4 && cleanCode.length !== 6)) {
-      alert('Please enter the room code from the host.');
+    if (cleanCode.length !== 6) {
+      alert('Please enter the full 6-character room code from the host.');
       return;
     }
 
@@ -814,7 +930,13 @@ class HotspotApp {
     const startTime = Date.now();
     this.headStartStartTime = startTime;
 
-    if (this.myPosition) {
+    // The yard centre must be the HIDER's start point, not whoever pressed
+    // Start. When a spectating parent starts the round, using their own
+    // position put the geofence on their chair instead of the play area.
+    const hiderPlayer = Object.values(this.players).find(p => p.role === 'hider');
+    if (hiderPlayer && hiderPlayer.lat && hiderPlayer.lng) {
+      this.yardCenterPos = { lat: hiderPlayer.lat, lng: hiderPlayer.lng };
+    } else if (this.role !== 'spectator' && this.myPosition) {
       this.yardCenterPos = { lat: this.myPosition.lat, lng: this.myPosition.lng };
     }
 
@@ -950,6 +1072,13 @@ class HotspotApp {
       this.showScreen('replay-screen');
       if (window.hotspotReplay) {
         window.hotspotReplay.loadReplayData(this.matchTrackHistory, this.tagEvent);
+        window.hotspotReplay.setBoundary(this.yardCenterPos, this.boundaryRadius);
+      }
+
+      // Rematch only makes sense in a real room with the roster still present.
+      const rematchBtn = document.getElementById('btn-rematch');
+      if (rematchBtn) {
+        rematchBtn.style.display = (this.roomCode && !this.isSoloDrill) ? 'block' : 'none';
       }
     }
   }
@@ -1007,6 +1136,8 @@ class HotspotApp {
     this.stopPulseLoop();
     this.gameState = 'gameover';
 
+    const survivedMs = this.gameStartTime ? (Date.now() - this.gameStartTime) : 0;
+
     if (this.role === 'hider') {
       window.hotspotAudio.speak("TIME EXPIRED! YOU SURVIVED AND WON THE HUNT!");
       alert("🎉 TIME EXPIRED!\n\nYou successfully hid until time ran out! HIDER WINS!");
@@ -1015,6 +1146,9 @@ class HotspotApp {
       alert("⌛ TIME EXPIRED!\n\nThe Hider survived the entire match duration! Hider wins!");
     }
 
+    // Surviving the whole clock is exactly the Longest Hide record, and it was
+    // the one outcome that never got saved.
+    this.saveSeasonStats(survivedMs, 'escape');
     this.handleGameStateChange('gameover');
   }
 
@@ -1057,9 +1191,17 @@ class HotspotApp {
 
     this.recordTrackPoint(this.playerId, this.playerName, this.role, pos);
 
-    // Send immediate position update over WebRTC P2P DataChannel on every GPS tick
+    // Also run boundary feedback here, not just in the pulse loop — the hider is
+    // moving during the head start, which is exactly when they stray.
+    if (this.gameState === 'headstart' || this.gameState === 'active') {
+      this.updateBoundaryWarning();
+    }
+
+    // Push position over the P2P DataChannel on every GPS tick — free and
+    // instant. The cloud relay is left to the throttled 3s interval; posting
+    // per-tick is what exhausted the ntfy.sh rate limit.
     if (this.roomCode && (this.gameState === 'headstart' || this.gameState === 'active')) {
-      this.sendHeartbeat();
+      this.sendHeartbeat(false);
     }
   }
 
@@ -1227,49 +1369,85 @@ class HotspotApp {
       const seekerPlayers = Object.values(this.players).filter(p => p.role === 'seeker' && p.lat && p.lng);
 
       if (seekerPlayers.length > 0) {
-        const distances = seekerPlayers.map(s => {
-          return window.hotspotGeo.calculateDistance(
+        let closestDistFeet = Infinity;
+        let closestSeeker = null;
+        seekerPlayers.forEach(s => {
+          const d = window.hotspotGeo.calculateDistance(
             this.myPosition.lat, this.myPosition.lng,
             s.lat, s.lng
           );
+          if (d < closestDistFeet) { closestDistFeet = d; closestSeeker = s; }
         });
 
-        const closestDistFeet = Math.min(...distances);
+        // Same GPS noise as the seeker radar, so show the same honesty about it.
+        const margin = window.hotspotGeo.combinedAccuracy(
+          this.myPosition.accuracy, closestSeeker ? closestSeeker.accuracy : 25
+        );
+
         if (distEl) {
-          if (closestDistFeet > 300) {
-            distEl.innerText = `${Math.round(closestDistFeet / 3)}yd`;
-          } else {
-            distEl.innerText = `${Math.round(closestDistFeet)}ft`;
-          }
+          const shown = closestDistFeet > 300
+            ? `${Math.round(closestDistFeet / 3)}yd`
+            : `${Math.round(closestDistFeet)}ft`;
+          distEl.innerHTML = `${shown}<span style="font-size:.35em;opacity:.65;font-weight:600;"> ±${margin}ft</span>`;
         }
       } else {
         if (distEl) distEl.innerText = '--ft';
       }
 
-      const boundaryBanner = document.getElementById('hider-boundary-alert');
-      if (this.yardCenterPos && this.boundaryRadius > 0 && boundaryBanner) {
-        const distFromCenterFeet = window.hotspotGeo.calculateDistance(
-          this.myPosition.lat, this.myPosition.lng,
-          this.yardCenterPos.lat, this.yardCenterPos.lng
-        );
-
-        if (distFromCenterFeet > this.boundaryRadius) {
-          boundaryBanner.style.display = 'block';
-          boundaryBanner.style.background = '#EF4444';
-          boundaryBanner.innerText = `🛑 OUT OF BOUNDS! Move back inside yard! (${Math.round(distFromCenterFeet)}ft from start)`;
-        } else if (distFromCenterFeet > 0.8 * this.boundaryRadius) {
-          boundaryBanner.style.display = 'block';
-          boundaryBanner.style.background = '#F59E0B';
-          boundaryBanner.innerText = `⚠️ APPROACHING YARD EDGE! (${Math.round(distFromCenterFeet)}ft / ${this.boundaryRadius}ft limit)`;
-        } else {
-          boundaryBanner.style.display = 'none';
-        }
-      }
     }
+
+    // Boundary feedback runs for BOTH roles. Previously only the hider ever saw
+    // it, and only once already at the edge — you cannot see a property line in
+    // the dark, so everyone now gets a live "room left" readout.
+    this.updateBoundaryWarning();
 
     if (this.role === 'spectator') {
       window.hotspotReplay.updateSpectatorView(this.players);
+      window.hotspotReplay.setBoundary(this.yardCenterPos, this.boundaryRadius);
     }
+  }
+
+  updateBoundaryWarning() {
+    const ids = ['hider-boundary-alert', 'seeker-boundary-alert'];
+    const banners = ids.map(id => document.getElementById(id)).filter(Boolean);
+    if (!banners.length) return;
+
+    const noLimit = !this.yardCenterPos || !this.boundaryRadius || this.boundaryRadius <= 0 || !this.myPosition;
+    if (noLimit || this.role === 'spectator') {
+      banners.forEach(b => { b.style.display = 'none'; });
+      return;
+    }
+
+    const distFromCenter = window.hotspotGeo.calculateDistance(
+      this.myPosition.lat, this.myPosition.lng,
+      this.yardCenterPos.lat, this.yardCenterPos.lng
+    );
+    const roomLeft = Math.max(0, Math.round(this.boundaryRadius - distFromCenter));
+
+    let bg, text;
+    if (distFromCenter > this.boundaryRadius) {
+      bg = '#EF4444';
+      text = `🛑 OUT OF BOUNDS — ${Math.round(distFromCenter - this.boundaryRadius)}ft past the ${this.boundaryRadius}ft line. Head back!`;
+      if (!this.outOfBoundsSpoken) {
+        this.outOfBoundsSpoken = true;
+        if ('vibrate' in navigator) { try { navigator.vibrate([200, 100, 200]); } catch(e) {} }
+        window.hotspotAudio.speak('Out of bounds! Head back inside the yard!');
+      }
+    } else if (distFromCenter > 0.8 * this.boundaryRadius) {
+      this.outOfBoundsSpoken = false;
+      bg = '#F59E0B';
+      text = `⚠️ NEAR THE EDGE — only ${roomLeft}ft of room left`;
+    } else {
+      this.outOfBoundsSpoken = false;
+      bg = 'rgba(34, 197, 94, 0.20)';
+      text = `✅ In bounds — ${roomLeft}ft of room left`;
+    }
+
+    banners.forEach(b => {
+      b.style.display = 'block';
+      b.style.background = bg;
+      b.innerText = text;
+    });
   }
 
   usePowerup(type) {
@@ -1433,13 +1611,20 @@ class HotspotApp {
     this.handleGameStateChange('gameover');
   }
 
-  saveSeasonStats(huntDurationMs) {
+  // outcome: 'tag'    — a seeker caught the hider
+  //          'escape' — the match clock ran out and the hider survived
+  // Fastest Tag only means anything for a tag; Longest Hide is how long the
+  // hider stayed free either way. Previously both were fed the same number, so
+  // they were really just min and max round length.
+  saveSeasonStats(huntDurationMs, outcome = 'tag') {
     try {
       const stats = JSON.parse(localStorage.getItem('hotspot_stats') || '{"totalHunts":0,"fastestTagSec":9999,"longestHideSec":0}');
       stats.totalHunts += 1;
-      const durationSec = Math.floor(huntDurationMs / 1000);
+      const durationSec = Math.max(0, Math.floor(huntDurationMs / 1000));
 
-      if (durationSec < stats.fastestTagSec) stats.fastestTagSec = durationSec;
+      if (outcome === 'tag' && durationSec < stats.fastestTagSec) {
+        stats.fastestTagSec = durationSec;
+      }
       if (durationSec > stats.longestHideSec) stats.longestHideSec = durationSec;
 
       localStorage.setItem('hotspot_stats', JSON.stringify(stats));

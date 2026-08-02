@@ -14,6 +14,42 @@ class HotspotReplay {
     this.replayStep = 0;
     this.isPlaying = false;
     this.playbackSpeed = 1;
+    this.boundaryCircle = null;
+  }
+
+  // Draw the yard limit on the map. Players in the field only get a numeric
+  // "room left" readout, so this is the one place the limit is actually visible
+  // as a shape — useful for a parent running the game from God View.
+  setBoundary(centerPos, radiusFeet) {
+    if (!this.map || typeof L === 'undefined') return;
+
+    if (!centerPos || !radiusFeet || radiusFeet <= 0) {
+      if (this.boundaryCircle) {
+        try { this.map.removeLayer(this.boundaryCircle); } catch(e) {}
+        this.boundaryCircle = null;
+      }
+      return;
+    }
+
+    const radiusMeters = radiusFeet / 3.28084;
+    const latLng = [centerPos.lat, centerPos.lng];
+
+    if (this.boundaryCircle) {
+      this.boundaryCircle.setLatLng(latLng);
+      this.boundaryCircle.setRadius(radiusMeters);
+      return;
+    }
+
+    this.boundaryCircle = L.circle(latLng, {
+      radius: radiusMeters,
+      color: '#F59E0B',
+      weight: 2,
+      dashArray: '6, 6',
+      fill: true,
+      fillColor: '#F59E0B',
+      fillOpacity: 0.07
+    }).addTo(this.map);
+    this.boundaryCircle.bindTooltip(`Yard limit — ${radiusFeet}ft`, { permanent: false });
   }
 
   initMap(elementId, center = [37.774929, -122.419416], zoom = 17) {
