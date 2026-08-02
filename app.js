@@ -12,6 +12,7 @@ class HotspotApp {
     this.heartbeatInterval = null;
 
     this.roomCode = null;
+    this.joinTime = 0;
     this.playerId = 'player_' + Math.random().toString(36).substr(2, 6);
     this.playerName = 'Runner_' + Math.floor(Math.random() * 899 + 100);
     this.role = 'seeker'; // 'hider' | 'seeker' | 'spectator'
@@ -88,7 +89,7 @@ class HotspotApp {
       };
     } catch(e) {}
 
-    // 3. Heartbeat & Poll loop every 1 second (100% reliable on 4G/5G/Wi-Fi)
+    // 3. Heartbeat & Poll loop every 1 second
     this.heartbeatInterval = setInterval(() => {
       this.sendHeartbeat();
       this.pollCloudMessages(topic);
@@ -105,6 +106,7 @@ class HotspotApp {
     const data = {
       type: 'HEARTBEAT',
       senderId: this.playerId,
+      timestamp: Date.now(),
       player: {
         id: this.playerId,
         name: this.playerName,
@@ -113,7 +115,6 @@ class HotspotApp {
         lng: this.myPosition ? this.myPosition.lng : null,
         accuracy: this.myPosition ? this.myPosition.accuracy : 25
       },
-      gameState: this.gameState,
       headStartSeconds: this.headStartSeconds,
       boundaryRadius: this.boundaryRadius
     };
@@ -130,6 +131,7 @@ class HotspotApp {
   broadcastCloud(data) {
     if (!this.roomCode) return;
     data.senderId = this.playerId;
+    data.timestamp = Date.now();
     const topic = 'hotspot_room_' + this.roomCode.toLowerCase();
 
     try {
@@ -143,7 +145,7 @@ class HotspotApp {
 
   pollCloudMessages(topic) {
     try {
-      fetch(`https://ntfy.sh/${topic}/json?poll=1&since=6s`)
+      fetch(`https://ntfy.sh/${topic}/json?poll=1&since=3s`)
         .then(res => res.text())
         .then(text => {
           if (!text) return;
@@ -165,6 +167,7 @@ class HotspotApp {
   handleCloudMessage(data) {
     if (!data || data.senderId === this.playerId) return;
 
+    // Heartbeats and join packets update player names strictly WITHOUT triggering state changes
     if (data.type === 'HEARTBEAT' || data.type === 'PLAYER_JOIN' || data.type === 'PLAYER_UPDATE') {
       const p = data.player;
       if (p && p.id) {
@@ -178,21 +181,18 @@ class HotspotApp {
         if (data.boundaryRadius) this.boundaryRadius = data.boundaryRadius;
 
         this.updateLobbyList();
-
-        // If another phone has started headstart or active round, sync state
-        if (data.gameState && (data.gameState === 'headstart' || data.gameState === 'active') && this.gameState === 'lobby') {
-          this.gameState = data.gameState;
-          this.handleGameStateChange(this.gameState, data);
-        }
       }
     } else if (data.type === 'START_HEADSTART') {
-      if (this.gameState === 'lobby') {
+      // ONLY trigger headstart if message timestamp is AFTER Seeker joined
+      if (this.gameState === 'lobby' && data.timestamp && data.timestamp >= (this.joinTime - 2000)) {
         this.gameState = 'headstart';
         this.handleGameStateChange('headstart', data);
       }
     } else if (data.type === 'HIDER_READY_EARLY') {
-      this.gameState = 'active';
-      this.handleGameStateChange('active', data);
+      if (data.timestamp && data.timestamp >= (this.joinTime - 2000)) {
+        this.gameState = 'active';
+        this.handleGameStateChange('active', data);
+      }
     } else if (data.type === 'POS_UPDATE') {
       if (data.playerId && this.players[data.playerId]) {
         this.players[data.playerId].lat = data.lat;
@@ -276,6 +276,7 @@ class HotspotApp {
     this.boundaryRadius = parseInt(boundaryFeet, 10) || 250;
     this.gameMode = mode;
     this.roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+    this.joinTime = Date.now();
     this.role = 'hider';
     this.hiderId = this.playerId;
     this.gameState = 'lobby';
@@ -307,6 +308,7 @@ class HotspotApp {
 
     this.isSoloDrill = false;
     this.roomCode = code.toUpperCase().trim();
+    this.joinTime = Date.now(); // Record join timestamp
     this.playerName = nickname ? nickname.trim() : this.playerName;
     this.role = role;
     this.gameState = 'lobby';
@@ -465,7 +467,7 @@ class HotspotApp {
       this.gameStartTime = Date.now();
       if (this.headStartTimer) clearInterval(this.headStartTimer);
 
-      document.querySelectorAll('.headstart-counter').forEach(el => el.innerText = '🔥 HUNT IS LIVE!';
+      document.querySelectorAll('.headstart-counter').forEach(el => el.innerText = '🔥 HUNT IS LIVE!');
       const hiderCounter = document.getElementById('hider-timer-display');
       if (hiderCounter) hiderCounter.innerText = 'LIVE!';
 
