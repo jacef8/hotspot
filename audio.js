@@ -14,8 +14,21 @@ class HotspotAudio {
     this.lastSpokenBand = null;
     this.lastSpokenTime = 0;
     this.unlocked = false;
+    this.voices = [];
 
+    this.initVoices();
     this.setupUnlockListeners();
+  }
+
+  initVoices() {
+    if (this.synth) {
+      this.voices = this.synth.getVoices();
+      if (this.synth.onvoiceschanged !== undefined) {
+        this.synth.onvoiceschanged = () => {
+          this.voices = this.synth.getVoices();
+        };
+      }
+    }
   }
 
   setupUnlockListeners() {
@@ -71,7 +84,7 @@ class HotspotAudio {
 
   speak(text, rate = 1.1, pitch = 1.0) {
     if (!this.speechEnabled || !this.synth) return;
-    if (this.isHiderSilent()) return; // SILENT FOR HIDER TO PREVENT LOCATION EXPOSURE!
+    if (this.isHiderSilent()) return; // SILENT FOR HIDER!
 
     try {
       this.initAudioContext();
@@ -85,8 +98,11 @@ class HotspotAudio {
       utterance.rate = rate;
       utterance.pitch = pitch;
 
-      const voices = this.synth.getVoices();
-      const engVoice = voices.find(v => v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('US')));
+      if (!this.voices || this.voices.length === 0) {
+        this.voices = this.synth.getVoices();
+      }
+
+      const engVoice = this.voices.find(v => v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('US')));
       if (engVoice) utterance.voice = engVoice;
 
       this.synth.speak(utterance);
@@ -198,7 +214,6 @@ class HotspotAudio {
 
   playTagScream() {
     if (!this.audioFxEnabled) return;
-    // Note: Tag scream plays when caught to announce game over
     try {
       this.initAudioContext();
       if (!this.audioCtx || this.audioCtx.state === 'suspended') return;

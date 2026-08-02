@@ -36,6 +36,10 @@ class HotspotReplay {
       subdomains: 'abcd',
       maxZoom: 20
     }).addTo(this.map);
+
+    setTimeout(() => {
+      if (this.map) this.map.invalidateSize();
+    }, 200);
   }
 
   updateSpectatorView(playersData) {
@@ -154,6 +158,10 @@ class HotspotReplay {
         icon: L.divIcon({ html: tagMarkerHtml, className: 'tag-marker', iconSize: [32, 32] })
       }).addTo(this.map).bindTooltip(`TAGGED! ${this.tagEvent.seekerName} caught ${this.tagEvent.hiderName}`, { permanent: true });
     }
+
+    setTimeout(() => {
+      if (this.map) this.map.invalidateSize();
+    }, 250);
   }
 
   stepReplay(progressPercent) {
