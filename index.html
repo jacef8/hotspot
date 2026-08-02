@@ -23,13 +23,6 @@
       appId: "1:439506643972:web:3da9762948d142897f9951"
     };
   </script>
-
-  <!-- Firebase Compat Libraries -->
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-
-  <!-- MQTT over WebSockets for Instant Multi-Phone Cloud Sync -->
-  <script src="https://unpkg.com/mqtt@5.3.4/dist/mqtt.min.js"></script>
 </head>
 <body>
 
@@ -54,6 +47,9 @@
       <div class="brand-header">
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="brand-subtitle">Extreme Yard Tag & Proximity Hunt</div>
+        <div id="cloud-sync-status" style="font-size: 11px; color: var(--accent-cyan); font-weight: 700; text-align: center; margin-top: 4px; letter-spacing: 0.5px;">
+          🌐 Cloud Sync: hotspot-app-yardtag.web.app
+        </div>
       </div>
 
       <div class="card" style="border-color: var(--accent-cyan);">

@@ -13,6 +13,7 @@ class HotspotApp {
     this.pollInterval = null;
 
     this.roomCode = null;
+    this.sessionId = null;
     this.playerId = 'player_' + Math.random().toString(36).substr(2, 6);
     this.playerName = 'Runner_' + Math.floor(Math.random() * 899 + 100);
     this.role = 'seeker'; // 'hider' | 'seeker' | 'spectator'
@@ -108,6 +109,7 @@ class HotspotApp {
     this.broadcastCloud({
       type: 'PLAYER_JOIN',
       senderId: this.playerId,
+      sessionId: this.sessionId,
       player: {
         id: this.playerId,
         name: this.playerName,
@@ -122,6 +124,7 @@ class HotspotApp {
   broadcastCloud(data) {
     if (!this.roomCode) return;
     data.senderId = this.playerId;
+    data.sessionId = this.sessionId;
     const topic = 'hotspot_room_' + this.roomCode.toLowerCase();
 
     try {
@@ -157,6 +160,12 @@ class HotspotApp {
   handleCloudMessage(data) {
     if (!data || data.senderId === this.playerId) return;
 
+    // Reject messages from different room sessions
+    if (data.sessionId && this.sessionId && data.sessionId !== this.sessionId && this.role === 'seeker') {
+      this.sessionId = data.sessionId;
+      this.players = { [this.playerId]: this.players[this.playerId] };
+    }
+
     if (data.type === 'PLAYER_JOIN' || data.type === 'PLAYER_UPDATE') {
       const p = data.player;
       if (p && p.id) {
@@ -177,15 +186,17 @@ class HotspotApp {
         }
       }
     } else if (data.type === 'ROOM_SNAPSHOT') {
+      // Active Round Guard: If game is already live and Seeker was not in lobby, inform Seeker
+      if ((data.gameState === 'active' || data.gameState === 'headstart') && this.gameState === 'lobby') {
+        alert('⚠️ That round is already underway — ask the host for a new room code!');
+        this.showScreen('join-screen');
+        return;
+      }
+
       this.players = { ...this.players, ...data.players };
       if (data.hiderId) this.hiderId = data.hiderId;
       this.updateLobbyList();
 
-      // Only sync state if match is ALREADY live
-      if (data.gameState && (data.gameState === 'headstart' || data.gameState === 'active') && this.gameState === 'lobby') {
-        this.gameState = data.gameState;
-        this.handleGameStateChange(this.gameState, data);
-      }
     } else if (data.type === 'START_HEADSTART') {
       if (this.gameState === 'lobby') {
         this.gameState = 'headstart';
@@ -277,6 +288,7 @@ class HotspotApp {
     this.boundaryRadius = parseInt(boundaryFeet, 10) || 250;
     this.gameMode = mode;
     this.roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+    this.sessionId = 'sess_' + Date.now(); // Fresh room session wipe
     this.role = 'hider';
     this.hiderId = this.playerId;
     this.gameState = 'lobby';
@@ -308,16 +320,19 @@ class HotspotApp {
 
     this.isSoloDrill = false;
     this.roomCode = code.toUpperCase().trim();
+    this.sessionId = null; // Will adopt Host's session ID on snapshot
     this.playerName = nickname ? nickname.trim() : this.playerName;
     this.role = role;
     this.gameState = 'lobby';
 
-    this.players[this.playerId] = {
-      id: this.playerId,
-      name: this.playerName,
-      role: this.role,
-      lat: this.myPosition ? this.myPosition.lat : null,
-      lng: this.myPosition ? this.myPosition.lng : null
+    this.players = {
+      [this.playerId]: {
+        id: this.playerId,
+        name: this.playerName,
+        role: this.role,
+        lat: this.myPosition ? this.myPosition.lat : null,
+        lng: this.myPosition ? this.myPosition.lng : null
+      }
     };
 
     document.getElementById('lobby-code-display').innerText = this.roomCode;
