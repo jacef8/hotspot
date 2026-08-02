@@ -1,10 +1,7 @@
 {
+  "_comment": "Realtime Database is NOT used by this app. Sync runs over WebRTC (PeerJS) with an ntfy.sh HTTPS relay as fallback. These rules stay closed so a stray `firebase deploy` cannot open the database to the world.",
   "rules": {
-    "rooms": {
-      "$roomCode": {
-        ".read": true,
-        ".write": true
-      }
-    }
+    ".read": false,
+    ".write": false
   }
 }
