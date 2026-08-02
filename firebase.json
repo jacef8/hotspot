@@ -5,6 +5,8 @@
       "firebase.json",
       "database.rules.json",
       "**/.*",
+      ".git/**",
+      ".firebase/**",
       "**/node_modules/**",
       "**/*.md"
     ],
