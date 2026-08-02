@@ -15,6 +15,8 @@ class HotspotGeo {
     this.onPositionUpdate = null;
     this.onError = null;
     this.isProtocolWarning = false;
+    this.deviceHeading = null;
+    this.compassStarted = false;
 
     this.checkProtocol();
   }
@@ -147,6 +149,64 @@ class HotspotGeo {
     const θ = Math.atan2(y, x);
 
     return ((θ * 180) / Math.PI + 360) % 360;
+  }
+
+  // Returns a { lat, lng } point offset from an arbitrary origin.
+  // distanceFeet in FEET, bearingDeg in degrees clockwise from true north.
+  offsetPosition(lat, lng, distanceFeet, bearingDeg) {
+    const R = 6371e3;
+    const d = distanceFeet / 3.28084;
+    const brng = (bearingDeg * Math.PI) / 180;
+    const lat1 = (lat * Math.PI) / 180;
+    const lon1 = (lng * Math.PI) / 180;
+
+    const lat2 = Math.asin(
+      Math.sin(lat1) * Math.cos(d / R) +
+      Math.cos(lat1) * Math.sin(d / R) * Math.cos(brng)
+    );
+
+    const lon2 = lon1 + Math.atan2(
+      Math.sin(brng) * Math.sin(d / R) * Math.cos(lat1),
+      Math.cos(d / R) - Math.sin(lat1) * Math.sin(lat2)
+    );
+
+    return {
+      lat: (lat2 * 180) / Math.PI,
+      lng: (lon2 * 180) / Math.PI
+    };
+  }
+
+  // iOS 13+ requires a user gesture before granting orientation access.
+  requestCompassPermission() {
+    if (this.compassStarted) return;
+
+    const attach = () => {
+      this.compassStarted = true;
+      window.addEventListener('deviceorientationabsolute', (e) => this.handleOrientation(e), true);
+      window.addEventListener('deviceorientation', (e) => this.handleOrientation(e), true);
+    };
+
+    try {
+      if (typeof DeviceOrientationEvent !== 'undefined' &&
+          typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission()
+          .then((state) => { if (state === 'granted') attach(); })
+          .catch(() => {});
+      } else {
+        attach();
+      }
+    } catch(e) {}
+  }
+
+  handleOrientation(e) {
+    if (!e) return;
+    if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) {
+      this.deviceHeading = e.webkitCompassHeading; // iOS: already true-north clockwise
+      return;
+    }
+    if (typeof e.alpha === 'number' && !isNaN(e.alpha)) {
+      this.deviceHeading = (360 - e.alpha) % 360; // Android: alpha is counter-clockwise
+    }
   }
 
   // Expects distance in FEET

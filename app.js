@@ -1,8 +1,9 @@
 /**
  * HOTSPOT - Main Game Engine & Controller
  * Standard US Customary Units (Feet & Yards).
- * 100% Bulletproof HTTPS 1-Second Heartbeat Cloud Sync Engine (Port 443).
- * Zero-Cache Topic Nonce Architecture.
+ * HTTPS cloud sync over Port 443: SSE primary receive, 3s heartbeat publish,
+ * HTTP GET polling only as a fallback when SSE goes silent.
+ * Round identity is carried by roundId (no cross-device clock comparison).
  */
 
 window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || null;
@@ -13,8 +14,14 @@ class HotspotApp {
     this.heartbeatInterval = null;
 
     this.roomCode = null;
-    this.roomNonce = null;
     this.joinTime = 0;
+    this.currentRoundId = null;
+    this.seenRoundIds = {};
+    this.seenMsgIds = {};
+    this.seenMsgCount = 0;
+    this.taggedHiderIds = {};
+    this.lastCloudMessageAt = 0;
+    this.syncFailCount = 0;
     this.playerId = 'player_' + Math.random().toString(36).substr(2, 6);
     this.playerName = 'Runner_' + Math.floor(Math.random() * 899 + 100);
     this.role = 'seeker'; // 'hider' | 'seeker' | 'spectator'
@@ -66,6 +73,35 @@ class HotspotApp {
     } catch(e) {}
   }
 
+  getTopic() {
+    if (!this.roomCode) return null;
+    return 'hotspot_r243_' + this.roomCode.toLowerCase();
+  }
+
+  updateSyncStatus(ok, note) {
+    const banner = document.getElementById('sync-warning-banner');
+    const homeLabel = document.getElementById('cloud-sync-status');
+
+    if (ok) {
+      this.syncFailCount = 0;
+      if (banner) banner.style.display = 'none';
+      if (homeLabel && this.roomCode) {
+        homeLabel.innerText = '🟢 Cloud sync live — room ' + this.roomCode;
+      }
+      return;
+    }
+
+    this.syncFailCount++;
+    if (this.syncFailCount < 3) return;
+
+    const msg = '⚠️ CLOUD SYNC FAILING' + (note ? ' — ' + note : '') + ' — players may not update.';
+    if (banner) {
+      banner.innerText = msg;
+      banner.style.display = 'block';
+    }
+    if (homeLabel) homeLabel.innerText = msg;
+  }
+
   requestGpsPermissionDirectly() {
     window.hotspotGeo.startTracking(
       (pos) => this.onGpsUpdate(pos),
@@ -76,49 +112,92 @@ class HotspotApp {
   // --- 100% BULLETPROOF HTTPS 1-SECOND HEARTBEAT CLOUD SYNC ---
   initCloudSync() {
     if (!this.roomCode) return;
-    const topic = 'hotspot_r242_' + this.roomCode.toLowerCase();
+    const topic = this.getTopic();
 
     // 1. Clear existing timers and streams
     if (this.eventSource) {
       try { this.eventSource.close(); } catch(e) {}
+      this.eventSource = null;
     }
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
     }
 
-    // 2. Open HTTPS Server-Sent Events (SSE) over Port 443
+    this.seenMsgIds = {};
+    this.seenMsgCount = 0;
+    this.lastCloudMessageAt = Date.now();
+    this.syncFailCount = 0;
+
+    // 2. Open HTTPS Server-Sent Events (SSE) over Port 443 — primary receive path.
+    //    One long-lived connection, so it does not consume the request-rate budget.
     try {
       this.eventSource = new EventSource(`https://ntfy.sh/${topic}/sse`);
 
       this.eventSource.onmessage = (event) => {
         try {
-          const payload = JSON.parse(event.data);
-          if (payload && payload.message) {
-            const data = JSON.parse(payload.message);
-            this.handleCloudMessage(data);
-          }
+          this.processCloudPayload(JSON.parse(event.data));
         } catch(e) {}
+      };
+
+      this.eventSource.onerror = () => {
+        this.updateSyncStatus(false, 'stream dropped');
       };
     } catch(e) {}
 
-    // 3. Heartbeat & Poll loop every 1 second
+    // 3. Publish heartbeat every 3s. Poll ONLY when SSE has been silent for 12s.
+    //    ntfy.sh free tier rate-limits per IP; the old 1s POST + 1s poll cadence
+    //    exceeded it and every failure was swallowed silently.
     this.heartbeatInterval = setInterval(() => {
       this.sendHeartbeat();
-      this.pollCloudMessages(topic);
-    }, 1000);
+      if (Date.now() - this.lastCloudMessageAt > 12000) {
+        this.pollCloudMessages(this.getTopic());
+      }
+    }, 3000);
 
     // 4. Send initial heartbeat immediately
     this.sendHeartbeat();
   }
 
+  processCloudPayload(payload) {
+    if (!payload) return;
+    if (payload.event && payload.event !== 'message') return;
+
+    // Any delivered frame proves the stream is alive.
+    this.lastCloudMessageAt = Date.now();
+    this.updateSyncStatus(true);
+
+    if (!payload.message) return;
+
+    // Deduplicate: SSE and the poll fallback can both deliver the same message.
+    if (payload.id) {
+      if (this.seenMsgIds[payload.id]) return;
+      this.seenMsgIds[payload.id] = true;
+      this.seenMsgCount++;
+      if (this.seenMsgCount > 500) {
+        this.seenMsgIds = {};
+        this.seenMsgCount = 0;
+      }
+    }
+
+    let data = null;
+    try {
+      data = JSON.parse(payload.message);
+    } catch(e) {
+      return;
+    }
+    this.handleCloudMessage(data);
+  }
+
   sendHeartbeat() {
-    if (!this.roomCode) return;
-    const topic = 'hotspot_r242_' + this.roomCode.toLowerCase();
+    if (!this.roomCode || this.isSoloDrill) return;
+    const topic = this.getTopic();
 
     const data = {
       type: 'HEARTBEAT',
       senderId: this.playerId,
       timestamp: Date.now(),
+      roundId: this.currentRoundId,
       player: {
         id: this.playerId,
         name: this.playerName,
@@ -136,55 +215,81 @@ class HotspotApp {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
-      }).catch(() => {});
-    } catch(e) {}
+      })
+        .then((res) => {
+          if (res && res.ok) {
+            this.updateSyncStatus(true);
+          } else {
+            const code = res ? res.status : 0;
+            this.updateSyncStatus(false, code === 429 ? 'rate limited by ntfy.sh' : 'HTTP ' + code);
+          }
+        })
+        .catch(() => this.updateSyncStatus(false, 'network unreachable'));
+    } catch(e) {
+      this.updateSyncStatus(false, 'send failed');
+    }
   }
 
   broadcastCloud(data) {
-    if (!this.roomCode) return;
+    if (!this.roomCode || this.isSoloDrill) return;
     data.senderId = this.playerId;
     data.timestamp = Date.now();
-    const topic = 'hotspot_r242_' + this.roomCode.toLowerCase();
+    const topic = this.getTopic();
 
     try {
       fetch(`https://ntfy.sh/${topic}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
-      }).catch(() => {});
-    } catch(e) {}
+      })
+        .then((res) => {
+          if (res && res.ok) {
+            this.updateSyncStatus(true);
+          } else {
+            const code = res ? res.status : 0;
+            this.updateSyncStatus(false, code === 429 ? 'rate limited by ntfy.sh' : 'HTTP ' + code);
+          }
+        })
+        .catch(() => this.updateSyncStatus(false, 'network unreachable'));
+    } catch(e) {
+      this.updateSyncStatus(false, 'send failed');
+    }
   }
 
   pollCloudMessages(topic) {
+    if (!topic) return;
     try {
-      fetch(`https://ntfy.sh/${topic}/json?poll=1&since=2s`)
-        .then(res => res.text())
+      fetch(`https://ntfy.sh/${topic}/json?poll=1&since=15s`)
+        .then(res => {
+          if (!res || !res.ok) {
+            const code = res ? res.status : 0;
+            this.updateSyncStatus(false, code === 429 ? 'rate limited by ntfy.sh' : 'HTTP ' + code);
+            return '';
+          }
+          return res.text();
+        })
         .then(text => {
           if (!text) return;
           const lines = text.trim().split('\n');
           lines.forEach(line => {
             try {
-              const payload = JSON.parse(line);
-              if (payload && payload.message) {
-                const data = JSON.parse(payload.message);
-                this.handleCloudMessage(data);
-              }
+              this.processCloudPayload(JSON.parse(line));
             } catch(e) {}
           });
         })
-        .catch(() => {});
+        .catch(() => this.updateSyncStatus(false, 'network unreachable'));
     } catch(e) {}
   }
 
   handleCloudMessage(data) {
     if (!data || data.senderId === this.playerId) return;
 
-    // Heartbeats and join packets update player names strictly WITHOUT triggering state changes
+    // Heartbeats update rosters and positions. They never change game state.
     if (data.type === 'HEARTBEAT' || data.type === 'PLAYER_JOIN' || data.type === 'PLAYER_UPDATE') {
       const p = data.player;
       if (p && p.id) {
         this.players[p.id] = { ...this.players[p.id], ...p, lastSeen: Date.now() };
-        
+
         if (p.role === 'hider') {
           this.hiderId = p.id;
         }
@@ -192,25 +297,61 @@ class HotspotApp {
         if (data.headStartSeconds) this.headStartSeconds = data.headStartSeconds;
         if (data.boundaryRadius) this.boundaryRadius = data.boundaryRadius;
 
+        // Record every player's track, not just our own, so the replay has
+        // something to draw for the rest of the field.
+        if ((this.gameState === 'headstart' || this.gameState === 'active') && p.lat && p.lng) {
+          this.recordTrackPoint(p.id, p.name, p.role, {
+            lat: p.lat,
+            lng: p.lng,
+            accuracy: p.accuracy || 25
+          });
+        }
+
         this.updateLobbyList();
       }
-    } else if (data.type === 'START_HEADSTART') {
-      // STRICT TIMESTAMP GUARD: Only trigger headstart if sent AFTER Seeker joined
-      if (this.gameState === 'lobby' && data.timestamp && data.timestamp > (this.joinTime + 200)) {
-        this.gameState = 'headstart';
-        this.handleGameStateChange('headstart', data);
-      }
-    } else if (data.type === 'HIDER_READY_EARLY') {
-      if (data.timestamp && data.timestamp > (this.joinTime + 200)) {
-        this.gameState = 'active';
-        this.handleGameStateChange('active', data);
-      }
-    } else if (data.type === 'POS_UPDATE') {
-      if (data.playerId && this.players[data.playerId]) {
-        this.players[data.playerId].lat = data.lat;
-        this.players[data.playerId].lng = data.lng;
-        this.players[data.playerId].accuracy = data.accuracy;
-      }
+      return;
+    }
+
+    if (data.type === 'START_HEADSTART') {
+      // ROUND IDENTITY GUARD: no cross-device clock comparison. A round is
+      // accepted once, by id. Phone clock skew cannot suppress a real start.
+      if (!data.roundId) return;
+      if (this.seenRoundIds[data.roundId]) return;
+      this.seenRoundIds[data.roundId] = true;
+      if (this.gameState !== 'lobby') return;
+
+      this.currentRoundId = data.roundId;
+      this.gameState = 'headstart';
+      this.handleGameStateChange('headstart', data);
+      return;
+    }
+
+    if (data.type === 'HIDER_READY_EARLY') {
+      if (this.gameState !== 'lobby' && this.gameState !== 'headstart') return;
+      this.gameState = 'active';
+      this.handleGameStateChange('active', data);
+      return;
+    }
+
+    if (data.type === 'TAG') {
+      this.applyTag(data);
+      return;
+    }
+
+    if (data.type === 'DECOY') {
+      if (this.role !== 'seeker') return;
+      if (typeof data.lat !== 'number' || typeof data.lng !== 'number') return;
+      this.decoyPos = { lat: data.lat, lng: data.lng };
+      window.hotspotAudio.speak('Warning! Signal may be spoofed!');
+      setTimeout(() => { this.decoyPos = null; }, data.durationMs || 30000);
+      return;
+    }
+
+    if (data.type === 'SMOKE') {
+      if (this.role !== 'seeker') return;
+      this.triggerSmokeVisual(true);
+      setTimeout(() => this.triggerSmokeVisual(false), data.durationMs || 15000);
+      return;
     }
   }
 
@@ -234,6 +375,8 @@ class HotspotApp {
     this.roomCode = 'SOLO';
     this.role = 'seeker';
     this.gameState = 'active';
+    this.gameStartTime = Date.now();
+    this.taggedHiderIds = {};
 
     const hiderPos = window.hotspotGeo.startSoloDrill(300);
 
@@ -287,8 +430,11 @@ class HotspotApp {
     this.headStartSeconds = parseInt(headStartSec, 10) || 60;
     this.boundaryRadius = parseInt(boundaryFeet, 10) || 250;
     this.gameMode = mode;
-    this.roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
+    this.roomCode = this.generateRoomCode();
     this.joinTime = Date.now();
+    this.currentRoundId = null;
+    this.seenRoundIds = {};
+    this.taggedHiderIds = {};
     this.role = 'hider';
     this.hiderId = this.playerId;
     this.gameState = 'lobby';
@@ -312,15 +458,92 @@ class HotspotApp {
     window.hotspotAudio.speak(`Hunt created. Code is ${this.roomCode.split('').join(' ')}`);
   }
 
+  generateRoomCode() {
+    // 32-char alphabet with no 0/O/1/I ambiguity. 32^6 ≈ 1.07 billion codes,
+    // which is what keeps the public ntfy.sh topic from being enumerable.
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let out = '';
+    for (let i = 0; i < 6; i++) {
+      out += alphabet.charAt(Math.floor(Math.random() * alphabet.length));
+    }
+    return out;
+  }
+
+  leaveRoom() {
+    if (this.eventSource) {
+      try { this.eventSource.close(); } catch(e) {}
+      this.eventSource = null;
+    }
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+    if (this.headStartTimer) {
+      clearInterval(this.headStartTimer);
+      this.headStartTimer = null;
+    }
+    this.stopPulseLoop();
+
+    this.roomCode = null;
+    this.currentRoundId = null;
+    this.isSoloDrill = false;
+    this.gameState = 'lobby';
+    this.players = {};
+    this.hiderId = null;
+    this.decoyPos = null;
+    this.taggedHiderIds = {};
+    this.seenMsgIds = {};
+    this.seenMsgCount = 0;
+    this.syncFailCount = 0;
+    this.matchTrackHistory = [];
+    this.tagEvent = null;
+    this.powerups = {
+      decoyUsed: false,
+      smokeUsed: false,
+      bearingPingUsed: false,
+      decoyActive: false,
+      smokeActive: false,
+      bearingActive: false
+    };
+
+    const banner = document.getElementById('sync-warning-banner');
+    if (banner) banner.style.display = 'none';
+
+    const homeLabel = document.getElementById('cloud-sync-status');
+    if (homeLabel) homeLabel.innerText = '🌐 hotspot-app-yardtag.web.app';
+
+    ['btn-powerup-decoy', 'btn-powerup-smoke', 'btn-bearing-ping'].forEach((id) => {
+      const b = document.getElementById(id);
+      if (b) b.disabled = false;
+    });
+
+    const soloControls = document.getElementById('solo-controls-card');
+    if (soloControls) soloControls.style.display = 'none';
+
+    const readyBtn = document.getElementById('btn-hider-ready');
+    if (readyBtn) readyBtn.style.display = '';
+
+    this.triggerSmokeVisual(false);
+  }
+
+  goHome() {
+    this.leaveRoom();
+    this.showScreen('home-screen');
+    this.updateSeasonStatsDisplay();
+  }
+
   joinRoom(code, nickname, role = 'seeker') {
-    if (!code || !code.trim()) {
-      alert('Please enter a 4-letter room code.');
+    if (!code || code.trim().length !== 6) {
+      alert('Please enter the full 6-character room code.');
       return;
     }
 
     this.isSoloDrill = false;
     this.roomCode = code.toUpperCase().trim();
-    this.joinTime = Date.now(); // Record join timestamp
+    this.joinTime = Date.now();
+    this.currentRoundId = null;
+    this.seenRoundIds = {};
+    this.taggedHiderIds = {};
     this.playerName = nickname ? nickname.trim() : this.playerName;
     this.role = role;
     this.gameState = 'lobby';
@@ -355,7 +578,20 @@ class HotspotApp {
     window.hotspotAudio.speak(`Switched role to ${this.role.toUpperCase()}`);
   }
 
+  prunePlayers() {
+    const now = Date.now();
+    Object.keys(this.players).forEach((id) => {
+      if (id === this.playerId) return;
+      const p = this.players[id];
+      if (!p) { delete this.players[id]; return; }
+      if (p.id === 'solo_hider') return;
+      if (!p.lastSeen || now - p.lastSeen > 15000) delete this.players[id];
+    });
+    if (this.hiderId && !this.players[this.hiderId]) this.hiderId = null;
+  }
+
   updateLobbyList() {
+    this.prunePlayers();
     const now = Date.now();
     // Keep active players seen in last 15s
     const activePlayers = Object.values(this.players).filter(p => !p.lastSeen || now - p.lastSeen <= 15000);
@@ -392,14 +628,22 @@ class HotspotApp {
       this.yardCenterPos = { lat: this.myPosition.lat, lng: this.myPosition.lng };
     }
 
+    const roundId = 'rnd_' + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+    this.currentRoundId = roundId;
+    this.seenRoundIds[roundId] = true;
+    this.taggedHiderIds = {};
+    this.gameState = 'headstart';
+
     this.broadcastCloud({
       type: 'START_HEADSTART',
+      roundId: roundId,
       headStartStartTime: startTime,
       headStartSeconds: this.headStartSeconds,
       yardCenterPos: this.yardCenterPos
     });
 
     this.handleGameStateChange('headstart', {
+      roundId: roundId,
       headStartStartTime: startTime,
       headStartSeconds: this.headStartSeconds,
       yardCenterPos: this.yardCenterPos
@@ -407,13 +651,16 @@ class HotspotApp {
   }
 
   hiderReadyEarly() {
+    if (this.gameState !== 'lobby' && this.gameState !== 'headstart') return;
+
     window.hotspotAudio.speak('Hider is hidden early! Pack released!');
     if (this.headStartTimer) {
       clearInterval(this.headStartTimer);
       this.headStartTimer = null;
     }
 
-    this.broadcastCloud({ type: 'HIDER_READY_EARLY' });
+    this.gameState = 'active';
+    this.broadcastCloud({ type: 'HIDER_READY_EARLY', roundId: this.currentRoundId });
     this.handleGameStateChange('active');
   }
 
@@ -573,6 +820,7 @@ class HotspotApp {
 
     this.pulseInterval = setInterval(() => {
       if (this.gameState !== 'active') return;
+      if (!this.isSoloDrill) this.prunePlayers();
       this.updateProximityEngine();
     }, 250);
   }
@@ -620,7 +868,7 @@ class HotspotApp {
       const pulseRing = document.getElementById('seeker-pulse-ring');
       const bandLabel = document.getElementById('seeker-band-label');
 
-      if (bandLabel) bandLabel.innerText = bandInfo.label;
+      if (bandLabel && !this.powerups.smokeActive) bandLabel.innerText = bandInfo.label;
 
       if (pulseRing) {
         pulseRing.style.borderColor = bandInfo.color;
@@ -644,15 +892,24 @@ class HotspotApp {
         );
         const arrow = document.getElementById('bearing-arrow');
         if (arrow) {
+          // Subtract the phone's compass heading so the arrow points where the
+          // player is actually facing, not at true north.
+          const heading = window.hotspotGeo.deviceHeading;
+          const shown = (typeof heading === 'number') ? (bearing - heading + 360) % 360 : bearing;
           arrow.style.display = 'block';
-          arrow.style.transform = `rotate(${bearing}deg)`;
+          arrow.style.transform = `rotate(${shown}deg)`;
         }
       }
 
-      // Auto-tag within 25 feet
-      if (distFeet <= 25 && this.gameState === 'active') {
+      // Auto-tag within 25 feet. Latched per target so infection mode cannot
+      // re-fire the tag every 250ms while the seeker stays in range.
+      if (distFeet <= 25 && this.gameState === 'active' && !this.decoyPos) {
         const hiderPlayer = Object.values(this.players).find(p => p.role === 'hider');
-        this.triggerTag(this.playerId, this.playerName, hiderPlayer ? hiderPlayer.id : 'hider');
+        const targetId = hiderPlayer ? hiderPlayer.id : (this.isSoloDrill ? 'solo_hider' : null);
+        if (targetId && !this.taggedHiderIds[targetId]) {
+          this.taggedHiderIds[targetId] = Date.now();
+          this.triggerTag(this.playerId, this.playerName, targetId);
+        }
       }
     }
 
@@ -708,6 +965,7 @@ class HotspotApp {
 
   usePowerup(type) {
     if (type === 'decoy' && !this.powerups.decoyUsed) {
+      if (!this.myPosition) return;
       this.powerups.decoyUsed = true;
       const btn = document.getElementById('btn-powerup-decoy');
       if (btn) btn.disabled = true;
@@ -715,14 +973,19 @@ class HotspotApp {
       window.hotspotAudio.playPowerupSound('decoy');
       window.hotspotAudio.speak('Decoy deployed! Fake hot signal active for 30 seconds!');
 
-      if (this.myPosition) {
-        const decoy = window.hotspotGeo.startSoloDrill(250);
-        this.decoyPos = decoy;
-      }
+      // The decoy has to reach the SEEKERS. Setting it locally on the hider's
+      // own device did nothing, because the hider never runs seeker logic.
+      const bearing = Math.floor(Math.random() * 360);
+      const fake = window.hotspotGeo.offsetPosition(
+        this.myPosition.lat, this.myPosition.lng, 250, bearing
+      );
 
-      setTimeout(() => {
-        this.decoyPos = null;
-      }, 30000);
+      this.broadcastCloud({
+        type: 'DECOY',
+        lat: fake.lat,
+        lng: fake.lng,
+        durationMs: 30000
+      });
 
     } else if (type === 'smoke' && !this.powerups.smokeUsed) {
       this.powerups.smokeUsed = true;
@@ -732,17 +995,17 @@ class HotspotApp {
       window.hotspotAudio.playPowerupSound('smoke');
       window.hotspotAudio.speak('Smoke screen thrown! Seekers blinded for 15 seconds!');
 
-      this.triggerSmokeVisual(true);
-
-      setTimeout(() => {
-        this.triggerSmokeVisual(false);
-      }, 15000);
+      // Blur the SEEKERS' radar, not the hider's own screen.
+      this.broadcastCloud({ type: 'SMOKE', durationMs: 15000 });
 
     } else if (type === 'bearing' && !this.powerups.bearingPingUsed) {
       this.powerups.bearingPingUsed = true;
       this.powerups.bearingActive = true;
       const btn = document.getElementById('btn-bearing-ping');
       if (btn) btn.disabled = true;
+
+      // iOS requires a user gesture to grant compass access; this tap is it.
+      window.hotspotGeo.requestCompassPermission();
 
       window.hotspotAudio.playPowerupSound('bearing');
       window.hotspotAudio.speak('Bearing Ping active! Live compass arrow for 3 seconds!');
@@ -771,12 +1034,11 @@ class HotspotApp {
   triggerTag(seekerId, seekerName, hiderId) {
     if (this.gameState !== 'active') return;
 
-    window.hotspotAudio.playTagScream();
-    window.hotspotAudio.speak(`TREED AND TAGGED! ${seekerName} caught the hider!`);
-
     const hiderName = this.players[hiderId] ? this.players[hiderId].name : 'Hider';
 
-    this.tagEvent = {
+    const tag = {
+      type: 'TAG',
+      roundId: this.currentRoundId,
       seekerId,
       seekerName,
       hiderId,
@@ -786,14 +1048,73 @@ class HotspotApp {
       timestamp: Date.now()
     };
 
-    if (this.gameMode === 'infection') {
-      window.hotspotAudio.speak(`Infection mode! ${hiderName} has joined the hider pack!`);
-    } else {
-      this.gameState = 'gameover';
-      this.handleGameStateChange('gameover');
+    // A tag has to reach the hider and every other seeker. Previously it only
+    // ever ran on the one device that made the catch.
+    this.broadcastCloud({ ...tag });
+    this.applyTag(tag);
+  }
+
+  applyTag(tag) {
+    if (!tag) return;
+    if (this.gameState === 'gameover') return;
+    if (tag.roundId && this.currentRoundId && tag.roundId !== this.currentRoundId) return;
+    if (this.taggedHiderIds[tag.hiderId] && tag.seekerId !== this.playerId) {
+      // Already processed this target locally.
+      if (this.tagEvent && this.tagEvent.hiderId === tag.hiderId) return;
     }
 
+    this.taggedHiderIds[tag.hiderId] = Date.now();
+
+    this.tagEvent = {
+      seekerId: tag.seekerId,
+      seekerName: tag.seekerName,
+      hiderId: tag.hiderId,
+      hiderName: tag.hiderName,
+      lat: tag.lat,
+      lng: tag.lng,
+      timestamp: tag.timestamp || Date.now()
+    };
+
+    const iWasTagged = (tag.hiderId === this.playerId);
+
+    if (iWasTagged && 'vibrate' in navigator) {
+      try { navigator.vibrate([400, 150, 400, 150, 400]); } catch(e) {}
+    }
+
+    if (this.gameMode === 'infection') {
+      // Pack grows: the tagged hider flips to seeker. Flip the role BEFORE
+      // speaking so the newly-converted player is no longer audio-muted.
+      if (this.players[tag.hiderId]) this.players[tag.hiderId].role = 'seeker';
+      if (iWasTagged) {
+        this.role = 'seeker';
+        this.powerups.bearingPingUsed = false;
+        const bp = document.getElementById('btn-bearing-ping');
+        if (bp) bp.disabled = false;
+        this.showScreen('seeker-screen');
+        this.sendHeartbeat();
+      }
+
+      window.hotspotAudio.playTagScream();
+      window.hotspotAudio.speak(`TAGGED! ${tag.seekerName} caught ${tag.hiderName}!`);
+
+      const stillHiding = Object.values(this.players).filter(p => p.role === 'hider');
+      if (stillHiding.length === 0) {
+        this.gameState = 'gameover';
+        this.saveSeasonStats(Date.now() - this.gameStartTime);
+        this.handleGameStateChange('gameover');
+      } else {
+        window.hotspotAudio.speak(`${stillHiding.length} still hiding!`);
+      }
+      return;
+    }
+
+    if (iWasTagged) this.role = 'seeker'; // unmute the caught hider for the callout
+    window.hotspotAudio.playTagScream();
+    window.hotspotAudio.speak(`TREED AND TAGGED! ${tag.seekerName} caught ${tag.hiderName}!`);
+
+    this.gameState = 'gameover';
     this.saveSeasonStats(Date.now() - this.gameStartTime);
+    this.handleGameStateChange('gameover');
   }
 
   saveSeasonStats(huntDurationMs) {
@@ -812,7 +1133,7 @@ class HotspotApp {
 
   updateSeasonStatsDisplay() {
     try {
-      const stats = JSON.parse(localStorage.getItem('hotspot_stats') || '{"totalHunts":0,"fastestTagSec":0,"longestHideSec":0}');
+      const stats = JSON.parse(localStorage.getItem('hotspot_stats') || '{"totalHunts":0,"fastestTagSec":9999,"longestHideSec":0}');
       const elHunts = document.getElementById('stat-total-hunts');
       const elFastest = document.getElementById('stat-fastest-tag');
       const elLongest = document.getElementById('stat-longest-hide');

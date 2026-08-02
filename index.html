@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.4.2</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.4.3</title>
 
   <!-- Leaflet Map CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -33,12 +33,15 @@
       📍 Tap to Enable GPS Location Access (Required)
     </div>
 
+    <!-- Cloud Sync Failure Banner -->
+    <div id="sync-warning-banner" class="warning-banner" style="display: none; background: #B45309;"></div>
+
     <!-- Top Navigation / Sound Bar -->
     <div class="top-bar">
       <span class="accuracy-tag" style="font-size: 10px; color: var(--accent-cyan); font-weight: 700; cursor: pointer;" onclick="window.hotspotApp.requestGpsPermissionDirectly()">🎯 GPS: Searching...</span>
       <div style="display: flex; gap: 6px;">
         <button class="icon-btn" onclick="window.hotspotApp.toggleSound()" id="sound-btn">🔊 Voice</button>
-        <button class="icon-btn" onclick="window.hotspotApp.showScreen('home-screen')">🏠 Home</button>
+        <button class="icon-btn" onclick="window.hotspotApp.goHome()">🏠 Home</button>
       </div>
     </div>
 
@@ -48,7 +51,7 @@
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="brand-subtitle">Extreme Yard Tag & Proximity Hunt</div>
         <div style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
-          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800;">v2.4.2</span>
+          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800;">v2.4.3</span>
           <span id="cloud-sync-status" style="font-size: 11px; color: var(--text-muted); font-weight: 600; text-align: center; letter-spacing: 0.5px;">
             🌐 hotspot-app-yardtag.web.app
           </span>
@@ -177,8 +180,8 @@
 
       <div class="card" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
         <div class="input-group">
-          <label class="input-label">4-Letter Room Code</label>
-          <input type="text" id="join-code-input" class="text-input" placeholder="e.g. X7K2" style="text-transform: uppercase; font-size: 22px; text-align: center; letter-spacing: 4px;" onkeydown="if(event.key==='Enter') window.joinRoomAction()">
+          <label class="input-label">6-Character Room Code</label>
+          <input type="text" id="join-code-input" class="text-input" maxlength="6" placeholder="e.g. K7RQ4M" style="text-transform: uppercase; font-size: 22px; text-align: center; letter-spacing: 4px;" onkeydown="if(event.key==='Enter') window.joinRoomAction()">
         </div>
 
         <div class="input-group">
@@ -200,8 +203,8 @@
 
       <div class="card" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
         <div class="input-group">
-          <label class="input-label">4-Letter Room Code</label>
-          <input type="text" id="spectator-code-input" class="text-input" placeholder="e.g. X7K2" style="text-transform: uppercase; font-size: 22px; text-align: center;" onkeydown="if(event.key==='Enter') window.joinSpectatorAction()">
+          <label class="input-label">6-Character Room Code</label>
+          <input type="text" id="spectator-code-input" class="text-input" maxlength="6" placeholder="e.g. K7RQ4M" style="text-transform: uppercase; font-size: 22px; text-align: center;" onkeydown="if(event.key==='Enter') window.joinSpectatorAction()">
         </div>
       </div>
 
@@ -316,7 +319,7 @@
         </div>
       </div>
 
-      <button class="btn btn-secondary" style="margin-bottom: 0;" onclick="window.hotspotApp.showScreen('home-screen')">
+      <button class="btn btn-secondary" style="margin-bottom: 0;" onclick="window.hotspotApp.goHome()">
         Back to Home
       </button>
     </div>
@@ -340,8 +343,8 @@
       const code = codeEl ? codeEl.value : '';
       const nick = nickEl ? nickEl.value : 'Chaser';
       
-      if (!code || !code.trim()) {
-        alert('Please type in the 4-letter Room Code from the host!');
+      if (!code || code.trim().length !== 6) {
+        alert('Please type in the full 6-character Room Code from the host!');
         return;
       }
       window.hotspotApp.joinRoom(code, nick, 'seeker');
