@@ -1,5 +1,6 @@
 /**
  * HOTSPOT - Main Game Engine & Controller
+ * Standard US Customary Units (Feet & Yards).
  * Integrates Firebase RTDB, Game State, Solo Drill, Powerups, Proximity Engine,
  * Voice Announcer, Haptic Vibe, Spectator, and Replay.
  */
@@ -16,7 +17,7 @@ class HotspotApp {
     this.gameMode = 'classic'; // 'classic' | 'infection'
     this.gameState = 'lobby'; // 'lobby' | 'headstart' | 'active' | 'gameover'
     this.headStartSeconds = 60;
-    this.boundaryRadius = 75;
+    this.boundaryRadius = 250; // Yard boundary limit in Feet (default 250ft)
     this.yardCenterPos = null;
 
     this.headStartTimer = null;
@@ -28,7 +29,7 @@ class HotspotApp {
     this.hiderId = null;
     this.channel = null;
 
-    this.myPosition = { lat: 37.774929, lng: -122.419416, accuracy: 8, timestamp: Date.now() };
+    this.myPosition = { lat: 37.774929, lng: -122.419416, accuracy: 25, timestamp: Date.now() };
 
     this.powerups = {
       decoyUsed: false,
@@ -125,15 +126,15 @@ class HotspotApp {
     this.role = 'seeker';
     this.gameState = 'active';
 
-    const hiderPos = window.hotspotGeo.startSoloDrill(100);
+    const hiderPos = window.hotspotGeo.startSoloDrill(300);
 
     this.players = {
       [this.playerId]: { id: this.playerId, name: this.playerName, role: 'seeker' },
-      'solo_hider': { id: 'solo_hider', name: 'Virtual Hider', role: 'hider', lat: hiderPos.lat, lng: hiderPos.lng, accuracy: 5 }
+      'solo_hider': { id: 'solo_hider', name: 'Virtual Hider', role: 'hider', lat: hiderPos.lat, lng: hiderPos.lng, accuracy: 15 }
     };
     this.hiderId = 'solo_hider';
 
-    window.hotspotAudio.speak('Solo Drill initialized! Virtual hider planted 100 meters out.');
+    window.hotspotAudio.speak('Solo Drill initialized! Virtual hider planted 300 feet out.');
 
     this.showScreen('seeker-screen');
     
@@ -146,25 +147,25 @@ class HotspotApp {
     this.startPulseLoop();
   }
 
-  moveSoloHider(deltaMeters) {
+  moveSoloHider(deltaFeet) {
     if (!this.isSoloDrill) return;
     let hiderPos;
-    if (deltaMeters < 0) {
-      hiderPos = window.hotspotGeo.moveSoloHiderCloser(Math.abs(deltaMeters));
+    if (deltaFeet < 0) {
+      hiderPos = window.hotspotGeo.moveSoloHiderCloser(Math.abs(deltaFeet));
     } else {
-      hiderPos = window.hotspotGeo.moveSoloHiderAway(deltaMeters);
+      hiderPos = window.hotspotGeo.moveSoloHiderAway(deltaFeet);
     }
 
     if (this.players['solo_hider']) {
       this.players['solo_hider'].lat = hiderPos.lat;
       this.players['solo_hider'].lng = hiderPos.lng;
     }
-    window.hotspotAudio.speak(`Virtual hider moved to ${Math.round(hiderPos.currentDistMeters)} meters`);
+    window.hotspotAudio.speak(`Virtual hider moved to ${Math.round(hiderPos.currentDistFeet)} feet`);
   }
 
   instantTagSoloHider() {
     if (!this.isSoloDrill) return;
-    const hiderPos = window.hotspotGeo.setSoloHiderDistance(4);
+    const hiderPos = window.hotspotGeo.setSoloHiderDistance(10);
     if (this.players['solo_hider']) {
       this.players['solo_hider'].lat = hiderPos.lat;
       this.players['solo_hider'].lng = hiderPos.lng;
@@ -172,10 +173,10 @@ class HotspotApp {
   }
 
   // --- MULTIPLAYER ROOM SETUP ---
-  createRoom(headStartSec = 60, mode = 'classic', boundaryMeters = 75) {
+  createRoom(headStartSec = 60, mode = 'classic', boundaryFeet = 250) {
     this.isSoloDrill = false;
     this.headStartSeconds = parseInt(headStartSec, 10) || 60;
-    this.boundaryRadius = parseInt(boundaryMeters, 10) || 75;
+    this.boundaryRadius = parseInt(boundaryFeet, 10) || 250;
     this.gameMode = mode;
     this.roomCode = Math.random().toString(36).substring(2, 6).toUpperCase();
     this.role = 'hider';
@@ -194,79 +195,92 @@ class HotspotApp {
 
     this.setupBroadcastRelay();
 
-    if (this.db) {
-      this.db.ref('rooms/' + this.roomCode).set({
-        code: this.roomCode,
-        hostId: this.playerId,
-        hiderId: this.hiderId,
-        gameState: 'lobby',
-        headStartSeconds: this.headStartSeconds,
-        boundaryRadius: this.boundaryRadius,
-        gameMode: this.gameMode,
-        players: this.players,
-        createdAt: Date.now()
-      });
-
-      this.listenToRoom();
-    }
-
     document.getElementById('lobby-code-display').innerText = this.roomCode;
     this.updateLobbyList();
     this.showScreen('lobby-screen');
 
     window.hotspotAudio.speak(`Hunt created. Code is ${this.roomCode.split('').join(' ')}`);
-  }
-
-  joinRoom(code, nickname, role = 'seeker') {
-    this.isSoloDrill = false;
-    this.roomCode = code.toUpperCase().trim();
-    this.playerName = nickname || this.playerName;
-    this.role = role;
-    this.gameState = 'lobby';
-
-    this.setupBroadcastRelay();
 
     if (this.db) {
-      const roomRef = this.db.ref('rooms/' + this.roomCode);
-      roomRef.once('value', snapshot => {
-        if (!snapshot.exists()) {
-          // If RTDB doesn't exist yet, create it locally & push
-          this.hiderId = this.playerId;
-        } else {
-          const data = snapshot.val();
-          this.hiderId = data.hiderId || this.hiderId;
-          this.gameMode = data.gameMode || 'classic';
-          this.headStartSeconds = data.headStartSeconds || 60;
-          this.boundaryRadius = data.boundaryRadius || 75;
-        }
-
-        roomRef.child('players/' + this.playerId).set({
-          id: this.playerId,
-          name: this.playerName,
-          role: this.role,
-          lat: this.myPosition ? this.myPosition.lat : null,
-          lng: this.myPosition ? this.myPosition.lng : null
+      try {
+        this.db.ref('rooms/' + this.roomCode).set({
+          code: this.roomCode,
+          hostId: this.playerId,
+          hiderId: this.hiderId,
+          gameState: 'lobby',
+          headStartSeconds: this.headStartSeconds,
+          boundaryRadius: this.boundaryRadius,
+          gameMode: this.gameMode,
+          players: this.players,
+          createdAt: Date.now()
         });
 
         this.listenToRoom();
-        this.broadcastPlayerUpdate();
-        document.getElementById('lobby-code-display').innerText = this.roomCode;
-        this.updateLobbyList();
-        this.showScreen('lobby-screen');
-      });
-    } else {
-      this.players[this.playerId] = {
-        id: this.playerId,
-        name: this.playerName,
-        role: this.role,
-        lat: this.myPosition ? this.myPosition.lat : null,
-        lng: this.myPosition ? this.myPosition.lng : null
-      };
-      this.broadcastPlayerUpdate();
-      document.getElementById('lobby-code-display').innerText = this.roomCode;
-      this.updateLobbyList();
-      this.showScreen('lobby-screen');
+      } catch (e) {
+        console.warn('Firebase room creation error:', e);
+      }
     }
+  }
+
+  joinRoom(code, nickname, role = 'seeker') {
+    if (!code || !code.trim()) {
+      alert('Please enter a 4-letter room code.');
+      return;
+    }
+
+    this.isSoloDrill = false;
+    this.roomCode = code.toUpperCase().trim();
+    this.playerName = nickname ? nickname.trim() : this.playerName;
+    this.role = role;
+    this.gameState = 'lobby';
+
+    this.players[this.playerId] = {
+      id: this.playerId,
+      name: this.playerName,
+      role: this.role,
+      lat: this.myPosition ? this.myPosition.lat : null,
+      lng: this.myPosition ? this.myPosition.lng : null
+    };
+
+    this.setupBroadcastRelay();
+
+    document.getElementById('lobby-code-display').innerText = this.roomCode;
+    this.updateLobbyList();
+    this.showScreen('lobby-screen');
+
+    window.hotspotAudio.speak(`Joined hunt ${this.roomCode.split('').join(' ')}`);
+
+    if (this.db) {
+      try {
+        const roomRef = this.db.ref('rooms/' + this.roomCode);
+
+        roomRef.once('value', snapshot => {
+          if (snapshot.exists()) {
+            const data = snapshot.val();
+            this.hiderId = data.hiderId || this.hiderId;
+            this.gameMode = data.gameMode || 'classic';
+            this.headStartSeconds = data.headStartSeconds || 60;
+            this.boundaryRadius = data.boundaryRadius || 250;
+          }
+
+          roomRef.child('players/' + this.playerId).set({
+            id: this.playerId,
+            name: this.playerName,
+            role: this.role,
+            lat: this.myPosition ? this.myPosition.lat : null,
+            lng: this.myPosition ? this.myPosition.lng : null
+          });
+
+          this.listenToRoom();
+        }, (err) => {
+          console.warn('Firebase snapshot error:', err);
+        });
+      } catch (e) {
+        console.warn('Firebase join error:', e);
+      }
+    }
+
+    this.broadcastPlayerUpdate();
   }
 
   toggleRole() {
@@ -276,10 +290,12 @@ class HotspotApp {
     }
 
     if (this.db && this.roomCode) {
-      this.db.ref(`rooms/${this.roomCode}/players/${this.playerId}`).update({ role: this.role });
-      if (this.role === 'hider') {
-        this.db.ref(`rooms/${this.roomCode}`).update({ hiderId: this.playerId });
-      }
+      try {
+        this.db.ref(`rooms/${this.roomCode}/players/${this.playerId}`).update({ role: this.role });
+        if (this.role === 'hider') {
+          this.db.ref(`rooms/${this.roomCode}`).update({ hiderId: this.playerId });
+        }
+      } catch (e) {}
     }
     this.broadcastPlayerUpdate();
     this.updateLobbyList();
@@ -289,41 +305,45 @@ class HotspotApp {
   listenToRoom() {
     if (!this.db || !this.roomCode) return;
 
-    const roomRef = this.db.ref('rooms/' + this.roomCode);
+    try {
+      const roomRef = this.db.ref('rooms/' + this.roomCode);
 
-    roomRef.on('value', snapshot => {
-      if (!snapshot.exists()) return;
-      const data = snapshot.val();
+      roomRef.on('value', snapshot => {
+        if (!snapshot.exists()) return;
+        const data = snapshot.val();
 
-      this.players = data.players || {};
-      this.hiderId = data.hiderId;
-      this.gameMode = data.gameMode || 'classic';
-      this.headStartSeconds = data.headStartSeconds || 60;
-      this.boundaryRadius = data.boundaryRadius || 75;
-      this.updateLobbyList();
+        this.players = data.players || {};
+        this.hiderId = data.hiderId;
+        this.gameMode = data.gameMode || 'classic';
+        this.headStartSeconds = data.headStartSeconds || 60;
+        this.boundaryRadius = data.boundaryRadius || 250;
+        this.updateLobbyList();
 
-      if (data.gameState !== this.gameState) {
-        this.gameState = data.gameState;
-        this.handleGameStateChange(this.gameState, data);
-      }
-
-      if (data.powerups) {
-        if (data.powerups.smokeActive && !this.powerups.smokeActive) {
-          this.triggerSmokeVisual(true);
-        } else if (!data.powerups.smokeActive && this.powerups.smokeActive) {
-          this.triggerSmokeVisual(false);
+        if (data.gameState !== this.gameState) {
+          this.gameState = data.gameState;
+          this.handleGameStateChange(this.gameState, data);
         }
-        if (data.powerups.decoyPos) {
-          this.decoyPos = data.powerups.decoyPos;
-        } else {
-          this.decoyPos = null;
-        }
-      }
 
-      if (data.tagEvent && !this.tagEvent) {
-        this.handleTagEvent(data.tagEvent);
-      }
-    });
+        if (data.powerups) {
+          if (data.powerups.smokeActive && !this.powerups.smokeActive) {
+            this.triggerSmokeVisual(true);
+          } else if (!data.powerups.smokeActive && this.powerups.smokeActive) {
+            this.triggerSmokeVisual(false);
+          }
+          if (data.powerups.decoyPos) {
+            this.decoyPos = data.powerups.decoyPos;
+          } else {
+            this.decoyPos = null;
+          }
+        }
+
+        if (data.tagEvent && !this.tagEvent) {
+          this.handleTagEvent(data.tagEvent);
+        }
+      });
+    } catch (e) {
+      console.warn('listenToRoom error:', e);
+    }
   }
 
   updateLobbyList() {
@@ -362,12 +382,14 @@ class HotspotApp {
     }
 
     if (this.db) {
-      this.db.ref(`rooms/${this.roomCode}`).update({
-        gameState: 'headstart',
-        headStartStartTime: startTime,
-        headStartSeconds: this.headStartSeconds,
-        yardCenterPos: this.yardCenterPos
-      });
+      try {
+        this.db.ref(`rooms/${this.roomCode}`).update({
+          gameState: 'headstart',
+          headStartStartTime: startTime,
+          headStartSeconds: this.headStartSeconds,
+          yardCenterPos: this.yardCenterPos
+        });
+      } catch (e) {}
     } else {
       this.handleGameStateChange('headstart', {
         headStartStartTime: startTime,
@@ -385,7 +407,9 @@ class HotspotApp {
     }
 
     if (this.db) {
-      this.db.ref(`rooms/${this.roomCode}`).update({ gameState: 'active' });
+      try {
+        this.db.ref(`rooms/${this.roomCode}`).update({ gameState: 'active' });
+      } catch (e) {}
     } else {
       this.handleGameStateChange('active');
     }
@@ -443,7 +467,7 @@ class HotspotApp {
           window.hotspotAudio.speak('PACK RELEASED! HUNT IS LIVE!');
 
           if (this.role === 'hider' && this.db) {
-            this.db.ref(`rooms/${this.roomCode}`).update({ gameState: 'active' });
+            try { this.db.ref(`rooms/${this.roomCode}`).update({ gameState: 'active' }); } catch (e) {}
           } else if (!this.db) {
             this.handleGameStateChange('active');
           }
@@ -501,7 +525,7 @@ class HotspotApp {
     }
 
     document.querySelectorAll('.accuracy-tag').forEach(el => {
-      el.innerText = `🎯 GPS: ±${Math.round(pos.accuracy)}m`;
+      el.innerText = `🎯 GPS: ±${Math.round(pos.accuracy)}ft`;
     });
 
     const warnBox = document.getElementById('gps-warning-banner');
@@ -509,8 +533,8 @@ class HotspotApp {
       if (pos.isProtocolWarning) {
         warnBox.innerText = '⚠️ Opened as local file — GPS requires HTTPS web server (e.g. Railway, Vercel).';
         warnBox.style.display = 'block';
-      } else if (pos.accuracy > 15) {
-        warnBox.innerText = `⚠️ Weak GPS Fix (±${Math.round(pos.accuracy)}m) — Move out from under heavy tree canopy!`;
+      } else if (pos.accuracy > 50) {
+        warnBox.innerText = `⚠️ Weak GPS Fix (±${Math.round(pos.accuracy)}ft) — Move out from under heavy tree canopy!`;
         warnBox.style.display = 'block';
       } else {
         warnBox.style.display = 'none';
@@ -518,12 +542,14 @@ class HotspotApp {
     }
 
     if (this.db && this.roomCode) {
-      this.db.ref(`rooms/${this.roomCode}/players/${this.playerId}`).update({
-        lat: pos.lat,
-        lng: pos.lng,
-        accuracy: pos.accuracy,
-        timestamp: Date.now()
-      });
+      try {
+        this.db.ref(`rooms/${this.roomCode}/players/${this.playerId}`).update({
+          lat: pos.lat,
+          lng: pos.lng,
+          accuracy: pos.accuracy,
+          timestamp: Date.now()
+        });
+      } catch (e) {}
     }
 
     this.broadcastPlayerUpdate();
@@ -586,14 +612,14 @@ class HotspotApp {
 
       const bufferedHiderPos = window.hotspotGeo.getBufferedPosition(this.myPosition, hiderPos);
 
-      const distMeters = window.hotspotGeo.calculateDistance(
+      const distFeet = window.hotspotGeo.calculateDistance(
         this.myPosition.lat, this.myPosition.lng,
         bufferedHiderPos.lat, bufferedHiderPos.lng
       );
 
-      this.currentDistance = distMeters;
+      this.currentDistance = distFeet;
 
-      const bandInfo = window.hotspotGeo.getDistanceBand(distMeters);
+      const bandInfo = window.hotspotGeo.getDistanceBand(distFeet);
       this.currentBand = bandInfo.band;
 
       const pulseRing = document.getElementById('seeker-pulse-ring');
@@ -628,7 +654,8 @@ class HotspotApp {
         }
       }
 
-      if (distMeters <= 8 && this.gameState === 'active') {
+      // Auto-tag within 25 feet
+      if (distFeet <= 25 && this.gameState === 'active') {
         this.triggerTag(this.playerId, this.playerName, this.hiderId);
       }
     }
@@ -645,27 +672,33 @@ class HotspotApp {
           );
         });
 
-        const closestDist = Math.min(...distances);
-        if (distEl) distEl.innerText = `${Math.round(closestDist)}m`;
+        const closestDistFeet = Math.min(...distances);
+        if (distEl) {
+          if (closestDistFeet > 300) {
+            distEl.innerText = `${Math.round(closestDistFeet / 3)}yd`;
+          } else {
+            distEl.innerText = `${Math.round(closestDistFeet)}ft`;
+          }
+        }
       } else {
-        if (distEl) distEl.innerText = '--m';
+        if (distEl) distEl.innerText = '--ft';
       }
 
       const boundaryBanner = document.getElementById('hider-boundary-alert');
       if (this.yardCenterPos && this.boundaryRadius > 0 && boundaryBanner) {
-        const distFromCenter = window.hotspotGeo.calculateDistance(
+        const distFromCenterFeet = window.hotspotGeo.calculateDistance(
           this.myPosition.lat, this.myPosition.lng,
           this.yardCenterPos.lat, this.yardCenterPos.lng
         );
 
-        if (distFromCenter > this.boundaryRadius) {
+        if (distFromCenterFeet > this.boundaryRadius) {
           boundaryBanner.style.display = 'block';
           boundaryBanner.style.background = '#EF4444';
-          boundaryBanner.innerText = `🛑 OUT OF BOUNDS! Move back inside the yard! (${Math.round(distFromCenter)}m from start)`;
-        } else if (distFromCenter > 0.8 * this.boundaryRadius) {
+          boundaryBanner.innerText = `🛑 OUT OF BOUNDS! Move back inside yard! (${Math.round(distFromCenterFeet)}ft from start)`;
+        } else if (distFromCenterFeet > 0.8 * this.boundaryRadius) {
           boundaryBanner.style.display = 'block';
           boundaryBanner.style.background = '#F59E0B';
-          boundaryBanner.innerText = `⚠️ APPROACHING YARD EDGE! (${Math.round(distFromCenter)}m / ${this.boundaryRadius}m limit)`;
+          boundaryBanner.innerText = `⚠️ APPROACHING YARD EDGE! (${Math.round(distFromCenterFeet)}ft / ${this.boundaryRadius}ft limit)`;
         } else {
           boundaryBanner.style.display = 'none';
         }
@@ -687,17 +720,17 @@ class HotspotApp {
       window.hotspotAudio.speak('Decoy deployed! Fake hot signal active for 30 seconds!');
 
       if (this.myPosition) {
-        const decoy = window.hotspotGeo.startSoloDrill(80);
+        const decoy = window.hotspotGeo.startSoloDrill(250);
         this.decoyPos = decoy;
         if (this.db) {
-          this.db.ref(`rooms/${this.roomCode}/powerups`).update({ decoyPos: decoy });
+          try { this.db.ref(`rooms/${this.roomCode}/powerups`).update({ decoyPos: decoy }); } catch (e) {}
         }
       }
 
       setTimeout(() => {
         this.decoyPos = null;
         if (this.db) {
-          this.db.ref(`rooms/${this.roomCode}/powerups/decoyPos`).remove();
+          try { this.db.ref(`rooms/${this.roomCode}/powerups/decoyPos`).remove(); } catch (e) {}
         }
       }, 30000);
 
@@ -710,14 +743,14 @@ class HotspotApp {
       window.hotspotAudio.speak('Smoke screen thrown! Seekers blinded for 15 seconds!');
 
       if (this.db) {
-        this.db.ref(`rooms/${this.roomCode}/powerups`).update({ smokeActive: true });
+        try { this.db.ref(`rooms/${this.roomCode}/powerups`).update({ smokeActive: true }); } catch (e) {}
       } else {
         this.triggerSmokeVisual(true);
       }
 
       setTimeout(() => {
         if (this.db) {
-          this.db.ref(`rooms/${this.roomCode}/powerups`).update({ smokeActive: false });
+          try { this.db.ref(`rooms/${this.roomCode}/powerups`).update({ smokeActive: false }); } catch (e) {}
         } else {
           this.triggerSmokeVisual(false);
         }
@@ -774,15 +807,17 @@ class HotspotApp {
     if (this.gameMode === 'infection') {
       window.hotspotAudio.speak(`Infection mode! ${hiderName} has joined the hider pack!`);
       if (this.db) {
-        this.db.ref(`rooms/${this.roomCode}/players/${hiderId}`).update({ role: 'hider' });
+        try { this.db.ref(`rooms/${this.roomCode}/players/${hiderId}`).update({ role: 'seeker' }); } catch (e) {}
       }
     } else {
       this.gameState = 'gameover';
       if (this.db) {
-        this.db.ref(`rooms/${this.roomCode}`).update({
-          gameState: 'gameover',
-          tagEvent: this.tagEvent
-        });
+        try {
+          this.db.ref(`rooms/${this.roomCode}`).update({
+            gameState: 'gameover',
+            tagEvent: this.tagEvent
+          });
+        } catch (e) {}
       } else {
         this.handleGameStateChange('gameover');
       }

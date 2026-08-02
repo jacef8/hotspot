@@ -37,7 +37,7 @@
 
     <!-- Top Navigation / Sound Bar -->
     <div class="top-bar">
-      <span class="accuracy-tag" style="font-size: 10px; color: var(--accent-cyan); font-weight: 700;">GPS: Searching...</span>
+      <span class="accuracy-tag" style="font-size: 10px; color: var(--accent-cyan); font-weight: 700;">🎯 GPS: Searching...</span>
       <div style="display: flex; gap: 6px;">
         <button class="icon-btn" onclick="window.hotspotApp.toggleSound()" id="sound-btn">🔊 Voice</button>
         <button class="icon-btn" onclick="window.hotspotApp.showScreen('home-screen')">🏠 Home</button>
@@ -54,7 +54,7 @@
       <div class="card" style="border-color: var(--accent-cyan);">
         <div class="card-title">🚀 Solo Test Mode</div>
         <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; line-height: 1.3;">
-          Plants a virtual hider ~100m out. Test pulse rings, haptics & announcer instantly!
+          Plants a virtual hider ~300ft (~100yd) out. Test pulse rings, haptics & announcer instantly!
         </p>
         <button class="btn btn-solo" onclick="window.hotspotApp.startSoloDrill()">
           🎯 Tap Solo Drill to Test
@@ -113,10 +113,10 @@
         <div class="input-group">
           <label class="input-label">Yard Boundary Limit</label>
           <select id="setup-boundary" class="select-input">
-            <option value="50">50 Meters (Small Yard)</option>
-            <option value="75" selected>75 Meters (Standard Yard)</option>
-            <option value="100">100 Meters (Large Yard)</option>
-            <option value="150">150 Meters (Park)</option>
+            <option value="150">150 Feet (~50 Yards)</option>
+            <option value="250" selected>250 Feet (~80 Yards - Standard)</option>
+            <option value="350">350 Feet (~115 Yards - Large Yard)</option>
+            <option value="500">500 Feet (~165 Yards - Park)</option>
             <option value="0">No Boundary Limit</option>
           </select>
         </div>
@@ -242,8 +242,8 @@
       <div id="solo-controls-card" class="card" style="display: none; margin-bottom: 8px;">
         <div class="card-title">🧪 Solo Test Controls (Simulate Movement)</div>
         <div style="display: flex; gap: 6px;">
-          <button class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(-25)">🚶 Walk -25m</button>
-          <button class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(25)">🏃 Move +25m</button>
+          <button class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(-75)">🚶 Walk -75ft</button>
+          <button class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(75)">🏃 Move +75ft</button>
           <button class="btn btn-primary" style="flex: 1; font-size: 11px; padding: 8px; background: var(--danger-red);" onclick="window.hotspotApp.instantTagSoloHider()">🎯 Tag Hider</button>
         </div>
       </div>
@@ -273,7 +273,7 @@
 
       <div class="card hider-radar-box">
         <div class="card-title">Nearest Seeker Distance</div>
-        <div id="hider-nearest-dist" class="hider-dist-num">--m</div>
+        <div id="hider-nearest-dist" class="hider-dist-num">--ft</div>
         <div style="font-size: 11px; color: var(--text-muted);">Silent Proximity Radar</div>
       </div>
 

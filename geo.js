@@ -1,6 +1,7 @@
 /**
  * HOTSPOT - Geolocation Engine & Math Utilities
- * Handles GPS tracking, Haversine distances, 5s lag buffering >50m,
+ * Standard US Customary Units (Feet & Yards).
+ * Handles GPS tracking, Haversine distances, 15s lag buffering >165ft,
  * Solo drill simulation, GPS accuracy diagnostics, and Haptic feedback.
  */
 
@@ -8,7 +9,7 @@ class HotspotGeo {
   constructor() {
     this.watchId = null;
     this.currentPosition = { lat: 37.774929, lng: -122.419416, timestamp: Date.now() }; // Default fallback
-    this.accuracy = 8;
+    this.accuracyFeet = 25;
     this.positionHistory = [];
     this.lagBuffer = [];
     this.soloHiderPosition = null;
@@ -30,11 +31,10 @@ class HotspotGeo {
     this.onPositionUpdate = onUpdate;
     this.onError = onError;
 
-    // Immediately trigger an initial position update with fallback position
     if (this.onPositionUpdate && this.currentPosition) {
       this.onPositionUpdate({
         ...this.currentPosition,
-        accuracy: this.accuracy,
+        accuracy: this.accuracyFeet,
         isProtocolWarning: this.isProtocolWarning
       });
     }
@@ -71,19 +71,20 @@ class HotspotGeo {
   handlePosSuccess(pos) {
     const lat = pos.coords.latitude;
     const lng = pos.coords.longitude;
-    const accuracy = pos.coords.accuracy;
+    const accuracyMeters = pos.coords.accuracy;
+    const accuracyFeet = Math.round(accuracyMeters * 3.28084);
     const timestamp = pos.timestamp || Date.now();
 
     this.currentPosition = { lat, lng, timestamp };
-    this.accuracy = accuracy;
+    this.accuracyFeet = accuracyFeet;
 
-    this.positionHistory.push({ lat, lng, accuracy, timestamp });
+    this.positionHistory.push({ lat, lng, accuracy: accuracyFeet, timestamp });
 
     if (this.onPositionUpdate) {
       this.onPositionUpdate({
         lat,
         lng,
-        accuracy,
+        accuracy: accuracyFeet,
         timestamp,
         isProtocolWarning: this.isProtocolWarning
       });
@@ -107,8 +108,9 @@ class HotspotGeo {
     if (this.onError) this.onError(msg);
   }
 
+  // Returns distance in Feet
   calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371e3;
+    const R = 6371e3; // Earth radius in meters
     const φ1 = (lat1 * Math.PI) / 180;
     const φ2 = (lat2 * Math.PI) / 180;
     const Δφ = ((lat2 - lat1) * Math.PI) / 180;
@@ -119,7 +121,8 @@ class HotspotGeo {
       Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-    return R * c;
+    const meters = R * c;
+    return meters * 3.28084; // Convert meters to Feet
   }
 
   calculateBearing(lat1, lon1, lat2, lon2) {
@@ -134,18 +137,19 @@ class HotspotGeo {
     return ((θ * 180) / Math.PI + 360) % 360;
   }
 
-  getDistanceBand(meters) {
-    if (meters > 60) return { band: 'COLD', label: 'COLD', color: '#64748B', pulseMs: 1600 };
-    if (meters > 35) return { band: 'STRUCK', label: 'STRUCK', color: '#06B6D4', pulseMs: 1100 };
-    if (meters > 20) return { band: 'TRAILING', label: 'TRAILING', color: '#F59E0B', pulseMs: 700 };
-    if (meters > 8)  return { band: 'BAYING', label: 'BAYING', color: '#FF5500', pulseMs: 400 };
+  // Expects distance in FEET
+  getDistanceBand(feet) {
+    if (feet > 200) return { band: 'COLD', label: 'COLD', color: '#64748B', pulseMs: 1600 };
+    if (feet > 115) return { band: 'STRUCK', label: 'STRUCK', color: '#06B6D4', pulseMs: 1100 };
+    if (feet > 65)  return { band: 'TRAILING', label: 'TRAILING', color: '#F59E0B', pulseMs: 700 };
+    if (feet > 25)  return { band: 'BAYING', label: 'BAYING', color: '#FF5500', pulseMs: 400 };
     return { band: 'TREED', label: 'TREED / TAGGED', color: '#EF4444', pulseMs: 180 };
   }
 
   getBufferedPosition(rawPos, realTimeHiderPos) {
     if (!rawPos || !realTimeHiderPos) return rawPos;
 
-    const rawDist = this.calculateDistance(
+    const rawDistFeet = this.calculateDistance(
       rawPos.lat, rawPos.lng,
       realTimeHiderPos.lat, realTimeHiderPos.lng
     );
@@ -154,7 +158,8 @@ class HotspotGeo {
     this.lagBuffer.push({ ...realTimeHiderPos, timestamp: now });
     this.lagBuffer = this.lagBuffer.filter(p => now - p.timestamp <= 10000);
 
-    if (rawDist > 50) {
+    // 5-second lag buffer if outside 165 feet (50 meters)
+    if (rawDistFeet > 165) {
       const targetTime = now - 5000;
       const delayedPoint = this.lagBuffer.find(p => p.timestamp >= targetTime) || this.lagBuffer[0] || realTimeHiderPos;
       return delayedPoint;
@@ -173,19 +178,20 @@ class HotspotGeo {
   }
 
   /**
-   * Solo Drill: Plant a virtual hider ~distanceMeters out
+   * Solo Drill: Plant a virtual hider ~distanceFeet out (default 300ft)
    */
-  startSoloDrill(distanceMeters = 100) {
+  startSoloDrill(distanceFeet = 300) {
     if (!this.currentPosition) {
       this.currentPosition = { lat: 37.774929, lng: -122.419416, timestamp: Date.now() };
     }
 
-    return this.setSoloHiderDistance(distanceMeters);
+    return this.setSoloHiderDistance(distanceFeet);
   }
 
-  setSoloHiderDistance(distanceMeters) {
-    const bearingDeg = 45; // Fixed 45 degree bearing for deterministic test movement
+  setSoloHiderDistance(distanceFeet) {
+    const bearingDeg = 45;
     const bearingRad = (bearingDeg * Math.PI) / 180;
+    const distanceMeters = distanceFeet / 3.28084;
 
     const R = 6371e3;
     const lat1 = (this.currentPosition.lat * Math.PI) / 180;
@@ -206,23 +212,23 @@ class HotspotGeo {
       lng: (lon2 * 180) / Math.PI,
       timestamp: Date.now(),
       isVirtual: true,
-      currentDistMeters: distanceMeters
+      currentDistFeet: distanceFeet
     };
 
     return this.soloHiderPosition;
   }
 
-  moveSoloHiderCloser(deltaMeters = 25) {
-    if (!this.soloHiderPosition) this.startSoloDrill(100);
-    const currentDist = this.soloHiderPosition.currentDistMeters || 100;
-    const newDist = Math.max(2, currentDist - deltaMeters);
+  moveSoloHiderCloser(deltaFeet = 75) {
+    if (!this.soloHiderPosition) this.startSoloDrill(300);
+    const currentDist = this.soloHiderPosition.currentDistFeet || 300;
+    const newDist = Math.max(10, currentDist - deltaFeet);
     return this.setSoloHiderDistance(newDist);
   }
 
-  moveSoloHiderAway(deltaMeters = 25) {
-    if (!this.soloHiderPosition) this.startSoloDrill(100);
-    const currentDist = this.soloHiderPosition.currentDistMeters || 100;
-    const newDist = Math.min(200, currentDist + deltaMeters);
+  moveSoloHiderAway(deltaFeet = 75) {
+    if (!this.soloHiderPosition) this.startSoloDrill(300);
+    const currentDist = this.soloHiderPosition.currentDistFeet || 300;
+    const newDist = Math.min(600, currentDist + deltaFeet);
     return this.setSoloHiderDistance(newDist);
   }
 }
