@@ -133,41 +133,52 @@ class HotspotReplay {
     this.replayStep = 0;
     this.isPlaying = false;
 
-    // Find all points for center bounds
-    const allPoints = [];
-    tracks.forEach(t => {
-      t.points.forEach(p => allPoints.push([p.lat, p.lng]));
-    });
+    if (this.tagEvent && this.tagEvent.lat && this.tagEvent.lng) {
+      // Zoom WAY in directly to the location the person was caught (Zoom Level 19)
+      const tagCenter = [this.tagEvent.lat, this.tagEvent.lng];
+      this.initMap('replay-map', tagCenter, 19);
+    } else {
+      // Find all points for center bounds
+      const allPoints = [];
+      tracks.forEach(t => {
+        t.points.forEach(p => allPoints.push([p.lat, p.lng]));
+      });
 
-    if (allPoints.length > 0) {
-      this.initMap('replay-map', allPoints[0], 17);
-      this.map.fitBounds(allPoints, { padding: [40, 40] });
+      if (allPoints.length > 0) {
+        this.initMap('replay-map', allPoints[0], 18);
+        this.map.fitBounds(allPoints, { padding: [30, 30], maxZoom: 19 });
+      }
     }
 
     if (this.tagEvent && this.tagEvent.lat) {
       const tagMarkerHtml = `
         <div style="
           background: #EF4444;
-          width: 28px;
-          height: 28px;
+          width: 32px;
+          height: 32px;
           border-radius: 50%;
           border: 3px solid #FFF;
-          box-shadow: 0 0 16px #EF4444;
+          box-shadow: 0 0 20px #EF4444;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 14px;
+          font-size: 16px;
         ">
           🎯
         </div>
       `;
       L.marker([this.tagEvent.lat, this.tagEvent.lng], {
-        icon: L.divIcon({ html: tagMarkerHtml, className: 'tag-marker', iconSize: [32, 32] })
-      }).addTo(this.map).bindTooltip(`TAGGED! ${this.tagEvent.seekerName} caught ${this.tagEvent.hiderName}`, { permanent: true });
+        icon: L.divIcon({ html: tagMarkerHtml, className: 'tag-marker', iconSize: [36, 36] })
+      }).addTo(this.map).bindTooltip(`TAGGED! ${this.tagEvent.seekerName} caught ${this.tagEvent.hiderName}`, { permanent: true, direction: 'top' });
     }
 
     setTimeout(() => {
-      if (this.map) this.map.invalidateSize();
+      if (this.map) {
+        this.map.invalidateSize();
+        if (this.tagEvent && this.tagEvent.lat && this.tagEvent.lng) {
+          this.map.setView([this.tagEvent.lat, this.tagEvent.lng], 19);
+        }
+      }
     }, 250);
   }
 

@@ -35,6 +35,9 @@ class HotspotApp {
     this.headStartRemaining = 60;
     this.headStartStartTime = 0;
 
+    this.matchDurationSeconds = 300;
+    this.matchTimer = null;
+
     this.isSoloDrill = false;
     this.players = {};
     this.hiderId = null;
@@ -388,6 +391,7 @@ class HotspotApp {
 
         if (data.headStartSeconds) this.headStartSeconds = data.headStartSeconds;
         if (data.boundaryRadius) this.boundaryRadius = data.boundaryRadius;
+        if (data.matchDurationSeconds) this.matchDurationSeconds = data.matchDurationSeconds;
 
         // Record every player's track, not just our own, so the replay has
         // something to draw for the rest of the field.
@@ -529,11 +533,12 @@ class HotspotApp {
   }
 
   // --- MULTIPLAYER ROOM SETUP ---
-  createRoom(headStartSec = 60, mode = 'classic', boundaryFeet = 250) {
+  createRoom(headStartSec = 60, mode = 'classic', boundaryFeet = 250, matchDurationSec = 300) {
     this.isSoloDrill = false;
     this.headStartSeconds = parseInt(headStartSec, 10) || 60;
     this.boundaryRadius = parseInt(boundaryFeet, 10) || 250;
     this.gameMode = mode;
+    this.matchDurationSeconds = parseInt(matchDurationSec, 10) || 300;
     this.roomCode = this.generateRoomCode();
     this.joinTime = Date.now();
     this.currentRoundId = null;
@@ -760,6 +765,8 @@ class HotspotApp {
       roundId: roundId,
       headStartStartTime: startTime,
       headStartSeconds: this.headStartSeconds,
+      boundaryRadius: this.boundaryRadius,
+      matchDurationSeconds: this.matchDurationSeconds,
       yardCenterPos: this.yardCenterPos
     });
 
@@ -767,6 +774,8 @@ class HotspotApp {
       roundId: roundId,
       headStartStartTime: startTime,
       headStartSeconds: this.headStartSeconds,
+      boundaryRadius: this.boundaryRadius,
+      matchDurationSeconds: this.matchDurationSeconds,
       yardCenterPos: this.yardCenterPos
     });
   }
@@ -869,14 +878,80 @@ class HotspotApp {
       }
 
       this.startPulseLoop();
+      this.startMatchTimer();
     } else if (newState === 'gameover') {
       this.stopPulseLoop();
       if (this.headStartTimer) clearInterval(this.headStartTimer);
+      if (this.matchTimer) clearInterval(this.matchTimer);
       this.showScreen('replay-screen');
       if (window.hotspotReplay) {
         window.hotspotReplay.loadReplayData(this.matchTrackHistory, this.tagEvent);
       }
     }
+  }
+
+  startMatchTimer() {
+    if (this.matchTimer) clearInterval(this.matchTimer);
+    if (!this.matchDurationSeconds || this.matchDurationSeconds <= 0) {
+      ['match-timer-seeker', 'match-timer-hider'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = '⏱️ NO TIME LIMIT';
+      });
+      return;
+    }
+
+    const matchStartTime = Date.now();
+
+    this.matchTimer = setInterval(() => {
+      if (this.gameState !== 'active') {
+        clearInterval(this.matchTimer);
+        this.matchTimer = null;
+        return;
+      }
+
+      const elapsedSec = Math.floor((Date.now() - matchStartTime) / 1000);
+      const remainingSec = Math.max(0, this.matchDurationSeconds - elapsedSec);
+
+      const mins = Math.floor(remainingSec / 60);
+      const secs = (remainingSec % 60).toString().padStart(2, '0');
+      const timeStr = `⏱️ MATCH TIME: ${mins}:${secs}`;
+
+      ['match-timer-seeker', 'match-timer-hider'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = timeStr;
+      });
+
+      if (remainingSec === 60) {
+        window.hotspotAudio.speak("1 minute remaining in the hunt!");
+      } else if (remainingSec === 30 || remainingSec === 15) {
+        window.hotspotAudio.speak(`${remainingSec} seconds remaining!`);
+      } else if (remainingSec <= 5 && remainingSec > 0) {
+        window.hotspotAudio.playCountdownBeep(false);
+      }
+
+      if (remainingSec <= 0) {
+        clearInterval(this.matchTimer);
+        this.matchTimer = null;
+        this.handleMatchTimeExpired();
+      }
+    }, 1000);
+  }
+
+  handleMatchTimeExpired() {
+    if (this.gameState !== 'active') return;
+
+    this.stopPulseLoop();
+    this.gameState = 'gameover';
+
+    if (this.role === 'hider') {
+      window.hotspotAudio.speak("TIME EXPIRED! YOU SURVIVED AND WON THE HUNT!");
+      alert("🎉 TIME EXPIRED!\n\nYou successfully hid until time ran out! HIDER WINS!");
+    } else {
+      window.hotspotAudio.speak("TIME EXPIRED! THE HIDER ESCAPED! HIDER WINS!");
+      alert("⌛ TIME EXPIRED!\n\nThe Hider survived the entire match duration! Hider wins!");
+    }
+
+    this.handleGameStateChange('gameover');
   }
 
   startGpsTracking() {

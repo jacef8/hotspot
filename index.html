@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.5.0</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.5.1</title>
 
   <!-- PWA Full-Screen Native App Meta Tags -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -20,7 +20,7 @@
   <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
   
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=2.5.0">
+  <link rel="stylesheet" href="style.css?v=2.5.1">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -62,7 +62,7 @@
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="brand-subtitle">Extreme Yard Tag & Proximity Hunt</div>
         <div style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
-          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800;">v2.5.0</span>
+          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800;">v2.5.1</span>
           <span id="cloud-sync-status" style="font-size: 11px; color: var(--text-muted); font-weight: 600; text-align: center; letter-spacing: 0.5px;">
             🌐 hotspot-app-yardtag.web.app
           </span>
@@ -144,6 +144,17 @@
           <select id="setup-gamemode" class="select-input">
             <option value="classic" selected>Classic Tag (First Tag Wins)</option>
             <option value="infection">Infection Mode (Pack Grows!)</option>
+          </select>
+        </div>
+
+        <div class="input-group">
+          <label class="input-label">Hunt Time Limit</label>
+          <select id="setup-matchduration" class="select-input">
+            <option value="180">3 Minutes (Fast Blitz)</option>
+            <option value="300" selected>5 Minutes (Standard)</option>
+            <option value="420">7 Minutes (Extended)</option>
+            <option value="600">10 Minutes (Large Park)</option>
+            <option value="0">No Time Limit (Until Tagged)</option>
           </select>
         </div>
 
@@ -233,6 +244,9 @@
         <div id="headstart-banner-seeker" class="headstart-counter" style="font-size: 14px; font-weight: 800; color: var(--accent-amber); letter-spacing: 1px;">
           ⏳ HIDER HEAD START: 60s
         </div>
+        <div id="match-timer-seeker" style="font-size: 13px; font-weight: 800; color: var(--accent-cyan); margin-top: 2px;">
+          ⏱️ MATCH TIME: 5:00
+        </div>
       </div>
 
       <div class="seeker-radar-container">
@@ -271,6 +285,9 @@
       <div style="text-align: center;">
         <div class="brand-subtitle">HEAD START COUNTDOWN</div>
         <div id="hider-timer-display" class="headstart-counter" style="font-size: 32px; font-weight: 900; color: var(--accent-amber);">60s</div>
+        <div id="match-timer-hider" style="font-size: 14px; font-weight: 800; color: var(--accent-cyan); margin-top: 4px;">
+          ⏱️ MATCH TIME: 5:00
+        </div>
       </div>
 
       <!-- Yard Boundary Warning Banner -->
@@ -349,9 +366,10 @@
       const hs = document.getElementById('setup-headstart').value;
       const gm = document.getElementById('setup-gamemode').value;
       const b = document.getElementById('setup-boundary').value;
+      const md = document.getElementById('setup-matchduration').value;
       const name = document.getElementById('host-nickname').value || 'Host';
       window.hotspotApp.playerName = name;
-      window.hotspotApp.createRoom(hs, gm, b);
+      window.hotspotApp.createRoom(hs, gm, b, md);
     };
 
     window.joinRoomAction = function() {
@@ -380,10 +398,10 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=2.5.0"></script>
-  <script src="geo.js?v=2.5.0"></script>
-  <script src="replay.js?v=2.5.0"></script>
-  <script src="app.js?v=2.5.0"></script>
+  <script src="audio.js?v=2.5.1"></script>
+  <script src="geo.js?v=2.5.1"></script>
+  <script src="replay.js?v=2.5.1"></script>
+  <script src="app.js?v=2.5.1"></script>
 
   <script>
     document.addEventListener('DOMContentLoaded', () => {
