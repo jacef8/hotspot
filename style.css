@@ -413,3 +413,51 @@ html, body {
 
 .player-badge.hider { border-left: 3px solid var(--primary-blaze); }
 .player-badge.seeker { border-left: 3px solid var(--accent-cyan); }
+
+/* Distinct Role Screen Themes & Backgrounds */
+#hider-screen.active {
+  background: radial-gradient(circle at top, #3A1504 0%, #1A0701 80%, #0A0200 100%);
+  border-top: 3px solid var(--primary-blaze);
+  box-shadow: inset 0 0 40px rgba(255, 85, 0, 0.25);
+}
+
+#seeker-screen.active {
+  background: radial-gradient(circle at top, #062F47 0%, #031624 80%, #010A12 100%);
+  border-top: 3px solid var(--accent-cyan);
+  box-shadow: inset 0 0 40px rgba(0, 240, 255, 0.2);
+}
+
+/* Distinct Role Header Badges */
+.role-header-banner {
+  text-align: center;
+  margin-bottom: 4px;
+  flex-shrink: 0;
+}
+
+.role-badge {
+  display: inline-block;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+}
+
+.role-badge.hider-role-badge {
+  background: rgba(255, 85, 0, 0.2);
+  border: 2px solid var(--primary-blaze);
+  color: #FFAA80;
+  text-shadow: 0 0 10px rgba(255, 85, 0, 0.7);
+  box-shadow: 0 0 15px rgba(255, 85, 0, 0.3);
+}
+
+.role-badge.seeker-role-badge {
+  background: rgba(0, 240, 255, 0.18);
+  border: 2px solid var(--accent-cyan);
+  color: #80F7FF;
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.7);
+  box-shadow: 0 0 15px rgba(0, 240, 255, 0.3);
+}
+

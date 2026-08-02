@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.4.4</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.4.5</title>
 
   <!-- Leaflet Map CSS + JS. The JS was missing entirely, so L was undefined and
        both the Spectator God View and the post-game Replay map threw on open. -->
@@ -11,7 +11,7 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=2.4.4">
+  <link rel="stylesheet" href="style.css?v=2.4.5">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -53,7 +53,7 @@
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="brand-subtitle">Extreme Yard Tag & Proximity Hunt</div>
         <div style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
-          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800;">v2.4.4</span>
+          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800;">v2.4.5</span>
           <span id="cloud-sync-status" style="font-size: 11px; color: var(--text-muted); font-weight: 600; text-align: center; letter-spacing: 0.5px;">
             🌐 hotspot-app-yardtag.web.app
           </span>
@@ -217,8 +217,11 @@
 
     <!-- ==================== SCREEN 6: SEEKER LIVE HUNT ==================== -->
     <div id="seeker-screen" class="screen">
-      <div style="text-align: center; padding: 4px 0;">
-        <div id="headstart-banner-seeker" class="headstart-counter" style="font-size: 15px; font-weight: 800; color: var(--accent-amber); letter-spacing: 1px;">
+      <div class="role-header-banner">
+        <div class="role-badge seeker-role-badge">🎯 YOU ARE THE SEEKER</div>
+      </div>
+      <div style="text-align: center; padding: 2px 0;">
+        <div id="headstart-banner-seeker" class="headstart-counter" style="font-size: 14px; font-weight: 800; color: var(--accent-amber); letter-spacing: 1px;">
           ⏳ HIDER HEAD START: 60s
         </div>
       </div>
@@ -253,6 +256,9 @@
 
     <!-- ==================== SCREEN 7: HIDER LIVE HUNT ==================== -->
     <div id="hider-screen" class="screen">
+      <div class="role-header-banner">
+        <div class="role-badge hider-role-badge">👑 YOU ARE THE HIDER</div>
+      </div>
       <div style="text-align: center;">
         <div class="brand-subtitle">HEAD START COUNTDOWN</div>
         <div id="hider-timer-display" class="headstart-counter" style="font-size: 32px; font-weight: 900; color: var(--accent-amber);">60s</div>
@@ -365,10 +371,10 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=2.4.4"></script>
-  <script src="geo.js?v=2.4.4"></script>
-  <script src="replay.js?v=2.4.4"></script>
-  <script src="app.js?v=2.4.4"></script>
+  <script src="audio.js?v=2.4.5"></script>
+  <script src="geo.js?v=2.4.5"></script>
+  <script src="replay.js?v=2.4.5"></script>
+  <script src="app.js?v=2.4.5"></script>
 
   <script>
     document.addEventListener('DOMContentLoaded', () => {
