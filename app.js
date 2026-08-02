@@ -789,7 +789,7 @@ class HotspotApp {
     if (banner) banner.style.display = 'none';
 
     const homeLabel = document.getElementById('cloud-sync-status');
-    if (homeLabel) homeLabel.innerText = '🌐 hotspot-app-yardtag.web.app';
+    if (homeLabel) homeLabel.innerText = '🌐 hotspot-yardtag.web.app';
 
     ['btn-powerup-decoy', 'btn-powerup-smoke', 'btn-bearing-ping'].forEach((id) => {
       const b = document.getElementById(id);
