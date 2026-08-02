@@ -15,6 +15,42 @@ class HotspotReplay {
     this.isPlaying = false;
     this.playbackSpeed = 1;
     this.boundaryCircle = null;
+
+    // Auto-follow state. `userHasPanned` was read by updateSpectatorView but
+    // never assigned anywhere, so it was permanently false and the map re-fit
+    // its bounds on every position update — a spectator could not zoom into one
+    // corner of the yard without being snapped back a second later.
+    this.userHasPanned = false;
+    this.lastBounds = [];
+    this.programmaticUntil = 0;
+  }
+
+  // Our own fitBounds/setView calls also fire movestart/zoomstart, so mark a
+  // short window around them to tell "the app moved the map" apart from
+  // "the user moved the map".
+  markProgrammatic() {
+    this.programmaticUntil = Date.now() + 800;
+  }
+
+  isProgrammatic() {
+    return Date.now() < this.programmaticUntil;
+  }
+
+  setUserPanned(panned) {
+    this.userHasPanned = panned;
+    // Both the God View and the replay screen carry a recenter button.
+    document.querySelectorAll('.map-recenter-btn').forEach(btn => {
+      btn.style.display = panned ? 'block' : 'none';
+    });
+  }
+
+  // Resume auto-follow and snap back to the whole field.
+  recenterMap() {
+    this.setUserPanned(false);
+    if (this.map && this.lastBounds && this.lastBounds.length > 0) {
+      this.markProgrammatic();
+      this.map.fitBounds(this.lastBounds, { padding: [50, 50], maxZoom: 19 });
+    }
   }
 
   // Draw the yard limit on the map. Players in the field only get a numeric
@@ -72,6 +108,17 @@ class HotspotReplay {
     }
 
     this.map = L.map(elementId, { zoomControl: true }).setView(center, zoom);
+
+    // A freshly built map starts following again.
+    this.setUserPanned(false);
+    this.lastBounds = [];
+
+    // Any drag is unambiguously the user. Zoom/move can be either, so only
+    // count it when we did not just move the map ourselves.
+    this.map.on('dragstart', () => this.setUserPanned(true));
+    this.map.on('zoomstart movestart', () => {
+      if (!this.isProgrammatic()) this.setUserPanned(true);
+    });
 
     // Satellite imagery (Esri World Imagery — no API key required). An aerial
     // view makes the tag spot readable against real yard features: driveways,
@@ -167,8 +214,14 @@ class HotspotReplay {
       }
     });
 
-    if (bounds.length > 0 && !this.userHasPanned) {
-      this.map.fitBounds(bounds, { padding: [50, 50], maxZoom: 19 });
+    // Remember the field extent even while the user is panning, so Recenter
+    // has somewhere to snap back to.
+    if (bounds.length > 0) {
+      this.lastBounds = bounds;
+      if (!this.userHasPanned) {
+        this.markProgrammatic();
+        this.map.fitBounds(bounds, { padding: [50, 50], maxZoom: 19 });
+      }
     }
   }
 
@@ -178,10 +231,17 @@ class HotspotReplay {
     this.replayStep = 0;
     this.isPlaying = false;
 
+    // Full extent of every track, so Recenter works on the replay map too.
+    const trackBounds = [];
+    (tracks || []).forEach(t => {
+      (t.points || []).forEach(p => trackBounds.push([p.lat, p.lng]));
+    });
+
     if (this.tagEvent && this.tagEvent.lat && this.tagEvent.lng) {
       // Zoom WAY in directly to the location the person was caught (Zoom Level 19)
       const tagCenter = [this.tagEvent.lat, this.tagEvent.lng];
       this.initMap('replay-map', tagCenter, 19);
+      this.lastBounds = trackBounds.length > 0 ? trackBounds : [tagCenter];
     } else {
       // Find all points for center bounds
       const allPoints = [];
@@ -191,6 +251,8 @@ class HotspotReplay {
 
       if (allPoints.length > 0) {
         this.initMap('replay-map', allPoints[0], 18);
+        this.lastBounds = allPoints;
+        this.markProgrammatic();
         this.map.fitBounds(allPoints, { padding: [30, 30], maxZoom: 19 });
       }
     }
@@ -220,7 +282,9 @@ class HotspotReplay {
     setTimeout(() => {
       if (this.map) {
         this.map.invalidateSize();
-        if (this.tagEvent && this.tagEvent.lat && this.tagEvent.lng) {
+        // Only re-snap to the tag if the user has not started exploring the map.
+        if (this.tagEvent && this.tagEvent.lat && this.tagEvent.lng && !this.userHasPanned) {
+          this.markProgrammatic();
           this.map.setView([this.tagEvent.lat, this.tagEvent.lng], 19);
         }
       }
