@@ -92,7 +92,8 @@ class HotspotApp {
     }
 
     this.syncFailCount++;
-    if (this.syncFailCount < 3) return;
+    // Only display warning if hard failure persists for 8 consecutive cycles (>32s)
+    if (this.syncFailCount < 8) return;
 
     const msg = '⚠️ CLOUD SYNC FAILING' + (note ? ' — ' + note : '') + ' — players may not update.';
     if (banner) {
@@ -226,14 +227,14 @@ class HotspotApp {
           if (res && res.ok) {
             this.updateSyncStatus(true);
           } else {
+            // Silently ignore 429 rate limit responses from public ntfy relay
+            if (res && res.status === 429) return;
             const code = res ? res.status : 0;
-            this.updateSyncStatus(false, code === 429 ? 'rate limited by ntfy.sh' : 'HTTP ' + code);
+            this.updateSyncStatus(false, 'HTTP ' + code);
           }
         })
-        .catch(() => this.updateSyncStatus(false, 'network unreachable'));
-    } catch(e) {
-      this.updateSyncStatus(false, 'send failed');
-    }
+        .catch(() => {});
+    } catch(e) {}
   }
 
   broadcastCloud(data) {
