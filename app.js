@@ -18,12 +18,12 @@ class HotspotApp {
     this.headStartSeconds = 60;
     this.headStartTimer = null;
     this.headStartRemaining = 60;
+    this.headStartStartTime = 0;
 
     this.isSoloDrill = false;
     this.players = {};
     this.hiderId = null;
 
-    // Default immediate position fallback (Central Park coordinates if GPS pending)
     this.myPosition = { lat: 37.774929, lng: -122.419416, accuracy: 8, timestamp: Date.now() };
 
     this.powerups = {
@@ -36,10 +36,6 @@ class HotspotApp {
     };
 
     this.decoyPos = null;
-    this.decoyTimeout = null;
-    this.smokeTimeout = null;
-    this.bearingTimeout = null;
-
     this.matchTrackHistory = [];
     this.tagEvent = null;
     this.gameStartTime = 0;
@@ -50,7 +46,6 @@ class HotspotApp {
     this.lastPulseTime = 0;
 
     this.initFirebase();
-    this.bindDOMEvents();
   }
 
   initFirebase() {
@@ -81,12 +76,6 @@ class HotspotApp {
     if (target) target.classList.add('active');
   }
 
-  bindDOMEvents() {
-    document.addEventListener('DOMContentLoaded', () => {
-      this.updateSeasonStatsDisplay();
-    });
-  }
-
   // --- SOLO DRILL MODE ---
   startSoloDrill() {
     this.isSoloDrill = true;
@@ -107,9 +96,11 @@ class HotspotApp {
     this.startGpsTracking();
     this.showScreen('seeker-screen');
     
-    // Enable solo controls UI
     const soloControls = document.getElementById('solo-controls-card');
     if (soloControls) soloControls.style.display = 'block';
+
+    const counter = document.getElementById('headstart-banner-seeker');
+    if (counter) counter.innerText = '🔥 SOLO DRILL LIVE!';
 
     this.startPulseLoop();
   }
@@ -193,6 +184,7 @@ class HotspotApp {
         const data = snapshot.val();
         this.hiderId = data.hiderId;
         this.gameMode = data.gameMode || 'classic';
+        this.headStartSeconds = data.headStartSeconds || 60;
 
         roomRef.child('players/' + this.playerId).set({
           id: this.playerId,
@@ -202,6 +194,7 @@ class HotspotApp {
 
         this.listenToRoom();
         document.getElementById('lobby-code-display').innerText = this.roomCode;
+        this.updateLobbyList();
         this.showScreen('lobby-screen');
       });
     } else {
@@ -240,11 +233,12 @@ class HotspotApp {
       this.players = data.players || {};
       this.hiderId = data.hiderId;
       this.gameMode = data.gameMode || 'classic';
+      this.headStartSeconds = data.headStartSeconds || 60;
       this.updateLobbyList();
 
       if (data.gameState !== this.gameState) {
         this.gameState = data.gameState;
-        this.handleGameStateChange(this.gameState);
+        this.handleGameStateChange(this.gameState, data);
       }
 
       if (data.powerups) {
@@ -277,7 +271,7 @@ class HotspotApp {
       hiderContainer.innerHTML = hidersList.map(p => `
         <div class="player-badge hider">
           <span class="role-icon">👑 HIDER</span>
-          <span class="name">${p.name} ${p.id === this.playerId ? '<span class="you-badge">(YOU)</span>' : ''}</span>
+          <span class="name">${p.name} ${p.id === this.playerId ? '<b style="color:var(--accent-cyan);">(YOU)</b>' : ''}</span>
         </div>
       `).join('') || '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:6px;">No Hider Selected</div>';
     }
@@ -286,27 +280,36 @@ class HotspotApp {
       seekerContainer.innerHTML = seekersList.map(p => `
         <div class="player-badge seeker">
           <span class="role-icon">🏃 SEEKER</span>
-          <span class="name">${p.name} ${p.id === this.playerId ? '<span class="you-badge">(YOU)</span>' : ''}</span>
+          <span class="name">${p.name} ${p.id === this.playerId ? '<b style="color:var(--accent-cyan);">(YOU)</b>' : ''}</span>
         </div>
       `).join('') || '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:6px;">No Seekers Joined Yet</div>';
     }
   }
 
-  // --- GAME START & HEADSTART ---
+  // --- GAME START & HEADSTART TIMING ENGINE ---
   startHeadstart() {
+    const startTime = Date.now();
+    this.headStartStartTime = startTime;
+
     if (this.db) {
       this.db.ref(`rooms/${this.roomCode}`).update({
         gameState: 'headstart',
-        headStartStartTime: Date.now()
+        headStartStartTime: startTime,
+        headStartSeconds: this.headStartSeconds
       });
     } else {
-      this.handleGameStateChange('headstart');
+      this.handleGameStateChange('headstart', {
+        headStartStartTime: startTime,
+        headStartSeconds: this.headStartSeconds
+      });
     }
   }
 
-  handleGameStateChange(newState) {
+  handleGameStateChange(newState, roomData = null) {
     if (newState === 'headstart') {
-      this.headStartRemaining = this.headStartSeconds;
+      const startTime = (roomData && roomData.headStartStartTime) ? roomData.headStartStartTime : (this.headStartStartTime || Date.now());
+      const duration = (roomData && roomData.headStartSeconds) ? roomData.headStartSeconds : this.headStartSeconds;
+
       this.startGpsTracking();
 
       if (this.role === 'hider') {
@@ -318,22 +321,40 @@ class HotspotApp {
         window.hotspotReplay.initMap('spectator-map');
       }
 
-      window.hotspotAudio.speak(`Turn the pack loose! Hider gets ${this.headStartSeconds} seconds head start!`);
+      window.hotspotAudio.speak(`Turn the pack loose! Hider gets ${duration} seconds head start!`);
+
+      if (this.headStartTimer) clearInterval(this.headStartTimer);
 
       this.headStartTimer = setInterval(() => {
-        this.headStartRemaining -= 1;
-        document.querySelectorAll('.headstart-counter').forEach(el => el.innerText = `${this.headStartRemaining}s`);
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const remaining = Math.max(0, duration - elapsed);
+        this.headStartRemaining = remaining;
 
-        if (this.headStartRemaining <= 5 && this.headStartRemaining > 0) {
+        // Update all headstart display elements on screen
+        document.querySelectorAll('.headstart-counter').forEach(el => {
+          el.innerText = `⏳ HEAD START: ${remaining}s`;
+        });
+
+        const hiderCounter = document.getElementById('hider-timer-display');
+        if (hiderCounter) hiderCounter.innerText = `${remaining}s`;
+
+        if (remaining <= 5 && remaining > 0) {
           window.hotspotAudio.playCountdownBeep(false);
         }
 
-        if (this.headStartRemaining === 30 || this.headStartRemaining === 15) {
-          window.hotspotAudio.speak(`${this.headStartRemaining} seconds remaining!`);
+        if (remaining === 30 || remaining === 15) {
+          window.hotspotAudio.speak(`${remaining} seconds remaining!`);
         }
 
-        if (this.headStartRemaining <= 0) {
+        if (remaining <= 0) {
           clearInterval(this.headStartTimer);
+          this.headStartTimer = null;
+
+          document.querySelectorAll('.headstart-counter').forEach(el => {
+            el.innerText = '🔥 HUNT IS LIVE!';
+          });
+          if (hiderCounter) hiderCounter.innerText = 'LIVE!';
+
           window.hotspotAudio.playCountdownBeep(true);
           window.hotspotAudio.speak('PACK RELEASED! HUNT IS LIVE!');
 
@@ -347,9 +368,11 @@ class HotspotApp {
 
     } else if (newState === 'active') {
       this.gameStartTime = Date.now();
+      document.querySelectorAll('.headstart-counter').forEach(el => el.innerText = '🔥 HUNT IS LIVE!');
       this.startPulseLoop();
     } else if (newState === 'gameover') {
       this.stopPulseLoop();
+      if (this.headStartTimer) clearInterval(this.headStartTimer);
       this.showScreen('replay-screen');
       if (window.hotspotReplay) {
         window.hotspotReplay.loadReplayData(this.matchTrackHistory, this.tagEvent);
@@ -413,7 +436,6 @@ class HotspotApp {
     track.points.push({ lat: pos.lat, lng: pos.lng, accuracy: pos.accuracy, timestamp: Date.now() });
   }
 
-  // --- PULSE LOOP (SEEKER PROXIMITY) ---
   startPulseLoop() {
     if (this.pulseInterval) clearInterval(this.pulseInterval);
 
@@ -510,7 +532,6 @@ class HotspotApp {
     }
   }
 
-  // --- POWERUPS ---
   usePowerup(type) {
     if (type === 'decoy' && !this.powerups.decoyUsed) {
       this.powerups.decoyUsed = true;
