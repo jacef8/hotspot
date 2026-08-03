@@ -266,14 +266,20 @@ html, body {
 }
 
 .pulse-ring-outer {
-  width: clamp(170px, 46vw, 220px);
-  height: clamp(170px, 46vw, 220px);
+  width: clamp(200px, 62vw, 300px);
+  height: clamp(200px, 62vw, 300px);
   border-radius: 50%;
   border: 7px solid var(--slate-cold);
   box-shadow: 0 0 26px var(--slate-cold);
+  /* Column, not row. Without a direction the band label and the distance
+     readout were laid side by side and collided inside the ring. */
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 3px;
+  padding: 15%;
+  box-sizing: border-box;
   position: relative;
   animation: pulse-ring 1.6s infinite ease-out;
   transition: border-color 0.3s ease, box-shadow 0.3s ease;
@@ -287,13 +293,44 @@ html, body {
 }
 
 .seeker-band-label {
-  font-size: clamp(20px, 6vw, 26px);
+  font-size: clamp(17px, 5.2vw, 24px);
   font-weight: 900;
-  letter-spacing: 1.5px;
+  letter-spacing: 1px;
+  line-height: 1.05;
   text-transform: uppercase;
   text-align: center;
+  white-space: nowrap;
   color: var(--text-main);
   text-shadow: 0 0 12px rgba(255, 255, 255, 0.4);
+}
+
+/* Distance readout — each part on its own line so nothing wraps mid-unit
+   (it was breaking "201 ft ±30 ft" so a lone "ft" dropped to the next row). */
+#seeker-dist-readout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  line-height: 1.08;
+}
+#seeker-dist-readout .dist-main {
+  font-size: clamp(20px, 6.4vw, 28px);
+  font-weight: 900;
+  white-space: nowrap;
+  color: var(--text-main);
+}
+#seeker-dist-readout .dist-sub {
+  font-size: clamp(10px, 3vw, 12px);
+  font-weight: 700;
+  white-space: nowrap;
+  opacity: 0.65;
+}
+#seeker-dist-readout .dist-warn {
+  font-size: clamp(9px, 2.6vw, 11px);
+  font-weight: 800;
+  white-space: nowrap;
+  color: var(--accent-amber);
+  margin-top: 2px;
 }
 
 .bearing-arrow {

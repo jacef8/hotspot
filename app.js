@@ -1667,8 +1667,8 @@ class HotspotApp {
         if (bandLabel && !this.powerups.smokeActive) bandLabel.innerText = 'NO SIGNAL';
         if (distEl) {
           distEl.innerHTML = hiderPos
-            ? `<span style="font-size:.55em;opacity:.8;">last fix ${Math.round(hiderFixAgeMs / 1000)}s ago</span>`
-            : '<span style="font-size:.55em;opacity:.8;">waiting for hider…</span>';
+            ? `<span class="dist-sub">last fix ${Math.round(hiderFixAgeMs / 1000)}s ago</span>`
+            : '<span class="dist-sub">waiting for hider…</span>';
         }
         if (pulseRing) {
           pulseRing.style.borderColor = '#64748B';
@@ -1709,8 +1709,10 @@ class HotspotApp {
         const shown = distFeet > 300
           ? `${Math.round(distFeet / 3)} yd`
           : `${Math.round(distFeet)} ft`;
-        distEl.innerHTML = `${shown} <span style="opacity:.65;font-size:.6em;">±${marginFeet} ft</span>`
-          + (bandInfo.capped ? '<div style="font-size:10px;color:#F59E0B;font-weight:700;margin-top:2px;">WEAK GPS — reading may be off</div>' : '');
+        distEl.innerHTML =
+          `<span class="dist-main">${shown}</span>` +
+          `<span class="dist-sub">±${marginFeet} ft</span>` +
+          (bandInfo.capped ? '<span class="dist-warn">WEAK GPS</span>' : '');
       }
 
       if (pulseRing) {
