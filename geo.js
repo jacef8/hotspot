@@ -214,10 +214,12 @@ class HotspotGeo {
   // phone GPS error, so two players 90ft apart could read as "on top of you".
   //
   //   COLD     > 250 ft
-  //   WARM     150 - 250 ft
-  //   HOT       80 - 150 ft
-  //   HOTTER    40 -  80 ft
+  //   WARM     100 - 250 ft
+  //   HOT       60 - 100 ft
+  //   HOTTER    40 -  60 ft
   //   RED HOT  <  40 ft   (auto-tag range)
+  //
+  // HOT starts at 100ft, not 150 — the hot zone was far too wide to be useful.
   //
   // marginFeet is the combined GPS uncertainty of both phones. A hot reading is
   // only meaningful if the error is smaller than the ring itself, so the band is
@@ -225,8 +227,8 @@ class HotspotGeo {
   getDistanceBand(feet, marginFeet = 0) {
     const BANDS = [
       { band: 'COLD',   label: 'COLD',    color: '#64748B', pulseMs: 1600, min: 250 },
-      { band: 'WARM',   label: 'WARM',    color: '#06B6D4', pulseMs: 1100, min: 150 },
-      { band: 'HOT',    label: 'HOT',     color: '#F59E0B', pulseMs: 700,  min: 80  },
+      { band: 'WARM',   label: 'WARM',    color: '#06B6D4', pulseMs: 1100, min: 100 },
+      { band: 'HOT',    label: 'HOT',     color: '#F59E0B', pulseMs: 700,  min: 60  },
       { band: 'HOTTER', label: 'HOTTER',  color: '#FF5500', pulseMs: 400,  min: 40  },
       { band: 'REDHOT', label: 'RED HOT', color: '#EF4444', pulseMs: 180,  min: -1  }
     ];

@@ -20,6 +20,7 @@ class HotspotApp {
     this.seenMsgIds = {};
     this.seenMsgCount = 0;
     this.taggedHiderIds = {};
+    this.appliedTagByRound = {};
     this.lastCloudMessageAt = 0;
     this.syncFailCount = 0;
     // Whoever created the room owns the well-known peer id for it. Deliberately
@@ -774,6 +775,7 @@ class HotspotApp {
     this.gameState = 'active';
     this.gameStartTime = Date.now();
     this.taggedHiderIds = {};
+    this.appliedTagByRound = {};
 
     const hiderPos = window.hotspotGeo.startSoloDrill(300);
 
@@ -823,6 +825,11 @@ class HotspotApp {
 
   // --- MULTIPLAYER ROOM SETUP ---
   createRoom(headStartSec = 60, mode = 'classic', boundaryFeet = 250, matchDurationSec = 300) {
+    // Fully leave whatever room we were in. Without this the previous room's
+    // roster, database listeners and player node all survived into the new one,
+    // which is why players from the last game kept showing up under a new code.
+    if (this.roomCode) { try { this.leaveRoom(); } catch(e) {} }
+
     this.isSoloDrill = false;
     this.headStartSeconds = parseInt(headStartSec, 10) || 60;
     this.boundaryRadius = parseInt(boundaryFeet, 10) || 250;
@@ -835,6 +842,7 @@ class HotspotApp {
     this.currentRoundId = null;
     this.seenRoundIds = {};
     this.taggedHiderIds = {};
+    this.appliedTagByRound = {};
     this.role = 'hider';
     this.hiderId = this.playerId;
     this.gameState = 'lobby';
@@ -915,6 +923,7 @@ class HotspotApp {
     this.hiderId = null;
     this.decoyPos = null;
     this.taggedHiderIds = {};
+    this.appliedTagByRound = {};
     this.seenMsgIds = {};
     this.seenMsgCount = 0;
     this.syncFailCount = 0;
@@ -976,6 +985,7 @@ class HotspotApp {
     this.gameState = 'lobby';
     this.currentRoundId = null;
     this.taggedHiderIds = {};
+    this.appliedTagByRound = {};
     this.tagEvent = null;
     this.matchTrackHistory = [];
     this.decoyPos = null;
@@ -1058,6 +1068,8 @@ class HotspotApp {
       return;
     }
 
+    if (this.roomCode) { try { this.leaveRoom(); } catch(e) {} }
+
     this.isSoloDrill = false;
     this.roomCode = code.toUpperCase().trim();
     this.isRoomHost = false;
@@ -1065,6 +1077,7 @@ class HotspotApp {
     this.currentRoundId = null;
     this.seenRoundIds = {};
     this.taggedHiderIds = {};
+    this.appliedTagByRound = {};
     this.playerName = nickname ? nickname.trim() : this.playerName;
     this.role = role;
     this.gameState = 'lobby';
@@ -1092,14 +1105,40 @@ class HotspotApp {
   }
 
   toggleRole() {
-    this.role = this.role === 'hider' ? 'seeker' : 'hider';
+    if (this.gameState !== 'lobby') {
+      alert('You can only switch roles in the lobby, before the round starts.');
+      return;
+    }
+
+    const becomingHider = (this.role !== 'hider');
+
+    // The game has exactly one hider. Nothing stopped two people claiming the
+    // role at once, which left the roster showing two hiders and every seeker
+    // measuring distance to whichever one it happened to pick.
+    if (becomingHider) {
+      const now = Date.now();
+      const otherHider = Object.values(this.players).find(p =>
+        p.id !== this.playerId &&
+        p.role === 'hider' &&
+        (!p.lastSeen || now - p.lastSeen <= 15000)
+      );
+      if (otherHider) {
+        alert(`${otherHider.name || 'Someone else'} is already the Hider.\n\nThey need to switch to Seeker first, then you can take it.`);
+        return;
+      }
+    }
+
+    this.role = becomingHider ? 'hider' : 'seeker';
     if (this.players[this.playerId]) {
       this.players[this.playerId].role = this.role;
     }
+    if (!becomingHider && this.hiderId === this.playerId) this.hiderId = null;
 
+    // Publish immediately over every transport so the other phones redraw now
+    // rather than on the next 3s tick.
     this.sendHeartbeat();
     this.updateLobbyList();
-    window.hotspotAudio.speak(`Switched role to ${this.role.toUpperCase()}`);
+    window.hotspotAudio.speak(`You are now the ${this.role.toUpperCase()}`);
   }
 
   prunePlayers() {
@@ -1194,6 +1233,7 @@ class HotspotApp {
     this.currentRoundId = roundId;
     this.seenRoundIds[roundId] = true;
     this.taggedHiderIds = {};
+    this.appliedTagByRound = {};
     this.gameState = 'headstart';
 
     this.broadcastCloud({
@@ -1891,10 +1931,26 @@ class HotspotApp {
     if (!tag) return;
     if (this.gameState === 'gameover') return;
     if (tag.roundId && this.currentRoundId && tag.roundId !== this.currentRoundId) return;
-    if (this.taggedHiderIds[tag.hiderId] && tag.seekerId !== this.playerId) {
-      // Already processed this target locally.
-      if (this.tagEvent && this.tagEvent.hiderId === tag.hiderId) return;
+
+    // FIRST TAG WINS, once per round. Two seekers can both be inside 40ft when
+    // the hider is caught, and each device applied its own local tag before the
+    // other's arrived — so both players were told they made the catch. The
+    // earliest timestamp wins, with a deterministic tiebreak on seekerId so
+    // every device independently agrees on the same winner.
+    const roundKey = tag.roundId || 'noround';
+    this.appliedTagByRound = this.appliedTagByRound || {};
+    const prior = this.appliedTagByRound[roundKey];
+    if (prior) {
+      if (prior.seekerId === tag.seekerId) return;                 // our own tag echoed back
+      if (prior.timestamp < (tag.timestamp || 0)) return;          // ours was first
+      if (prior.timestamp === (tag.timestamp || 0) &&
+          String(prior.seekerId) < String(tag.seekerId)) return;   // tiebreak
+      // Otherwise the incoming tag genuinely beat ours; let it take over.
     }
+    this.appliedTagByRound[roundKey] = {
+      seekerId: tag.seekerId,
+      timestamp: tag.timestamp || 0
+    };
 
     this.taggedHiderIds[tag.hiderId] = Date.now();
 
