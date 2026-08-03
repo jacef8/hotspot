@@ -16,6 +16,9 @@ class HotspotGeo {
     this.onError = null;
     this.isProtocolWarning = false;
     this.deviceHeading = null;
+    this.headingIsAbsolute = false;
+    this.headingSamples = [];
+    this.headingUpdatedAt = 0;
     this.compassStarted = false;
 
     this.checkProtocol();
@@ -182,8 +185,12 @@ class HotspotGeo {
 
     const attach = () => {
       this.compassStarted = true;
-      window.addEventListener('deviceorientationabsolute', (e) => this.handleOrientation(e), true);
-      window.addEventListener('deviceorientation', (e) => this.handleOrientation(e), true);
+      // deviceorientationabsolute is true-north referenced. Plain
+      // deviceorientation on Android is often relative to an arbitrary origin,
+      // which would swing the arrow confidently in the wrong direction, so a
+      // relative reading is never allowed to overwrite an absolute one.
+      window.addEventListener('deviceorientationabsolute', (e) => this.handleOrientation(e, true), true);
+      window.addEventListener('deviceorientation', (e) => this.handleOrientation(e, false), true);
     };
 
     try {
@@ -198,15 +205,48 @@ class HotspotGeo {
     } catch(e) {}
   }
 
-  handleOrientation(e) {
+  handleOrientation(e, fromAbsoluteEvent) {
     if (!e) return;
+
+    let heading = null;
+    let absolute = false;
+
     if (typeof e.webkitCompassHeading === 'number' && !isNaN(e.webkitCompassHeading)) {
-      this.deviceHeading = e.webkitCompassHeading; // iOS: already true-north clockwise
-      return;
+      heading = e.webkitCompassHeading;              // iOS: already true-north clockwise
+      absolute = true;
+    } else if (typeof e.alpha === 'number' && !isNaN(e.alpha)) {
+      heading = (360 - e.alpha) % 360;               // Android: alpha is counter-clockwise
+      absolute = !!(fromAbsoluteEvent || e.absolute);
     }
-    if (typeof e.alpha === 'number' && !isNaN(e.alpha)) {
-      this.deviceHeading = (360 - e.alpha) % 360; // Android: alpha is counter-clockwise
-    }
+
+    if (heading === null) return;
+
+    // Once we have a true-north source, ignore relative ones entirely.
+    if (this.headingIsAbsolute && !absolute) return;
+    this.headingIsAbsolute = absolute;
+    this.pushHeadingSample(heading);
+  }
+
+  // Compass output is noisy; average the last few samples so the arrow settles
+  // instead of twitching. Averaged on the unit circle so 359° and 1° average to
+  // 0° rather than 180°.
+  pushHeadingSample(deg) {
+    const rad = (deg * Math.PI) / 180;
+    this.headingSamples.push({ s: Math.sin(rad), c: Math.cos(rad) });
+    if (this.headingSamples.length > 6) this.headingSamples.shift();
+
+    let s = 0, c = 0;
+    this.headingSamples.forEach(v => { s += v.s; c += v.c; });
+    this.deviceHeading = (((Math.atan2(s, c) * 180) / Math.PI) + 360) % 360;
+    this.headingUpdatedAt = Date.now();
+  }
+
+  // Only trust a heading that is true-north referenced and still arriving.
+  hasUsableHeading() {
+    return this.headingIsAbsolute
+      && typeof this.deviceHeading === 'number'
+      && !!this.headingUpdatedAt
+      && (Date.now() - this.headingUpdatedAt) < 3000;
   }
 
   // Distance rings, in FEET. Widened from the old ladder because the previous
@@ -224,13 +264,18 @@ class HotspotGeo {
   // marginFeet is the combined GPS uncertainty of both phones. A hot reading is
   // only meaningful if the error is smaller than the ring itself, so the band is
   // capped when the fix is poor rather than claiming false confidence.
-  getDistanceBand(feet, marginFeet = 0) {
+  getDistanceBand(feet, marginFeet = 0, tagRadiusFeet = 20) {
+    // RED HOT is exactly the catch zone, whatever the host set it to, so the
+    // hottest reading always means "you are close enough to tag".
+    const tag = Math.max(8, tagRadiusFeet || 20);
+    const hotter = Math.max(tag + 15, 45);
+
     const BANDS = [
       { band: 'COLD',   label: 'COLD',    color: '#64748B', pulseMs: 1600, min: 250 },
       { band: 'WARM',   label: 'WARM',    color: '#06B6D4', pulseMs: 1100, min: 100 },
-      { band: 'HOT',    label: 'HOT',     color: '#F59E0B', pulseMs: 700,  min: 60  },
-      { band: 'HOTTER', label: 'HOTTER',  color: '#FF5500', pulseMs: 400,  min: 40  },
-      { band: 'REDHOT', label: 'RED HOT', color: '#EF4444', pulseMs: 180,  min: -1  }
+      { band: 'HOT',    label: 'HOT',     color: '#F59E0B', pulseMs: 700,  min: hotter },
+      { band: 'HOTTER', label: 'HOTTER',  color: '#FF5500', pulseMs: 400,  min: tag },
+      { band: 'REDHOT', label: 'RED HOT', color: '#EF4444', pulseMs: 180,  min: -1 }
     ];
 
     let idx = BANDS.findIndex(b => feet > b.min);
@@ -254,9 +299,14 @@ class HotspotGeo {
     return Math.round(Math.sqrt(a * a + b * b));
   }
 
-  // Below this combined uncertainty an auto-tag is credible.
-  isTagCredible(marginFeet) {
-    return marginFeet <= 60;
+  // An auto-tag is only credible when the combined GPS uncertainty is small
+  // relative to the catch radius. A tight 12ft tag on a ±40ft fix would fire on
+  // noise rather than on an actual catch, so the gate scales with the radius
+  // (with a floor, otherwise a tight setting could never trigger at all).
+  isTagCredible(marginFeet, tagRadiusFeet = 20) {
+    const tag = Math.max(8, tagRadiusFeet || 20);
+    const allowed = Math.max(30, Math.round(tag * 1.75));
+    return marginFeet <= allowed;
   }
 
   getBufferedPosition(rawPos, realTimeHiderPos) {

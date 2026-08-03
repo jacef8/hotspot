@@ -40,6 +40,7 @@ class HotspotApp {
     this.headStartStartTime = 0;
 
     this.matchDurationSeconds = 300;
+    this.tagRadiusFeet = 20; // host-configurable catch distance, in feet
     this.matchTimer = null;
 
     this.isSoloDrill = false;
@@ -319,7 +320,8 @@ class HotspotApp {
           player: p,
           headStartSeconds: p.headStartSeconds,
           boundaryRadius: p.boundaryRadius,
-          matchDurationSeconds: p.matchDurationSeconds
+          matchDurationSeconds: p.matchDurationSeconds,
+          tagRadiusFeet: p.tagRadiusFeet
         });
       };
       this.rtdbPlayersRef.on('child_added', onPlayer);
@@ -373,6 +375,7 @@ class HotspotApp {
         headStartSeconds: this.headStartSeconds,
         boundaryRadius: this.boundaryRadius,
         matchDurationSeconds: this.matchDurationSeconds,
+        tagRadiusFeet: this.tagRadiusFeet,
         ts: firebase.database.ServerValue.TIMESTAMP
       }).catch(() => {});
     } catch (e) {}
@@ -568,7 +571,8 @@ class HotspotApp {
         accuracy: isSpectator ? null : (pos ? (pos.accuracy || 25) : 25)
       },
       headStartSeconds: this.headStartSeconds,
-      boundaryRadius: this.boundaryRadius
+      boundaryRadius: this.boundaryRadius,
+      tagRadiusFeet: this.tagRadiusFeet
     };
 
     // 1. Send directly over WebRTC Peer-to-Peer DataChannel (0ms delay, 0 rate limits)
@@ -670,6 +674,7 @@ class HotspotApp {
         if (data.headStartSeconds) this.headStartSeconds = data.headStartSeconds;
         if (data.boundaryRadius) this.boundaryRadius = data.boundaryRadius;
         if (data.matchDurationSeconds) this.matchDurationSeconds = data.matchDurationSeconds;
+        if (data.tagRadiusFeet) this.tagRadiusFeet = data.tagRadiusFeet;
 
         // The room creator is the mesh hub and relays every heartbeat to all
         // other connected devices, so seekers see each other. Keyed on host,
@@ -824,7 +829,7 @@ class HotspotApp {
   }
 
   // --- MULTIPLAYER ROOM SETUP ---
-  createRoom(headStartSec = 60, mode = 'classic', boundaryFeet = 250, matchDurationSec = 300) {
+  createRoom(headStartSec = 60, mode = 'classic', boundaryFeet = 250, matchDurationSec = 300, tagRadiusFeet = 20) {
     // Fully leave whatever room we were in. Without this the previous room's
     // roster, database listeners and player node all survived into the new one,
     // which is why players from the last game kept showing up under a new code.
@@ -835,6 +840,7 @@ class HotspotApp {
     this.boundaryRadius = parseInt(boundaryFeet, 10) || 250;
     this.gameMode = mode;
     this.matchDurationSeconds = parseInt(matchDurationSec, 10) || 300;
+    this.tagRadiusFeet = parseInt(tagRadiusFeet, 10) || 20;
     this.roomCode = this.generateRoomCode();
     this.isRoomHost = true;   // owns the well-known peer id for this room
     this.hostIdRetries = 0;
@@ -1243,6 +1249,7 @@ class HotspotApp {
       headStartSeconds: this.headStartSeconds,
       boundaryRadius: this.boundaryRadius,
       matchDurationSeconds: this.matchDurationSeconds,
+      tagRadiusFeet: this.tagRadiusFeet,
       yardCenterPos: this.yardCenterPos
     });
 
@@ -1252,6 +1259,7 @@ class HotspotApp {
       headStartSeconds: this.headStartSeconds,
       boundaryRadius: this.boundaryRadius,
       matchDurationSeconds: this.matchDurationSeconds,
+      tagRadiusFeet: this.tagRadiusFeet,
       yardCenterPos: this.yardCenterPos
     });
   }
@@ -1687,7 +1695,7 @@ class HotspotApp {
       );
       this.currentMargin = marginFeet;
 
-      const bandInfo = window.hotspotGeo.getDistanceBand(distFeet, marginFeet);
+      const bandInfo = window.hotspotGeo.getDistanceBand(distFeet, marginFeet, this.tagRadiusFeet);
       this.currentBand = bandInfo.band;
 
       const pulseRing = document.getElementById('seeker-pulse-ring');
@@ -1726,20 +1734,34 @@ class HotspotApp {
           bufferedHiderPos.lat, bufferedHiderPos.lng
         );
         const arrow = document.getElementById('bearing-arrow');
+        const note = document.getElementById('bearing-note');
         if (arrow) {
           // Subtract the phone's compass heading so the arrow points where the
-          // player is actually facing, not at true north.
-          const heading = window.hotspotGeo.deviceHeading;
-          const shown = (typeof heading === 'number') ? (bearing - heading + 360) % 360 : bearing;
+          // player is actually facing. Only a true-north heading that is still
+          // arriving is trusted — otherwise say plainly that the arrow is
+          // north-referenced rather than pointing confidently in the wrong
+          // direction.
+          const geo = window.hotspotGeo;
+          const usable = geo.hasUsableHeading();
+          const shown = usable ? (bearing - geo.deviceHeading + 360) % 360 : bearing;
           arrow.style.display = 'block';
           arrow.style.transform = `rotate(${shown}deg)`;
+
+          if (note) {
+            note.style.display = 'block';
+            note.innerText = usable
+              ? '📡 Arrow points at the hider — hold the phone flat'
+              : '📡 No compass — arrow is relative to NORTH';
+            note.style.color = usable ? 'var(--accent-cyan)' : 'var(--accent-amber)';
+          }
         }
       }
 
-      // Auto-tag inside RED HOT (40ft). Latched per target so infection mode
+      // Auto-tag inside RED HOT (host-configurable catch radius). Latched per target so infection mode
       // cannot re-fire every 250ms while the seeker stays in range. Requires a
       // credible fix — a ±80ft reading must not be allowed to end the round.
-      if (distFeet <= 40 && window.hotspotGeo.isTagCredible(marginFeet)
+      if (distFeet <= this.tagRadiusFeet
+          && window.hotspotGeo.isTagCredible(marginFeet, this.tagRadiusFeet)
           && this.gameState === 'active' && !this.decoyPos) {
         const hiderPlayer = Object.values(this.players).find(p => p.role === 'hider');
         const targetId = hiderPlayer ? hiderPlayer.id : (this.isSoloDrill ? 'solo_hider' : null);
@@ -1881,13 +1903,29 @@ class HotspotApp {
       window.hotspotGeo.requestCompassPermission();
 
       window.hotspotAudio.playPowerupSound('bearing');
-      window.hotspotAudio.speak('Bearing Ping active! Live compass arrow for 3 seconds!');
+      window.hotspotAudio.speak('Bearing ping active!');
 
-      setTimeout(() => {
+      const endPing = () => {
         this.powerups.bearingActive = false;
         const arrow = document.getElementById('bearing-arrow');
         if (arrow) arrow.style.display = 'none';
-      }, 3000);
+        const note = document.getElementById('bearing-note');
+        if (note) note.style.display = 'none';
+      };
+
+      // The compass takes a moment to wake up, especially the first time on
+      // iOS. Don't burn the player's single 3-second ping staring at a
+      // north-referenced arrow — start the clock once a real heading arrives,
+      // or after a 2s grace if the device has no usable compass at all.
+      const startCountdown = (waitedMs) => {
+        if (!this.powerups.bearingActive) return;
+        if (window.hotspotGeo.hasUsableHeading() || waitedMs >= 2000) {
+          setTimeout(endPing, 3000);
+        } else {
+          setTimeout(() => startCountdown(waitedMs + 200), 200);
+        }
+      };
+      startCountdown(0);
     }
   }
 

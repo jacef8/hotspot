@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.6.2</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.6.3</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -28,7 +28,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=2.6.2">
+  <link rel="stylesheet" href="style.css?v=2.6.3">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -70,7 +70,7 @@
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="brand-subtitle">Extreme Yard Tag & Proximity Hunt</div>
         <div style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
-          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800;">v2.6.2</span>
+          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800;">v2.6.3</span>
           <span id="cloud-sync-status" style="font-size: 11px; color: var(--text-muted); font-weight: 600; text-align: center; letter-spacing: 0.5px;">
             🌐 hotspot-yardtag.web.app
           </span>
@@ -152,6 +152,16 @@
             <option value="350">350 Feet (~115 Yards - Large Yard)</option>
             <option value="500">500 Feet (~165 Yards - Park)</option>
             <option value="0">No Boundary Limit</option>
+          </select>
+        </div>
+
+        <div class="input-group">
+          <label class="input-label">Tag Distance (how close counts as a catch)</label>
+          <select id="setup-tagradius" class="select-input">
+            <option value="12">12 Feet (Touch Range — needs a strong GPS fix)</option>
+            <option value="20" selected>20 Feet (Standard)</option>
+            <option value="30">30 Feet (Forgiving)</option>
+            <option value="40">40 Feet (Loose — weak GPS / heavy tree cover)</option>
           </select>
         </div>
 
@@ -294,6 +304,7 @@
             <polygon points="12 2 19 21 12 17 5 21 12 2"></polygon>
           </svg>
           <div id="seeker-band-label" class="seeker-band-label">STAND BY</div>
+          <div id="bearing-note" style="display: none; position: absolute; bottom: -34px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 10px; font-weight: 700; letter-spacing: .3px;"></div>
           <div id="seeker-dist-readout" style="font-size: 20px; font-weight: 800; color: var(--text-light); margin-top: 4px; text-align: center; line-height: 1.2;">--</div>
         </div>
       </div>
@@ -425,9 +436,10 @@
       const gm = document.getElementById('setup-gamemode').value;
       const b = document.getElementById('setup-boundary').value;
       const md = document.getElementById('setup-matchduration').value;
+      const tr = document.getElementById('setup-tagradius').value;
       const name = document.getElementById('host-nickname').value || 'Host';
       window.hotspotApp.playerName = name;
-      window.hotspotApp.createRoom(hs, gm, b, md);
+      window.hotspotApp.createRoom(hs, gm, b, md, tr);
     };
 
     window.joinRoomAction = function() {
@@ -506,15 +518,15 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=2.6.2"></script>
-  <script src="geo.js?v=2.6.2"></script>
-  <script src="replay.js?v=2.6.2"></script>
-  <script src="app.js?v=2.6.2"></script>
+  <script src="audio.js?v=2.6.3"></script>
+  <script src="geo.js?v=2.6.3"></script>
+  <script src="replay.js?v=2.6.3"></script>
+  <script src="app.js?v=2.6.3"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=2.6.2').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=2.6.3').catch(() => {});
       });
     }
 
