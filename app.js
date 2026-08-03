@@ -1,8 +1,13 @@
 /**
  * HOTSPOT - Main Game Engine & Controller
  * Standard US Customary Units (Feet & Yards).
- * HTTPS cloud sync over Port 443: SSE primary receive, 3s heartbeat publish,
- * HTTP GET polling only as a fallback when SSE goes silent.
+ *
+ * Sync runs on two transports at once:
+ *   - WebRTC DataChannel (PeerJS) — low latency, every GPS tick.
+ *   - Firebase Realtime Database — reliable; survives a phone changing network
+ *     mid-game and works where WebRTC cannot form a link.
+ * Room discovery never depends on the relay: the room creator claims a
+ * well-known peer id derived from the room code and everyone else dials it.
  * Round identity is carried by roundId (no cross-device clock comparison).
  */
 
@@ -10,15 +15,12 @@ window.FIREBASE_CONFIG = window.FIREBASE_CONFIG || null;
 
 class HotspotApp {
   constructor() {
-    this.eventSource = null;
     this.heartbeatInterval = null;
 
     this.roomCode = null;
     this.joinTime = 0;
     this.currentRoundId = null;
     this.seenRoundIds = {};
-    this.seenMsgIds = {};
-    this.seenMsgCount = 0;
     this.taggedHiderIds = {};
     this.appliedTagByRound = {};
     this.lastCloudMessageAt = 0;
@@ -77,16 +79,11 @@ class HotspotApp {
   // any setting added later.
   clearStaleCache() {
     try {
-      sessionStorage.clear();
       ['hotspot_room', 'hotspot_session', 'hotspot_players', 'hotspot_state']
-        .forEach(k => localStorage.removeItem(k));
+        .forEach(k => { localStorage.removeItem(k); sessionStorage.removeItem(k); });
     } catch(e) {}
   }
 
-  getTopic() {
-    if (!this.roomCode) return null;
-    return 'hotspot_r243_' + this.roomCode.toLowerCase();
-  }
 
   updateSyncStatus(ok, note) {
     if (ok) this.syncFailCount = 0;
@@ -145,65 +142,30 @@ class HotspotApp {
   // --- 100% BULLETPROOF HTTPS 1-SECOND HEARTBEAT CLOUD SYNC ---
   initCloudSync() {
     if (!this.roomCode) return;
-    const topic = this.getTopic();
 
-    // 1. Clear existing timers and streams
-    if (this.eventSource) {
-      try { this.eventSource.close(); } catch(e) {}
-      this.eventSource = null;
-    }
+    // 1. Clear existing timers
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
     }
-
-    this.seenMsgIds = {};
-    this.seenMsgCount = 0;
     this.lastCloudMessageAt = Date.now();
     this.syncFailCount = 0;
 
-    // 2. Open HTTPS Server-Sent Events (SSE) over Port 443 — primary receive path.
-    //    One long-lived connection, so it does not consume the request-rate budget.
-    try {
-      this.eventSource = new EventSource(`https://ntfy.sh/${topic}/sse`);
+    // 2. WebRTC direct link — the low-latency path, updated on every GPS tick.
+    this.initPeerSync();
 
-      this.eventSource.onmessage = (event) => {
-        try {
-          this.processCloudPayload(JSON.parse(event.data));
-        } catch(e) {}
-      };
+    // 3. Firebase Realtime Database — the reliable path. Works on any network
+    //    and survives a phone changing network mid-game.
+    this.initRtdbSync();
 
-      this.eventSource.onerror = () => {
-        // SSE auto-reconnects natively. Only flag sync status if connection closes completely.
-        if (this.eventSource && this.eventSource.readyState === EventSource.CLOSED) {
-          this.updateSyncStatus(false, 'stream disconnected');
-        }
-      };
-    } catch(e) {}
-
-    // 3. Publish heartbeat every 3s. Poll ONLY when SSE has been silent for 12s.
-    //    ntfy.sh free tier rate-limits per IP; the old 1s POST + 1s poll cadence
-    //    exceeded it and every failure was swallowed silently.
+    // 4. Keep dialling the host until the direct link is up, and republish our
+    //    own state on a steady tick.
     this.heartbeatInterval = setInterval(() => {
-      // Keep hammering on the host until the P2P mesh is up. This is the path
-      // that works when the relay is blocked or down.
       if (!this.isRoomHost) this.ensureHostConnection();
-
       this.sendHeartbeat();
-      if (Date.now() - this.lastCloudMessageAt > 12000) {
-        this.pollCloudMessages(this.getTopic());
-      }
       this.refreshTransportStatus();
     }, 3000);
 
-    // 4. Initialize WebRTC Direct P2P Sync (Zero Server Rate Limits)
-    this.initPeerSync();
-
-    // 5. Firebase Realtime Database relay — the path that keeps working when
-    //    WebRTC cannot form a link or a phone changes network mid-game.
-    this.initRtdbSync();
-
-    // 5. Send initial heartbeat immediately
     this.sendHeartbeat();
   }
 
@@ -218,8 +180,8 @@ class HotspotApp {
 
       this.peerConnections = {};
 
-      // Discovery MUST NOT depend on the ntfy relay. v2.5.10 made the relay the
-      // only way to learn the host's peer id, so when ntfy was unreachable no
+      // Discovery MUST NOT depend on a relay. v2.5.10 made the relay the only
+      // way to learn the host's peer id, so when that relay went unreachable no
       // device ever found the room at all. The room creator claims a well-known
       // id derived from the room code; everyone else dials it directly.
       //
@@ -279,8 +241,8 @@ class HotspotApp {
   // --- FIREBASE REALTIME DATABASE RELAY ---
   // Google-hosted, so it works on any network and survives a phone switching
   // between WiFi and cellular — which a direct WebRTC link does not, and which
-  // is the likeliest reason a match froze mid-game. ntfy.sh, the previous
-  // relay, is simply unreachable. P2P stays as the low-latency fast path.
+  // is the likeliest reason a match froze mid-game. P2P stays as the
+  // low-latency fast path; this is the one that always gets through.
   initRtdbSync() {
     if (!this.roomCode) return;
     if (typeof firebase === 'undefined' || !window.FIREBASE_CONFIG) return;
@@ -397,6 +359,13 @@ class HotspotApp {
   }
 
   teardownRtdb() {
+    // The host owns the room node. Remove the whole thing on the way out so
+    // rooms/<CODE> and its event log do not accumulate in the database forever
+    // — nothing else prunes them and there is no TTL.
+    if (this.isRoomHost && this.rtdb && this.roomCode) {
+      try { this.rtdb.ref(`rooms/${this.roomCode}`).remove().catch(() => {}); } catch (e) {}
+    }
+
     this.teardownRtdbListeners();
     try {
       if (this.rtdbMyRef) {
@@ -410,17 +379,6 @@ class HotspotApp {
     this.rtdbConnected = false;
   }
 
-  // Abort relay requests quickly. When ntfy is blocked the TCP connect never
-  // completes, so without this a hung fetch accumulates every 3 seconds.
-  cloudFetch(url, opts) {
-    const o = Object.assign({}, opts || {});
-    try {
-      if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
-        o.signal = AbortSignal.timeout(6000);
-      }
-    } catch(e) {}
-    return fetch(url, o);
-  }
 
   getHostPeerId() {
     if (!this.roomCode) return null;
@@ -511,42 +469,12 @@ class HotspotApp {
     }
   }
 
-  processCloudPayload(payload) {
-    if (!payload) return;
-    if (payload.event && payload.event !== 'message') return;
-
-    // Any delivered frame proves the stream is alive.
-    this.lastCloudMessageAt = Date.now();
-    this.updateSyncStatus(true);
-
-    if (!payload.message) return;
-
-    // Deduplicate: SSE and the poll fallback can both deliver the same message.
-    if (payload.id) {
-      if (this.seenMsgIds[payload.id]) return;
-      this.seenMsgIds[payload.id] = true;
-      this.seenMsgCount++;
-      if (this.seenMsgCount > 500) {
-        this.seenMsgIds = {};
-        this.seenMsgCount = 0;
-      }
-    }
-
-    let data = null;
-    try {
-      data = JSON.parse(payload.message);
-    } catch(e) {
-      return;
-    }
-    this.handleCloudMessage(data);
-  }
 
   // includeCloud=false sends only over the P2P DataChannel. GPS ticks use that
-  // path: they fire several times a second, and POSTing each one to the public
-  // relay is what was burning the ntfy.sh rate limit and causing the 429s.
+  // path: they fire several times a second, and writing each one to the
+  // database would be needless traffic when the direct link is instant.
   sendHeartbeat(includeCloud = true) {
     if (!this.roomCode || this.isSoloDrill) return;
-    const topic = this.getTopic();
 
     const currentGeo = (window.hotspotGeo && window.hotspotGeo.currentPosition) ? window.hotspotGeo.currentPosition : null;
     const pos = this.myPosition || currentGeo;
@@ -578,81 +506,21 @@ class HotspotApp {
     // 1. Send directly over WebRTC Peer-to-Peer DataChannel (0ms delay, 0 rate limits)
     this.broadcastPeer(data);
 
-    // 2. Publish to the relays — throttled, unlike the P2P path.
+    // 2. Publish to the database — throttled, unlike the P2P path.
     if (!includeCloud) return;
-
     this.rtdbPublishSelf(data.player);
-
-    try {
-      this.cloudFetch(`https://ntfy.sh/${topic}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      })
-        .then((res) => {
-          if (res && res.ok) {
-            this.updateSyncStatus(true);
-          } else {
-            // Silently ignore 429 rate limit responses from public ntfy relay
-            if (res && res.status === 429) return;
-            const code = res ? res.status : 0;
-            this.updateSyncStatus(false, 'HTTP ' + code);
-          }
-        })
-        .catch(() => {});
-    } catch(e) {}
   }
 
   broadcastCloud(data) {
     if (!this.roomCode || this.isSoloDrill) return;
     data.senderId = this.playerId;
     data.timestamp = Date.now();
-    const topic = this.getTopic();
 
-    // Broadcast over WebRTC Direct P2P, and mirror to the relay so devices
-    // without a working peer link still receive it.
+    // Direct link for speed, database so devices without a peer link still get it.
     this.broadcastPeer(data);
     this.rtdbPublishEvent(data);
-
-    try {
-      this.cloudFetch(`https://ntfy.sh/${topic}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data)
-      })
-        .then((res) => {
-          if (res && res.ok) {
-            this.updateSyncStatus(true);
-          }
-        })
-        .catch(() => {});
-    } catch(e) {}
   }
 
-  pollCloudMessages(topic) {
-    if (!topic) return;
-    try {
-      this.cloudFetch(`https://ntfy.sh/${topic}/json?poll=1&since=15s`)
-        .then(res => {
-          if (!res || !res.ok) {
-            const code = res ? res.status : 0;
-            this.updateSyncStatus(false, code === 429 ? 'rate limited by ntfy.sh' : 'HTTP ' + code);
-            return '';
-          }
-          return res.text();
-        })
-        .then(text => {
-          if (!text) return;
-          const lines = text.trim().split('\n');
-          lines.forEach(line => {
-            try {
-              this.processCloudPayload(JSON.parse(line));
-            } catch(e) {}
-          });
-        })
-        .catch(() => this.updateSyncStatus(false, 'network unreachable'));
-    } catch(e) {}
-  }
 
   handleCloudMessage(data) {
     if (!data || data.senderId === this.playerId) return;
@@ -664,12 +532,13 @@ class HotspotApp {
         this.players[p.id] = { ...this.players[p.id], ...p, lastSeen: Date.now() };
 
         if (p.role === 'hider') {
-          this.hiderId = p.id;
           // Everyone who is not the hider dials the hider, forming the mesh hub.
           if (this.role !== 'hider' && data.peerId) {
             this.connectToPeerId(data.peerId);
           }
         }
+        const activeHider = this.getActiveHider();
+        this.hiderId = activeHider ? activeHider.id : null;
 
         if (data.headStartSeconds) this.headStartSeconds = data.headStartSeconds;
         if (data.boundaryRadius) this.boundaryRadius = data.boundaryRadius;
@@ -895,10 +764,6 @@ class HotspotApp {
       });
     }
 
-    if (this.eventSource) {
-      try { this.eventSource.close(); } catch(e) {}
-      this.eventSource = null;
-    }
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
@@ -930,8 +795,6 @@ class HotspotApp {
     this.decoyPos = null;
     this.taggedHiderIds = {};
     this.appliedTagByRound = {};
-    this.seenMsgIds = {};
-    this.seenMsgCount = 0;
     this.syncFailCount = 0;
     this.matchTrackHistory = [];
     this.tagEvent = null;
@@ -963,6 +826,7 @@ class HotspotApp {
 
     this.triggerSmokeVisual(false);
     this.blankSeekerRadar();
+    if (window.hotspotGeo.clearLagBuffers) window.hotspotGeo.clearLagBuffers();
   }
 
   // "Winner becomes hider" used to be announced and then thrown away, because
@@ -1015,6 +879,7 @@ class HotspotApp {
     if (readyBtn) readyBtn.style.display = '';
     this.triggerSmokeVisual(false);
     this.blankSeekerRadar();
+    if (window.hotspotGeo.clearLagBuffers) window.hotspotGeo.clearLagBuffers();
 
     // Roles were already rotated locally when the tag landed; publish the new
     // one so every roster agrees before the next round starts.
@@ -1040,7 +905,6 @@ class HotspotApp {
 
   resetSeasonRecords() {
     if (confirm('🏆 Start New Season?\n\nThis will reset your Total Hunts, Fastest Tag, and Longest Hide records back to zero.')) {
-      this.seasonStats = { totalHunts: 0, fastestTagMs: null, longestHideMs: 0 };
       try {
         localStorage.removeItem('hotspot_stats');
       } catch(e) {}
@@ -1068,9 +932,15 @@ class HotspotApp {
   }
 
   joinRoom(code, nickname, role = 'seeker') {
-    const cleanCode = code ? code.trim() : '';
+    const cleanCode = code ? code.trim().toUpperCase() : '';
     if (cleanCode.length !== 6) {
       alert('Please enter the full 6-character room code from the host.');
+      return;
+    }
+    // The generator never emits O, I, L, Z, 0, 1 or 2. Accepting them silently
+    // dropped the player into an empty room that could never fill.
+    if (!/^[ABCDEFGHJKMNPQRSTVWX3456789]{6}$/.test(cleanCode)) {
+      alert('That is not a valid room code.\n\nCodes never contain O, I, L, Z, 0, 1 or 2 — check for a mistyped character.');
       return;
     }
 
@@ -1122,12 +992,7 @@ class HotspotApp {
     // role at once, which left the roster showing two hiders and every seeker
     // measuring distance to whichever one it happened to pick.
     if (becomingHider) {
-      const now = Date.now();
-      const otherHider = Object.values(this.players).find(p =>
-        p.id !== this.playerId &&
-        p.role === 'hider' &&
-        (!p.lastSeen || now - p.lastSeen <= 15000)
-      );
+      const otherHider = this.getActiveHider();
       if (otherHider) {
         alert(`${otherHider.name || 'Someone else'} is already the Hider.\n\nThey need to switch to Seeker first, then you can take it.`);
         return;
@@ -1145,6 +1010,20 @@ class HotspotApp {
     this.sendHeartbeat();
     this.updateLobbyList();
     window.hotspotAudio.speak(`You are now the ${this.role.toUpperCase()}`);
+  }
+
+  // Exactly one hider, chosen the same way on every device. Object key order is
+  // not guaranteed, so `find(role === 'hider')` could hand two seekers two
+  // different targets. When more than one player claims the role, the lowest
+  // player id wins so all devices independently agree.
+  getActiveHider() {
+    const now = Date.now();
+    const hiders = Object.values(this.players).filter(p =>
+      p && p.role === 'hider' && (!p.lastSeen || now - p.lastSeen <= 15000)
+    );
+    if (hiders.length === 0) return null;
+    if (hiders.length === 1) return hiders[0];
+    return hiders.sort((a, b) => String(a.id).localeCompare(String(b.id)))[0];
   }
 
   prunePlayers() {
@@ -1183,7 +1062,7 @@ class HotspotApp {
       hiderContainer.innerHTML = hidersList.map(p => `
         <div class="player-badge hider" style="border: 2px solid var(--accent-amber); background: rgba(245, 158, 11, 0.15); padding: 10px 14px; border-radius: 10px; display: flex; align-items: center; justify-content: space-between;">
           <span class="name" style="font-weight: 800; font-size: 15px; color: #FFF;">
-            👑 ${p.name} <span style="font-size: 11px; background: var(--accent-amber); color: #000; padding: 2px 6px; border-radius: 8px; font-weight: 900; margin-left: 6px;">HOST</span> ${p.id === this.playerId ? '<b style="color:var(--accent-cyan);">(YOU)</b>' : ''}
+            👑 ${window.hsEscape(p.name)} <span style="font-size: 11px; background: var(--accent-amber); color: #000; padding: 2px 6px; border-radius: 8px; font-weight: 900; margin-left: 6px;">HOST</span> ${p.id === this.playerId ? '<b style="color:var(--accent-cyan);">(YOU)</b>' : ''}
           </span>
           <span style="font-size: 11px; color: var(--accent-amber); font-weight: 800; letter-spacing: 0.5px;">SOLE HIDER</span>
         </div>
@@ -1194,7 +1073,7 @@ class HotspotApp {
       seekerContainer.innerHTML = seekersList.map(p => `
         <div class="player-badge seeker" style="border: 1px solid var(--accent-cyan); background: rgba(0, 240, 255, 0.08); padding: 8px 12px; border-radius: 8px; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
           <span class="name" style="font-weight: 700; font-size: 14px; color: #FFF;">
-            🎯 ${p.name} ${p.id === this.playerId ? '<b style="color:var(--accent-cyan);">(YOU)</b>' : ''}
+            🎯 ${window.hsEscape(p.name)} ${p.id === this.playerId ? '<b style="color:var(--accent-cyan);">(YOU)</b>' : ''}
           </span>
           <span style="font-size: 11px; color: var(--accent-cyan); font-weight: 700;">SEEKER</span>
         </div>
@@ -1222,13 +1101,21 @@ class HotspotApp {
       return;
     }
 
+    // A round with nobody hiding leaves every seeker on NO SIGNAL for the whole
+    // match, and no yard centre means the boundary silently does not exist.
+    const hiderNow = this.isSoloDrill ? true : this.getActiveHider();
+    if (!hiderNow) {
+      alert('Nobody is the Hider yet.\n\nSomeone needs to tap "Switch Role" in the lobby to become the Hider before the round can start.');
+      return;
+    }
+
     const startTime = Date.now();
     this.headStartStartTime = startTime;
 
     // The yard centre must be the HIDER's start point, not whoever pressed
     // Start. When a spectating parent starts the round, using their own
     // position put the geofence on their chair instead of the play area.
-    const hiderPlayer = Object.values(this.players).find(p => p.role === 'hider');
+    const hiderPlayer = this.getActiveHider();
     if (hiderPlayer && hiderPlayer.lat && hiderPlayer.lng) {
       this.yardCenterPos = { lat: hiderPlayer.lat, lng: hiderPlayer.lng };
     } else if (this.role !== 'spectator' && this.myPosition) {
@@ -1456,7 +1343,7 @@ class HotspotApp {
     this.stopPulseLoop();
     this.gameState = 'gameover';
 
-    const survivedMs = this.gameStartTime ? (Date.now() - this.gameStartTime) : 0;
+    const survivedMs = this.roundDurationMs();
 
     if (this.role === 'hider') {
       window.hotspotAudio.speak("TIME EXPIRED! YOU SURVIVED AND WON THE HUNT!");
@@ -1521,8 +1408,7 @@ class HotspotApp {
     }
 
     // Push position over the P2P DataChannel on every GPS tick — free and
-    // instant. The cloud relay is left to the throttled 3s interval; posting
-    // per-tick is what exhausted the ntfy.sh rate limit.
+    // instant. The database write is left to the throttled 3s interval.
     if (this.roomCode && (this.gameState === 'headstart' || this.gameState === 'active')) {
       this.sendHeartbeat(false);
     }
@@ -1548,6 +1434,11 @@ class HotspotApp {
     if (!track) {
       track = { playerId, name, role, points: [] };
       this.matchTrackHistory.push(track);
+    } else {
+      // Keep these current: a player who swaps role mid-session was drawn on
+      // the replay in the colour of whatever they were when first seen.
+      if (name) track.name = name;
+      if (role) track.role = role;
     }
 
     const now = Date.now();
@@ -1618,7 +1509,7 @@ class HotspotApp {
       if (this.isSoloDrill) {
         hiderPos = window.hotspotGeo.soloHiderPosition;
       } else {
-        const hiderPlayer = Object.values(this.players).find(p => p.role === 'hider');
+        const hiderPlayer = this.getActiveHider();
         hiderPlayerForAcc = hiderPlayer || null;
         if (hiderPlayer && hiderPlayer.lat) {
           hiderPos = { lat: hiderPlayer.lat, lng: hiderPlayer.lng };
@@ -1679,7 +1570,9 @@ class HotspotApp {
         return;
       }
 
-      const bufferedHiderPos = window.hotspotGeo.getBufferedPosition(this.myPosition, hiderPos);
+      // Key the anti-snipe buffer by which target this actually is.
+      const targetKey = this.decoyPos ? 'decoy' : (this.isSoloDrill ? 'solo' : 'hider');
+      const bufferedHiderPos = window.hotspotGeo.getBufferedPosition(this.myPosition, hiderPos, targetKey);
 
       const distFeet = window.hotspotGeo.calculateDistance(
         this.myPosition.lat, this.myPosition.lng,
@@ -1765,7 +1658,7 @@ class HotspotApp {
       if (distFeet <= this.tagRadiusFeet
           && window.hotspotGeo.isTagCredible(marginFeet, this.tagRadiusFeet)
           && this.gameState === 'active' && !this.decoyPos) {
-        const hiderPlayer = Object.values(this.players).find(p => p.role === 'hider');
+        const hiderPlayer = this.getActiveHider();
         const targetId = hiderPlayer ? hiderPlayer.id : (this.isSoloDrill ? 'solo_hider' : null);
         if (targetId && !this.taggedHiderIds[targetId]) {
           this.taggedHiderIds[targetId] = Date.now();
@@ -2029,7 +1922,7 @@ class HotspotApp {
       const stillHiding = Object.values(this.players).filter(p => p.role === 'hider');
       if (stillHiding.length === 0) {
         this.gameState = 'gameover';
-        this.saveSeasonStats(Date.now() - this.gameStartTime);
+        this.saveSeasonStats(this.roundDurationMs(), 'tag');
         this.handleGameStateChange('gameover');
       } else {
         window.hotspotAudio.speak(`${stillHiding.length} still hiding!`);
@@ -2049,8 +1942,15 @@ class HotspotApp {
     }
 
     this.gameState = 'gameover';
-    this.saveSeasonStats(Date.now() - this.gameStartTime);
+    this.saveSeasonStats(this.roundDurationMs(), 'tag');
     this.handleGameStateChange('gameover');
+  }
+
+  // A device that joined mid-round has gameStartTime = 0, which would otherwise
+  // record an epoch-sized duration as a season record.
+  roundDurationMs() {
+    if (!this.gameStartTime) return 0;
+    return Math.max(0, Date.now() - this.gameStartTime);
   }
 
   // outcome: 'tag'    — a seeker caught the hider

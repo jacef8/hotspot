@@ -185,7 +185,7 @@ class HotspotReplay {
 
         this.markers[player.id] = L.marker(latlng, { icon: customIcon })
           .addTo(this.map)
-          .bindTooltip(`${player.name} (${player.role.toUpperCase()})`, { permanent: true, direction: 'top' });
+          .bindTooltip(`${window.hsEscape(player.name)} (${window.hsEscape(String(player.role).toUpperCase())})`, { permanent: true, direction: 'top' });
 
         this.polylines[player.id] = L.polyline([latlng], {
           color: color,
@@ -278,7 +278,7 @@ class HotspotReplay {
       `;
       L.marker([this.tagEvent.lat, this.tagEvent.lng], {
         icon: L.divIcon({ html: tagMarkerHtml, className: 'tag-marker', iconSize: [36, 36] })
-      }).addTo(this.map).bindTooltip(`TAGGED! ${this.tagEvent.seekerName} caught ${this.tagEvent.hiderName}`, { permanent: true, direction: 'top' });
+      }).addTo(this.map).bindTooltip(`TAGGED! ${window.hsEscape(this.tagEvent.seekerName)} caught ${window.hsEscape(this.tagEvent.hiderName)}`, { permanent: true, direction: 'top' });
     }
 
     setTimeout(() => {

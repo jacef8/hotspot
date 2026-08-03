@@ -10,7 +10,7 @@ class HotspotGeo {
     this.currentPosition = { lat: 37.774929, lng: -122.419416, timestamp: Date.now() }; // Default fallback
     this.accuracyFeet = 25;
     this.positionHistory = [];
-    this.lagBuffer = [];
+    this.lagBuffers = {};   // keyed per target; see getBufferedPosition
     this.soloHiderPosition = null;
     this.onPositionUpdate = null;
     this.onError = null;
@@ -309,7 +309,11 @@ class HotspotGeo {
     return marginFeet <= allowed;
   }
 
-  getBufferedPosition(rawPos, realTimeHiderPos) {
+  // targetKey separates the real hider, a decoy, and the solo-drill hider. They
+  // previously shared ONE buffer, so while a decoy was live the 5-second lookup
+  // could return a real-hider coordinate (or vice versa) — the anti-snipe delay
+  // was handing back the wrong target's position.
+  getBufferedPosition(rawPos, realTimeHiderPos, targetKey = 'hider') {
     if (!rawPos || !realTimeHiderPos) return rawPos;
 
     const rawDistFeet = this.calculateDistance(
@@ -318,17 +322,22 @@ class HotspotGeo {
     );
 
     const now = Date.now();
-    this.lagBuffer.push({ ...realTimeHiderPos, timestamp: now });
-    this.lagBuffer = this.lagBuffer.filter(p => now - p.timestamp <= 10000);
+    if (!this.lagBuffers) this.lagBuffers = {};
+    const buf = (this.lagBuffers[targetKey] || [])
+      .filter(p => now - p.timestamp <= 10000);
+    buf.push({ ...realTimeHiderPos, timestamp: now });
+    this.lagBuffers[targetKey] = buf;
 
     // 5-second lag buffer if outside 165 feet (50 meters)
     if (rawDistFeet > 165) {
       const targetTime = now - 5000;
-      const delayedPoint = this.lagBuffer.find(p => p.timestamp >= targetTime) || this.lagBuffer[0] || realTimeHiderPos;
-      return delayedPoint;
-    } else {
-      return realTimeHiderPos;
+      return buf.find(p => p.timestamp >= targetTime) || buf[0] || realTimeHiderPos;
     }
+    return realTimeHiderPos;
+  }
+
+  clearLagBuffers() {
+    this.lagBuffers = {};
   }
 
   vibratePulse(pulseMs) {

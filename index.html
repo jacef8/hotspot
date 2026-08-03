@@ -3,7 +3,23 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.6.4</title>
+
+  <!-- Defence in depth behind the output escaping: even if a nickname or other
+       network-supplied string were ever rendered unescaped again, an injected
+       <script> or remote payload has nowhere to load from. 'unsafe-inline' is
+       still required because the screens use inline onclick handlers. -->
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'self';
+    script-src 'self' 'unsafe-inline' https://unpkg.com https://www.gstatic.com;
+    style-src 'self' 'unsafe-inline' https://unpkg.com;
+    img-src 'self' data: blob: https://unpkg.com https://server.arcgisonline.com;
+    connect-src 'self' https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://0.peerjs.com wss://0.peerjs.com https://*.peerjs.com wss://*.peerjs.com https://server.arcgisonline.com stun: turn:;
+    font-src 'self' data:;
+    object-src 'none';
+    base-uri 'self';
+    form-action 'none';
+    frame-ancestors 'none'">
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.7.0</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -27,8 +43,23 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 
+  <!-- Player names arrive over the network and are rendered into markup in a
+       few places. Defined here, before every other script, so both app.js and
+       replay.js can rely on it regardless of load order. -->
+  <script>
+    window.hsEscape = function (value) {
+      if (value === null || value === undefined) return '';
+      return String(value).replace(/[&<>"'`]/g, function (ch) {
+        return {
+          '&': '&amp;', '<': '&lt;', '>': '&gt;',
+          '"': '&quot;', "'": '&#39;', '`': '&#96;'
+        }[ch];
+      });
+    };
+  </script>
+
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=2.6.4">
+  <link rel="stylesheet" href="style.css?v=2.7.0">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -70,7 +101,7 @@
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="brand-subtitle">Extreme Yard Tag & Proximity Hunt</div>
         <div style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
-          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800;">v2.6.4</span>
+          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800;">v2.7.0</span>
           <span id="cloud-sync-status" style="font-size: 11px; color: var(--text-muted); font-weight: 600; text-align: center; letter-spacing: 0.5px;">
             🌐 hotspot-yardtag.web.app
           </span>
@@ -518,15 +549,15 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=2.6.4"></script>
-  <script src="geo.js?v=2.6.4"></script>
-  <script src="replay.js?v=2.6.4"></script>
-  <script src="app.js?v=2.6.4"></script>
+  <script src="audio.js?v=2.7.0"></script>
+  <script src="geo.js?v=2.7.0"></script>
+  <script src="replay.js?v=2.7.0"></script>
+  <script src="app.js?v=2.7.0"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=2.6.4').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=2.7.0').catch(() => {});
       });
     }
 

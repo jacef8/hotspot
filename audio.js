@@ -56,6 +56,16 @@ class HotspotAudio {
     return window.hotspotApp && window.hotspotApp.role === 'hider';
   }
 
+  // Proximity cues (band callouts and pulse beeps) must not play on a hider's
+  // phone, and also not on a spectator's — a parent standing near the hider was
+  // effectively announcing "RED HOT, THEY ARE RIGHT THERE" to everyone nearby.
+  // Game-state announcements (round start, tag, time) still play for spectators.
+  isProximityMuted() {
+    if (!window.hotspotApp) return false;
+    const role = window.hotspotApp.role;
+    return role === 'hider' || role === 'spectator';
+  }
+
   initAudioContext() {
     if (!this.audioCtx) {
       try {
@@ -113,7 +123,7 @@ class HotspotAudio {
 
   playPulseBeep(band) {
     if (!this.audioFxEnabled) return;
-    if (this.isHiderSilent()) return; // SILENT FOR HIDER!
+    if (this.isProximityMuted()) return;
 
     try {
       this.initAudioContext();
@@ -241,7 +251,7 @@ class HotspotAudio {
   }
 
   announceBandChange(band) {
-    if (this.isHiderSilent()) return; // SILENT FOR HIDER!
+    if (this.isProximityMuted()) return;
 
     const now = Date.now();
     if (this.lastSpokenBand === band && now - this.lastSpokenTime < 8000) {
