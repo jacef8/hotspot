@@ -210,6 +210,7 @@ class HotspotApp {
 
       this.peer.on('error', (err) => {
         const type = err && err.type;
+        this.lastPeerError = type || (err && err.message) || 'unknown';
 
         if (type === 'unavailable-id') {
           if (this.isRoomHost) {
@@ -252,8 +253,10 @@ class HotspotApp {
         firebase.initializeApp(window.FIREBASE_CONFIG);
       }
       this.rtdb = firebase.database();
+      this.lastRtdbError = null;
     } catch (e) {
       this.rtdb = null;
+      this.lastRtdbError = 'init: ' + (e && e.message ? e.message : e);
       return;
     }
 
@@ -311,15 +314,36 @@ class HotspotApp {
         this.rtdbConnected = !!s.val();
         this.refreshTransportStatus();
       });
+
+      // Appear in the room now, not on the next 3s tick.
+      this.sendHeartbeat();
     };
 
-    // The room creator wipes any leftover state before anyone attaches.
+    // Attach IMMEDIATELY — never gate the room on a server round-trip.
+    //
+    // This used to be `remove().then(attach)` for the host, so the host's
+    // listeners and its own player node waited on a write acknowledgement from
+    // Google. On a weak signal at the moment of room creation that promise can
+    // take a long time or never settle at all, and the host then sat there for
+    // the entire session invisible in the database and subscribed to nothing —
+    // leaving WebRTC as the only way in, which is why joining "took a while".
+    attach();
+
     if (this.isRoomHost) {
+      // Clear leftovers in the background instead. Never touch our own node and
+      // never remove a player who is currently alive — only genuinely stale
+      // entries from an earlier session that happened to reuse this code.
       try {
-        this.rtdb.ref(base).remove().then(attach).catch(attach);
-      } catch (e) { attach(); }
-    } else {
-      attach();
+        this.rtdb.ref(`${base}/events`).remove().catch(() => {});
+        this.rtdb.ref(`${base}/players`).once('value').then((snap) => {
+          const cutoff = Date.now() - 60000;
+          snap.forEach((child) => {
+            if (child.key === this.playerId) return;
+            const v = child.val() || {};
+            if (!v.ts || v.ts < cutoff) child.ref.remove().catch(() => {});
+          });
+        }).catch(() => {});
+      } catch (e) {}
     }
   }
 
@@ -339,13 +363,22 @@ class HotspotApp {
         matchDurationSeconds: this.matchDurationSeconds,
         tagRadiusFeet: this.tagRadiusFeet,
         ts: firebase.database.ServerValue.TIMESTAMP
-      }).catch(() => {});
+      }).catch((err) => {
+        // Swallowing this hid rule rejections and offline writes completely.
+        this.lastRtdbError = 'write: ' + (err && err.message ? err.message : err);
+        this.refreshTransportStatus();
+      });
     } catch (e) {}
   }
 
   rtdbPublishEvent(data) {
     if (!this.rtdbEventsPushRef) return;
-    try { this.rtdbEventsPushRef.push(data).catch(() => {}); } catch (e) {}
+    try {
+      this.rtdbEventsPushRef.push(data).catch((err) => {
+        this.lastRtdbError = 'event: ' + (err && err.message ? err.message : err);
+        this.refreshTransportStatus();
+      });
+    } catch (e) { this.lastRtdbError = 'event: ' + e.message; }
   }
 
   teardownRtdbListeners() {
@@ -1024,6 +1057,58 @@ class HotspotApp {
     if (hiders.length === 0) return null;
     if (hiders.length === 1) return hiders[0];
     return hiders.sort((a, b) => String(a.id).localeCompare(String(b.id)))[0];
+  }
+
+  // Tap the version badge to open this. When two phones cannot see each other
+  // the useful facts live in state that is otherwise invisible on a phone with
+  // no console attached.
+  toggleDiagnostics() {
+    const el = document.getElementById('diag-panel');
+    if (!el) return;
+    const showing = el.style.display === 'block';
+    el.style.display = showing ? 'none' : 'block';
+    if (this.diagTimer) { clearInterval(this.diagTimer); this.diagTimer = null; }
+    if (!showing) {
+      this.renderDiagnostics();
+      this.diagTimer = setInterval(() => this.renderDiagnostics(), 1000);
+    }
+  }
+
+  renderDiagnostics() {
+    const el = document.getElementById('diag-body');
+    if (!el) return;
+    const now = Date.now();
+    const roster = Object.values(this.players).map(p => {
+      const age = p.lastSeen ? Math.round((now - p.lastSeen) / 1000) + 's' : 'self';
+      return `${window.hsEscape(p.name || '?')} [${p.role || '?'}] ${age}`;
+    });
+    const row = (k, v, bad) =>
+      `<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;">
+         <span style="opacity:.6">${k}</span>
+         <span style="text-align:right;font-weight:700;color:${bad ? '#EF4444' : '#F8FAFC'}">${v}</span>
+       </div>`;
+
+    el.innerHTML =
+      row('app version', 'v2.7.2') +
+      row('room', this.roomCode || '(none)', !this.roomCode) +
+      row('am I host', this.isRoomHost ? 'yes' : 'no') +
+      row('my role', this.role) +
+      row('my id', this.playerId) +
+      row('online', navigator.onLine ? 'yes' : 'NO', !navigator.onLine) +
+      '<hr style="border:0;border-top:1px solid #1E293B;margin:6px 0">' +
+      row('database', this.rtdbConnected ? 'CONNECTED' : 'not connected', !this.rtdbConnected) +
+      row('db node written', this.rtdbMyRef ? 'yes' : 'NO', !this.rtdbMyRef) +
+      row('db error', this.lastRtdbError ? window.hsEscape(this.lastRtdbError) : 'none', !!this.lastRtdbError) +
+      '<hr style="border:0;border-top:1px solid #1E293B;margin:6px 0">' +
+      row('peer registered', (this.peer && this.peer.open) ? 'yes' : 'NO', !(this.peer && this.peer.open)) +
+      row('my peer id', this.myPeerId || '(none)') +
+      row('host peer id', this.getHostPeerId() || '(none)') +
+      row('direct links', this.peerCount(), this.peerCount() === 0) +
+      row('peer error', this.lastPeerError ? window.hsEscape(this.lastPeerError) : 'none', !!this.lastPeerError) +
+      '<hr style="border:0;border-top:1px solid #1E293B;margin:6px 0">' +
+      row('GPS accuracy', this.myPosition ? '±' + Math.round(this.myPosition.accuracy) + 'ft' : 'none') +
+      row('players seen', roster.length) +
+      `<div style="margin-top:4px;opacity:.75;word-break:break-word">${roster.join('<br>') || '(nobody)'}</div>`;
   }
 
   prunePlayers() {

@@ -19,7 +19,7 @@
     base-uri 'self';
     form-action 'none';
     frame-ancestors 'none'">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.7.0</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.7.2</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -59,7 +59,7 @@
   </script>
 
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=2.7.0">
+  <link rel="stylesheet" href="style.css?v=2.7.2">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -75,6 +75,18 @@
   </script>
 </head>
 <body>
+
+  <!-- Diagnostics overlay — opened by tapping the version badge -->
+  <div id="diag-panel" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(6,10,20,.97); overflow-y:auto; padding:16px; font-family:ui-monospace,Menlo,Consolas,monospace;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+      <strong style="font-size:15px; color:#00F0FF; letter-spacing:1px;">DIAGNOSTICS</strong>
+      <button onclick="window.hotspotApp.toggleDiagnostics()" style="background:#1E293B; color:#F8FAFC; border:0; border-radius:8px; padding:8px 14px; font-weight:800;">Close</button>
+    </div>
+    <div id="diag-body" style="font-size:12px; line-height:1.5;"></div>
+    <p style="font-size:11px; opacity:.6; margin-top:12px; line-height:1.4;">
+      Both phones should show the same room, database CONNECTED, and each other under "players seen".
+    </p>
+  </div>
 
   <div id="app-container">
 
@@ -101,7 +113,7 @@
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="brand-subtitle">Extreme Yard Tag & Proximity Hunt</div>
         <div style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
-          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800;">v2.7.0</span>
+          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800; cursor: pointer;" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">v2.7.2</span>
           <span id="cloud-sync-status" style="font-size: 11px; color: var(--text-muted); font-weight: 600; text-align: center; letter-spacing: 0.5px;">
             🌐 hotspot-yardtag.web.app
           </span>
@@ -216,7 +228,7 @@
         </div>
 
         <div class="input-group">
-          <label class="input-label">Your Runner Name</label>
+          <label class="input-label">Your Name</label>
           <input type="text" id="host-nickname" class="text-input" value="AlphaHider" placeholder="Nickname">
         </div>
       </div>
@@ -235,7 +247,7 @@
 
       <!-- Quick Nickname Editor Bar -->
       <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-        <input type="text" id="lobby-nickname-input" class="text-input" style="flex: 1; padding: 10px 14px; font-size: 14px; margin-bottom: 0;" placeholder="Enter Nickname">
+        <input type="text" id="lobby-nickname-input" class="text-input" style="flex: 1; padding: 10px 14px; font-size: 14px; margin-bottom: 0;" placeholder="Your name">
         <button class="btn btn-secondary" style="width: auto; padding: 10px 14px; font-size: 13px; margin-bottom: 0; border-color: var(--accent-cyan); color: var(--accent-cyan); font-weight: 800;" onclick="window.hotspotApp.updateLobbyNickname()">
           ✏️ Save Name
         </button>
@@ -283,7 +295,7 @@
         </div>
 
         <div class="input-group">
-          <label class="input-label">Your Nickname</label>
+          <label class="input-label">Your Name</label>
           <input type="text" id="join-nickname-input" class="text-input" placeholder="Chaser" value="Chaser1" onkeydown="if(event.key==='Enter') window.joinRoomAction()">
         </div>
       </div>
@@ -549,15 +561,15 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=2.7.0"></script>
-  <script src="geo.js?v=2.7.0"></script>
-  <script src="replay.js?v=2.7.0"></script>
-  <script src="app.js?v=2.7.0"></script>
+  <script src="audio.js?v=2.7.2"></script>
+  <script src="geo.js?v=2.7.2"></script>
+  <script src="replay.js?v=2.7.2"></script>
+  <script src="app.js?v=2.7.2"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=2.7.0').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=2.7.2').catch(() => {});
       });
     }
 
