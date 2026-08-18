@@ -19,7 +19,7 @@
     base-uri 'self';
     form-action 'none';
     frame-ancestors 'none'">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.7.2</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.7.3</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -59,7 +59,7 @@
   </script>
 
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=2.7.2">
+  <link rel="stylesheet" href="style.css?v=2.7.3">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -113,7 +113,7 @@
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="brand-subtitle">Extreme Yard Tag & Proximity Hunt</div>
         <div style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
-          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800; cursor: pointer;" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">v2.7.2</span>
+          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800; cursor: pointer;" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">v2.7.3</span>
           <span id="cloud-sync-status" style="font-size: 11px; color: var(--text-muted); font-weight: 600; text-align: center; letter-spacing: 0.5px;">
             🌐 hotspot-yardtag.web.app
           </span>
@@ -229,7 +229,7 @@
 
         <div class="input-group">
           <label class="input-label">Your Name</label>
-          <input type="text" id="host-nickname" class="text-input" value="AlphaHider" placeholder="Nickname">
+          <input type="text" id="host-nickname" class="text-input" maxlength="24" placeholder="Your name">
         </div>
       </div>
 
@@ -296,7 +296,7 @@
 
         <div class="input-group">
           <label class="input-label">Your Name</label>
-          <input type="text" id="join-nickname-input" class="text-input" placeholder="Chaser" value="Chaser1" onkeydown="if(event.key==='Enter') window.joinRoomAction()">
+          <input type="text" id="join-nickname-input" class="text-input" placeholder="Your name" maxlength="24" onkeydown="if(event.key==='Enter') window.joinRoomAction()">
         </div>
       </div>
 
@@ -480,8 +480,8 @@
       const b = document.getElementById('setup-boundary').value;
       const md = document.getElementById('setup-matchduration').value;
       const tr = document.getElementById('setup-tagradius').value;
-      const name = document.getElementById('host-nickname').value || 'Host';
-      window.hotspotApp.playerName = name;
+      const name = document.getElementById('host-nickname').value;
+      if (name && name.trim()) window.hotspotApp.saveName(name);
       window.hotspotApp.createRoom(hs, gm, b, md, tr);
     };
 
@@ -561,15 +561,15 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=2.7.2"></script>
-  <script src="geo.js?v=2.7.2"></script>
-  <script src="replay.js?v=2.7.2"></script>
-  <script src="app.js?v=2.7.2"></script>
+  <script src="audio.js?v=2.7.3"></script>
+  <script src="geo.js?v=2.7.3"></script>
+  <script src="replay.js?v=2.7.3"></script>
+  <script src="app.js?v=2.7.3"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=2.7.2').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=2.7.3').catch(() => {});
       });
     }
 

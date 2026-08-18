@@ -1,4 +1,4 @@
-// HOTSPOT Service Worker v2.7.2 — PWA shell
+// HOTSPOT Service Worker v2.7.3 — PWA shell
 //
 // This app is useless without a network (it syncs live positions between
 // phones), so there is no meaningful offline mode to precache for. The previous
@@ -9,7 +9,7 @@
 // What remains is what is actually wanted: a registered worker so the app is
 // installable to the home screen, network-first for everything, and a
 // version-scoped cache used only when the network fails outright.
-const VERSION = 'v2.7.2';
+const VERSION = 'v2.7.3';
 const CACHE_NAME = 'hotspot-' + VERSION;
 
 self.addEventListener('install', () => {

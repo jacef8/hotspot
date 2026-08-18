@@ -29,7 +29,9 @@ class HotspotApp {
     // NOT tied to hider/seeker, so role swaps and rematches cannot break the mesh.
     this.isRoomHost = false;
     this.playerId = 'player_' + Math.random().toString(36).substr(2, 6);
-    this.playerName = 'Runner_' + Math.floor(Math.random() * 899 + 100);
+    // Asked for on the host screen, the join screen AND in the lobby — three
+    // inputs for one value. Remember it so it is typed once, ever.
+    this.playerName = this.loadSavedName() || ('Runner_' + Math.floor(Math.random() * 899 + 100));
     this.role = 'seeker'; // 'hider' | 'seeker' | 'spectator'
     this.gameMode = 'classic'; // 'classic' | 'infection'
     this.gameState = 'lobby'; // 'lobby' | 'headstart' | 'active' | 'gameover'
@@ -77,6 +79,30 @@ class HotspotApp {
   // Clear only this app's transient room state. The old version wiped ALL of
   // localStorage on every boot and restored one key, which would silently eat
   // any setting added later.
+  loadSavedName() {
+    try {
+      const n = (localStorage.getItem('hotspot_name') || '').trim();
+      return n ? n.slice(0, 24) : null;
+    } catch (e) { return null; }
+  }
+
+  saveName(name) {
+    const clean = (name || '').trim().slice(0, 24);
+    if (!clean) return false;
+    this.playerName = clean;
+    try { localStorage.setItem('hotspot_name', clean); } catch (e) {}
+    this.fillNameInputs();
+    return true;
+  }
+
+  // Keep every name box in the app showing the same value.
+  fillNameInputs() {
+    ['host-nickname', 'join-nickname-input', 'lobby-nickname-input'].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el && el.value !== this.playerName) el.value = this.playerName;
+    });
+  }
+
   clearStaleCache() {
     try {
       ['hotspot_room', 'hotspot_session', 'hotspot_players', 'hotspot_state']
@@ -954,9 +980,9 @@ class HotspotApp {
       return;
     }
 
-    this.playerName = newName;
+    if (!this.saveName(newName)) return;
     if (this.players[this.playerId]) {
-      this.players[this.playerId].name = newName;
+      this.players[this.playerId].name = this.playerName;
     }
 
     this.sendHeartbeat();
@@ -987,7 +1013,7 @@ class HotspotApp {
     this.seenRoundIds = {};
     this.taggedHiderIds = {};
     this.appliedTagByRound = {};
-    this.playerName = nickname ? nickname.trim() : this.playerName;
+    if (nickname && nickname.trim()) this.saveName(nickname);
     this.role = role;
     this.gameState = 'lobby';
 
@@ -1089,7 +1115,7 @@ class HotspotApp {
        </div>`;
 
     el.innerHTML =
-      row('app version', 'v2.7.2') +
+      row('app version', 'v2.7.3') +
       row('room', this.roomCode || '(none)', !this.roomCode) +
       row('am I host', this.isRoomHost ? 'yes' : 'no') +
       row('my role', this.role) +
