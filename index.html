@@ -19,14 +19,14 @@
     base-uri 'self';
     form-action 'none';
     frame-ancestors 'none'">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.7.3</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.7.7</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="HOTSPOT">
-  <meta name="theme-color" content="#080C14">
+  <meta name="theme-color" content="#0A0A0D">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="manifest" href="manifest.json">
 
@@ -59,7 +59,7 @@
   </script>
 
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=2.7.3">
+  <link rel="stylesheet" href="style.css?v=2.7.7">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -77,7 +77,7 @@
 <body>
 
   <!-- Diagnostics overlay — opened by tapping the version badge -->
-  <div id="diag-panel" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(6,10,20,.97); overflow-y:auto; padding:16px; font-family:ui-monospace,Menlo,Consolas,monospace;">
+  <div id="diag-panel" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(10,10,13,.97); overflow-y:auto; padding:16px; font-family:ui-monospace,Menlo,Consolas,monospace;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
       <strong style="font-size:15px; color:#00F0FF; letter-spacing:1px;">DIAGNOSTICS</strong>
       <button onclick="window.hotspotApp.toggleDiagnostics()" style="background:#1E293B; color:#F8FAFC; border:0; border-radius:8px; padding:8px 14px; font-weight:800;">Close</button>
@@ -113,16 +113,16 @@
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="brand-subtitle">Extreme Yard Tag & Proximity Hunt</div>
         <div style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
-          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800; cursor: pointer;" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">v2.7.3</span>
+          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800; cursor: pointer;" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">v2.7.7</span>
           <span id="cloud-sync-status" style="font-size: 11px; color: var(--text-muted); font-weight: 600; text-align: center; letter-spacing: 0.5px;">
             🌐 hotspot-yardtag.web.app
           </span>
         </div>
       </div>
 
-      <div class="card" style="border-color: var(--accent-cyan);">
+      <div class="card">
         <div class="card-title">🚀 Solo Test Mode</div>
-        <p style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; line-height: 1.3;">
+        <p class="solo-hint" style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; line-height: 1.3;">
           Plants a virtual hider ~300ft (~100yd) out. Test pulse rings, haptics & announcer instantly!
         </p>
         <button class="btn btn-solo" onclick="window.hotspotApp.startSoloDrill()">
@@ -146,7 +146,7 @@
       <div class="card" style="margin-bottom: 0;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
           <div class="card-title" style="margin-bottom: 0;">🏆 Season Records</div>
-          <button class="btn btn-secondary" style="width: auto; padding: 3px 8px; font-size: 11px; margin: 0; border-color: var(--accent-amber); color: var(--accent-amber);" onclick="window.hotspotApp.resetSeasonRecords()">
+          <button class="btn btn-secondary" style="width: auto; min-height: 46px; padding: 8px 14px; font-size: 11px; margin: 0; border-color: rgba(245,158,11,.45); color: var(--accent-amber);" onclick="window.hotspotApp.resetSeasonRecords()">
             🔄 Reset Season
           </button>
         </div>
@@ -242,7 +242,7 @@
     <div id="lobby-screen" class="screen">
       <div class="brand-header">
         <div class="brand-subtitle">ROOM CODE</div>
-        <div id="lobby-code-display" class="brand-title" style="font-size: 44px; color: var(--accent-cyan); text-shadow: 0 0 20px rgba(0, 240, 255, 0.5);">----</div>
+        <div id="lobby-code-display" class="room-code">------</div>
       </div>
 
       <!-- Quick Nickname Editor Bar -->
@@ -561,15 +561,15 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=2.7.3"></script>
-  <script src="geo.js?v=2.7.3"></script>
-  <script src="replay.js?v=2.7.3"></script>
-  <script src="app.js?v=2.7.3"></script>
+  <script src="audio.js?v=2.7.7"></script>
+  <script src="geo.js?v=2.7.7"></script>
+  <script src="replay.js?v=2.7.7"></script>
+  <script src="app.js?v=2.7.7"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=2.7.3').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=2.7.7').catch(() => {});
       });
     }
 

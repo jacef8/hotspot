@@ -4,18 +4,44 @@
    ========================================================================== */
 
 :root {
-  --bg-dark: #080C14;
-  --card-bg: rgba(18, 26, 43, 0.85);
-  --card-border: rgba(255, 85, 0, 0.25);
+  /* Warm near-black ground. #080C14 was a cold blue-black that fought the
+     blaze accent; this sits under amber without turning it muddy. */
+  --bg-dark: #0A0A0D;
+  --surface-1: rgba(24, 22, 28, 0.88);
+  --surface-2: rgba(34, 31, 38, 0.92);
+  --hairline: rgba(255, 255, 255, 0.09);
+  --hairline-strong: rgba(255, 255, 255, 0.16);
+
   --primary-blaze: #FF5500;
-  --blaze-glow: rgba(255, 85, 0, 0.4);
+  --blaze-soft: rgba(255, 85, 0, 0.14);
   --accent-cyan: #00F0FF;
+  --cyan-soft: rgba(0, 240, 255, 0.12);
   --accent-amber: #F59E0B;
-  --text-main: #F8FAFC;
-  --text-muted: #94A3B8;
-  --slate-cold: #64748B;
   --danger-red: #EF4444;
+  --slate-cold: #6B6B73;
+
+  --text-main: #F7F5F3;
+  /* Tinted from the surface hue rather than slate gray, and still clears
+     4.5:1 on the ground above. */
+  --text-muted: #A9A29C;
+
+  /* Real elevation: offset + blur. Zero-offset coloured halos are decoration,
+     and they were doing the depth work all over this UI. */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.32);
+  --shadow-2: 0 4px 14px rgba(0, 0, 0, 0.48), 0 14px 36px rgba(0, 0, 0, 0.34);
+  --shadow-lift: 0 6px 20px rgba(255, 85, 0, 0.22), 0 2px 6px rgba(0, 0, 0, 0.5);
+
+  --r-sm: 10px;
+  --r-md: 16px;
+  --r-lg: 22px;
+  --r-pill: 999px;
+
   --font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* Back-compat for rules further down the sheet. */
+  --card-bg: var(--surface-1);
+  --card-border: var(--hairline);
+  --blaze-glow: rgba(255, 85, 0, 0.28);
 }
 
 * {
@@ -46,7 +72,11 @@ html, body {
   display: flex;
   flex-direction: column;
   position: relative;
-  background: radial-gradient(circle at top, #141E33 0%, var(--bg-dark) 85%);
+  /* Ambient light from above, warm - the reference's lighting model. */
+  background:
+    radial-gradient(120% 70% at 50% -10%, rgba(255, 108, 26, 0.16) 0%, transparent 60%),
+    radial-gradient(90% 50% at 50% 105%, rgba(255, 85, 0, 0.07) 0%, transparent 70%),
+    var(--bg-dark);
   overflow: hidden;
 }
 
@@ -136,14 +166,14 @@ html, body {
 }
 
 .brand-title {
-  font-size: clamp(26px, 7vw, 36px);
+  font-size: clamp(28px, 7.5vw, 38px);
   font-weight: 900;
-  letter-spacing: 2px;
-  background: linear-gradient(135deg, #FFF 30%, var(--primary-blaze) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  letter-spacing: 1.5px;
+  /* Was gradient-filled with a zero-offset halo. Emphasis comes from weight
+     and size; the halo was decoration standing in for depth. */
+  color: var(--text-main);
   text-transform: uppercase;
-  text-shadow: 0 0 16px var(--blaze-glow);
+  line-height: 1.02;
 }
 
 .brand-subtitle {
@@ -151,30 +181,30 @@ html, body {
   color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 2.5px;
-  margin-top: 2px;
+  margin-top: 4px;
 }
 
 /* Cards */
 .card {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-radius: 14px;
-  padding: 12px 14px;
-  margin-bottom: 8px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  background: var(--surface-1);
+  border: 1px solid var(--hairline);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-radius: var(--r-lg);
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  box-shadow: var(--shadow-2);
   position: relative;
   z-index: 20;
 }
 
 .card-title {
-  font-size: 12px;
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 1.2px;
-  color: var(--accent-cyan);
+  letter-spacing: 1.4px;
+  color: var(--text-muted);
   font-weight: 700;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 /* Inputs */
@@ -193,23 +223,31 @@ html, body {
 
 .text-input, .select-input {
   width: 100%;
-  background: rgba(8, 12, 20, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.32);
+  border: 1px solid var(--hairline-strong);
   color: var(--text-main);
-  padding: 10px 12px;
-  border-radius: 8px;
+  padding: 12px 14px;
+  border-radius: var(--r-sm);
   font-size: 15px;
+  transition: border-color .18s ease, background-color .18s ease;
   outline: none;
   position: relative;
   z-index: 30;
   pointer-events: auto;
 }
 
+.text-input::placeholder { color: var(--text-muted); opacity: .75; }
+
+.text-input:focus, .select-input:focus {
+  border-color: var(--primary-blaze);
+  background: rgba(0, 0, 0, 0.45);
+}
+
 /* Buttons */
 .btn {
   width: 100%;
-  padding: 12px 16px;
-  border-radius: 10px;
+  padding: 14px 18px;
+  border-radius: var(--r-pill);
   border: none;
   font-size: 14px;
   font-weight: 800;
@@ -231,26 +269,32 @@ html, body {
   transform: scale(0.97);
 }
 
+.btn:focus-visible {
+  outline: 2px solid var(--accent-cyan);
+  outline-offset: 3px;
+}
+
 .btn:last-child {
   margin-bottom: 0;
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #FF6A00, var(--primary-blaze));
-  color: #FFF;
-  box-shadow: 0 4px 16px var(--blaze-glow);
+  background: linear-gradient(180deg, #FF7A2E 0%, var(--primary-blaze) 100%);
+  color: #1A0A02;
+  box-shadow: var(--shadow-lift);
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--surface-2);
   color: var(--text-main);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--hairline-strong);
+  box-shadow: var(--shadow-1);
 }
 
 .btn-solo {
-  background: linear-gradient(135deg, #00F0FF, #00A3FF);
-  color: #080C14;
-  box-shadow: 0 4px 16px rgba(0, 240, 255, 0.3);
+  background: linear-gradient(180deg, #2FF4FF 0%, #00C2E8 100%);
+  color: #03191E;
+  box-shadow: var(--shadow-1);
 }
 
 /* Seeker Pulse Ring Display */
@@ -442,26 +486,41 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 6px;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
   font-size: 13px;
 }
 
-.player-badge.hider { border-left: 3px solid var(--primary-blaze); }
-.player-badge.seeker { border-left: 3px solid var(--accent-cyan); }
+/* Role reads from a tinted fill and a leading dot rather than a thick side
+   tab, which is the most recognisable tell of a generated UI. */
+.player-badge.hider  { background: var(--blaze-soft); border-color: rgba(255, 85, 0, 0.30); }
+.player-badge.seeker { background: var(--cyan-soft);  border-color: rgba(0, 240, 255, 0.24); }
+
+.player-badge::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--slate-cold);
+}
+.player-badge.hider::before  { background: var(--primary-blaze); }
+.player-badge.seeker::before { background: var(--accent-cyan); }
 
 /* Distinct Role Screen Themes & Backgrounds */
 #hider-screen.active {
-  background: radial-gradient(circle at top, #3A1504 0%, #1A0701 80%, #0A0200 100%);
-  border-top: 3px solid var(--primary-blaze);
-  box-shadow: inset 0 0 40px rgba(255, 85, 0, 0.25);
+  background:
+    radial-gradient(110% 60% at 50% -5%, rgba(255, 106, 0, 0.28) 0%, transparent 62%),
+    linear-gradient(180deg, #1C0B03 0%, #0C0503 60%, #080402 100%);
 }
 
 #seeker-screen.active {
-  background: radial-gradient(circle at top, #062F47 0%, #031624 80%, #010A12 100%);
-  border-top: 3px solid var(--accent-cyan);
-  box-shadow: inset 0 0 40px rgba(0, 240, 255, 0.2);
+  background:
+    radial-gradient(110% 60% at 50% -5%, rgba(0, 176, 214, 0.22) 0%, transparent 62%),
+    linear-gradient(180deg, #05202E 0%, #04121B 60%, #020A10 100%);
 }
 
 /* Distinct Role Header Badges */
@@ -498,3 +557,87 @@ html, body {
   box-shadow: 0 0 15px rgba(0, 240, 255, 0.3);
 }
 
+
+/* Room code: the number people read aloud across a yard. Solid colour and a
+   real offset shadow; the old inline rule was a zero-offset cyan halo. */
+.room-code {
+  font-size: clamp(38px, 12vw, 52px);
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-indent: 0.14em;
+  line-height: 1.05;
+  color: var(--accent-cyan);
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.7);
+}
+
+/* Roster rows */
+.badge-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text-main);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge-you {
+  margin-left: 7px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.badge-role {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.player-badge.hider  .badge-role { color: var(--primary-blaze); }
+.player-badge.seeker .badge-role { color: var(--accent-cyan); }
+
+.roster-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 12px 8px;
+}
+
+/* ==========================================================================
+   Short-viewport compaction
+   The app is a zero-scroll 100dvh surface. On tall phones the generous rhythm
+   above is right; on a 640px-tall screen the home and host screens ran past
+   the fold. Tighten the vertical scale there rather than flattening it for
+   everyone.
+   ========================================================================== */
+@media (max-height: 720px) {
+  .screen            { padding: 6px 13px 10px; }
+  .brand-header      { margin-bottom: 4px; }
+  .brand-title       { font-size: clamp(22px, 6.4vw, 28px); letter-spacing: 1px; }
+  .brand-subtitle    { font-size: 10px; letter-spacing: 2px; margin-top: 2px; }
+
+  .card              { padding: 10px 13px; margin-bottom: 7px; border-radius: var(--r-md); }
+  .card-title        { margin-bottom: 7px; font-size: 10px; }
+
+  .btn               { padding: 11px 16px; font-size: 13px; margin-bottom: 6px; }
+  .text-input,
+  .select-input      { padding: 9px 12px; font-size: 14px; }
+  .input-group       { margin-bottom: 7px; }
+
+  /* Explanatory copy is the first thing that can go when height is scarce;
+     the button beneath it already says what it does. */
+  .solo-hint         { display: none; }
+}
+
+@media (max-height: 600px) {
+  .brand-title       { font-size: 20px; }
+  .card              { padding: 8px 11px; margin-bottom: 6px; }
+  .btn               { padding: 9px 14px; font-size: 12px; margin-bottom: 5px; }
+}

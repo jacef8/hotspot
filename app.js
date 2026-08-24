@@ -1115,7 +1115,7 @@ class HotspotApp {
        </div>`;
 
     el.innerHTML =
-      row('app version', 'v2.7.3') +
+      row('app version', 'v2.7.7') +
       row('room', this.roomCode || '(none)', !this.roomCode) +
       row('am I host', this.isRoomHost ? 'yes' : 'no') +
       row('my role', this.role) +
@@ -1171,24 +1171,20 @@ class HotspotApp {
 
     if (hiderContainer) {
       hiderContainer.innerHTML = hidersList.map(p => `
-        <div class="player-badge hider" style="border: 2px solid var(--accent-amber); background: rgba(245, 158, 11, 0.15); padding: 10px 14px; border-radius: 10px; display: flex; align-items: center; justify-content: space-between;">
-          <span class="name" style="font-weight: 800; font-size: 15px; color: #FFF;">
-            👑 ${window.hsEscape(p.name)} <span style="font-size: 11px; background: var(--accent-amber); color: #000; padding: 2px 6px; border-radius: 8px; font-weight: 900; margin-left: 6px;">HOST</span> ${p.id === this.playerId ? '<b style="color:var(--accent-cyan);">(YOU)</b>' : ''}
-          </span>
-          <span style="font-size: 11px; color: var(--accent-amber); font-weight: 800; letter-spacing: 0.5px;">SOLE HIDER</span>
+        <div class="player-badge hider">
+          <span class="badge-name">${window.hsEscape(p.name)}${p.id === this.playerId ? '<span class="badge-you">you</span>' : ''}</span>
+          <span class="badge-role">Hider</span>
         </div>
-      `).join('') || '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:10px;">Waiting for Host to claim Hider...</div>';
+      `).join('') || '<div class="roster-empty">Waiting for someone to take the Hider role</div>';
     }
 
     if (seekerContainer) {
       seekerContainer.innerHTML = seekersList.map(p => `
-        <div class="player-badge seeker" style="border: 1px solid var(--accent-cyan); background: rgba(0, 240, 255, 0.08); padding: 8px 12px; border-radius: 8px; margin-bottom: 6px; display: flex; align-items: center; justify-content: space-between;">
-          <span class="name" style="font-weight: 700; font-size: 14px; color: #FFF;">
-            🎯 ${window.hsEscape(p.name)} ${p.id === this.playerId ? '<b style="color:var(--accent-cyan);">(YOU)</b>' : ''}
-          </span>
-          <span style="font-size: 11px; color: var(--accent-cyan); font-weight: 700;">SEEKER</span>
+        <div class="player-badge seeker">
+          <span class="badge-name">${window.hsEscape(p.name)}${p.id === this.playerId ? '<span class="badge-you">you</span>' : ''}</span>
+          <span class="badge-role">Seeker</span>
         </div>
-      `).join('') || '<div style="font-size:12px; color:var(--text-muted); text-align:center; padding:10px;">No Seekers Joined Yet</div>';
+      `).join('') || '<div class="roster-empty">No seekers yet</div>';
     }
 
     // Host & Spectator Start Button Guard: Hider and Spectator (Parent) can start round!
