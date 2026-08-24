@@ -134,21 +134,21 @@ class HotspotApp {
 
     let text;
     if (peers > 0) {
-      text = `🟢 Connected — ${peers} direct link${peers === 1 ? '' : 's'}${this.rtdbConnected ? ' + cloud' : ''} · room ${this.roomCode}`
+      text = `Connected — ${peers} direct link${peers === 1 ? '' : 's'}${this.rtdbConnected ? ' + cloud' : ''} · room ${this.roomCode}`
         + (relayOk ? '' : ' (relay unavailable, not needed)');
     } else if (relayOk) {
       text = this.rtdbConnected
-        ? `🟢 Cloud sync active · room ${this.roomCode}`
-        : `🟡 Looking for other devices… · room ${this.roomCode}`;
+        ? `Cloud sync active · room ${this.roomCode}`
+        : `Looking for other devices… · room ${this.roomCode}`;
     } else {
-      text = `🔴 No connection to other devices · room ${this.roomCode}`;
+      text = `No connection to other devices · room ${this.roomCode}`;
     }
     if (homeLabel) homeLabel.innerText = text;
 
     // Only alarm when BOTH transports are down — a blocked relay alone is fine.
     if (banner) {
       if (peers === 0 && !relayOk) {
-        banner.innerText = '⚠️ Cannot reach other devices'
+        banner.innerText = 'Cannot reach other devices'
           + (this.lastSyncNote ? ' (' + this.lastSyncNote + ')' : '')
           + ' — check that both phones are on the internet.';
         banner.style.display = 'block';
@@ -652,7 +652,7 @@ class HotspotApp {
         this.stopPulseLoop();
         if (this.headStartTimer) clearInterval(this.headStartTimer);
         window.hotspotAudio.speak(`Attention! Hider ${data.name || ''} left the hunt. Game canceled!`);
-        alert(`⚠️ HIDER LEFT THE HUNT!\n\nHider (${data.name || 'Hider'}) has abandoned the match.`);
+        alert(`HIDER LEFT THE HUNT!\n\nHider (${data.name || 'Hider'}) has abandoned the match.`);
         this.showScreen('home-screen');
         try { this.leaveRoom(); } catch(e) {}
       }
@@ -690,7 +690,7 @@ class HotspotApp {
     const speechEnabled = window.hotspotAudio.toggleSpeech();
     const btn = document.getElementById('sound-btn');
     if (btn) {
-      btn.innerText = speechEnabled ? '🔊 Voice' : '🔇 Muted';
+      btn.innerText = speechEnabled ? 'Voice' : 'Muted';
     }
   }
 
@@ -726,7 +726,7 @@ class HotspotApp {
     if (soloControls) soloControls.style.display = 'block';
 
     const counter = document.getElementById('headstart-banner-seeker');
-    if (counter) counter.innerText = '🔥 SOLO DRILL LIVE!';
+    if (counter) counter.innerText = 'SOLO DRILL LIVE!';
 
     this.startPulseLoop();
   }
@@ -870,7 +870,7 @@ class HotspotApp {
     if (banner) banner.style.display = 'none';
 
     const homeLabel = document.getElementById('cloud-sync-status');
-    if (homeLabel) homeLabel.innerText = '🌐 hotspot-yardtag.web.app';
+    if (homeLabel) homeLabel.innerText = 'STANDBY';
 
     ['btn-powerup-decoy', 'btn-powerup-smoke', 'btn-bearing-ping'].forEach((id) => {
       const b = document.getElementById(id);
@@ -963,7 +963,7 @@ class HotspotApp {
   }
 
   resetSeasonRecords() {
-    if (confirm('🏆 Start New Season?\n\nThis will reset your Total Hunts, Fastest Tag, and Longest Hide records back to zero.')) {
+    if (confirm('Start New Season?\n\nThis will reset your Total Hunts, Fastest Tag, and Longest Hide records back to zero.')) {
       try {
         localStorage.removeItem('hotspot_stats');
       } catch(e) {}
@@ -1115,7 +1115,17 @@ class HotspotApp {
        </div>`;
 
     el.innerHTML =
-      row('app version', 'v2.7.7') +
+      row('app version', 'v2.8.0') +
+      (() => {
+        // Straight from the stylesheet. If this disagrees with the app version
+        // above, the phone is running cached CSS - provable, not a guess.
+        let css = 'not loaded';
+        try {
+          css = (getComputedStyle(document.documentElement)
+            .getPropertyValue('--css-version') || '').replace(/["']/g, '').trim() || 'missing';
+        } catch (e) {}
+        return row('stylesheet', css, css !== '2.8.0');
+      })() +
       row('room', this.roomCode || '(none)', !this.roomCode) +
       row('am I host', this.isRoomHost ? 'yes' : 'no') +
       row('my role', this.role) +
@@ -1302,7 +1312,7 @@ class HotspotApp {
         this.headStartRemaining = remaining;
 
         document.querySelectorAll('.headstart-counter').forEach(el => {
-          el.innerText = `⏳ HIDING TIME: ${remaining}s`;
+          el.innerText = `HIDING TIME: ${remaining}s`;
         });
 
         const hiderCounter = document.getElementById('hider-timer-display');
@@ -1321,7 +1331,7 @@ class HotspotApp {
           this.headStartTimer = null;
 
           document.querySelectorAll('.headstart-counter').forEach(el => {
-            el.innerText = '🔥 HUNT IS LIVE!';
+            el.innerText = 'HUNT IS LIVE!';
           });
           if (hiderCounter) hiderCounter.innerText = 'LIVE!';
 
@@ -1339,7 +1349,7 @@ class HotspotApp {
       this.gameStartTime = Date.now();
       if (this.headStartTimer) clearInterval(this.headStartTimer);
 
-      document.querySelectorAll('.headstart-counter').forEach(el => el.innerText = '🔥 HUNT IS LIVE!');
+      document.querySelectorAll('.headstart-counter').forEach(el => el.innerText = 'HUNT IS LIVE!');
       const hiderCounter = document.getElementById('hider-timer-display');
       if (hiderCounter) hiderCounter.innerText = 'LIVE!';
 
@@ -1402,7 +1412,7 @@ class HotspotApp {
     if (!this.matchDurationSeconds || this.matchDurationSeconds <= 0) {
       ['match-timer-seeker', 'match-timer-hider'].forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.innerText = '⏱️ NO TIME LIMIT';
+        if (el) el.innerText = 'NO TIME LIMIT';
       });
       return;
     }
@@ -1421,7 +1431,7 @@ class HotspotApp {
 
       const mins = Math.floor(remainingSec / 60);
       const secs = (remainingSec % 60).toString().padStart(2, '0');
-      const timeStr = `⏱️ MATCH TIME: ${mins}:${secs}`;
+      const timeStr = `MATCH TIME: ${mins}:${secs}`;
 
       ['match-timer-seeker', 'match-timer-hider'].forEach(id => {
         const el = document.getElementById(id);
@@ -1454,10 +1464,10 @@ class HotspotApp {
 
     if (this.role === 'hider') {
       window.hotspotAudio.speak("TIME EXPIRED! YOU SURVIVED AND WON THE HUNT!");
-      alert("🎉 TIME EXPIRED!\n\nYou successfully hid until time ran out! HIDER WINS!");
+      alert("TIME EXPIRED!\n\nYou successfully hid until time ran out! HIDER WINS!");
     } else {
       window.hotspotAudio.speak("TIME EXPIRED! THE HIDER ESCAPED! HIDER WINS!");
-      alert("⌛ TIME EXPIRED!\n\nThe Hider survived the entire match duration! Hider wins!");
+      alert("TIME EXPIRED!\n\nThe Hider survived the entire match duration! Hider wins!");
     }
 
     // Surviving the whole clock is exactly the Longest Hide record, and it was
@@ -1481,7 +1491,7 @@ class HotspotApp {
     }
 
     document.querySelectorAll('.accuracy-tag').forEach(el => {
-      el.innerText = `🎯 GPS: ±${Math.round(pos.accuracy)}ft`;
+      el.innerText = `GPS: ±${Math.round(pos.accuracy)}ft`;
     });
 
     const warnBox = document.getElementById('gps-warning-banner');
@@ -1490,10 +1500,10 @@ class HotspotApp {
       warnBox.style.display = 'none';
     } else if (warnBox) {
       if (pos.isProtocolWarning) {
-        warnBox.innerText = '⚠️ Opened as local file — GPS requires HTTPS web server.';
+        warnBox.innerText = 'Opened as local file — GPS requires HTTPS web server.';
         warnBox.style.display = 'block';
       } else if (pos.accuracy > 50) {
-        warnBox.innerText = `⚠️ Weak GPS Fix (±${Math.round(pos.accuracy)}ft) — Move out from under heavy tree canopy!`;
+        warnBox.innerText = `Weak GPS Fix (±${Math.round(pos.accuracy)}ft) — Move out from under heavy tree canopy!`;
         warnBox.style.display = 'block';
       } else {
         warnBox.style.display = 'none';
@@ -1532,7 +1542,7 @@ class HotspotApp {
       return;
     }
 
-    warnBox.innerText = `📍 Tap to Allow GPS Access: ${errMessage}`;
+    warnBox.innerText = `Tap to Allow GPS Access: ${errMessage}`;
     warnBox.style.display = 'block';
   }
 
@@ -1577,7 +1587,7 @@ class HotspotApp {
 
     const pulseRing = document.getElementById('seeker-pulse-ring');
     if (pulseRing) {
-      pulseRing.style.borderColor = '#64748B';
+      pulseRing.style.borderColor = '#4C5BA8';
       pulseRing.style.boxShadow = 'none';
       pulseRing.style.animationDuration = '2200ms';
     }
@@ -1629,13 +1639,13 @@ class HotspotApp {
             this.stopPulseLoop();
             if (this.headStartTimer) clearInterval(this.headStartTimer);
             window.hotspotAudio.speak("Hider connection lost completely. Hunt canceled!");
-            alert("⚠️ HIDER DISCONNECTED!\n\nHider signal was lost for over 35 seconds. Hunt canceled.");
+            alert("HIDER DISCONNECTED!\n\nHider signal was lost for over 35 seconds. Hunt canceled.");
             this.showScreen('home-screen');
             try { this.leaveRoom(); } catch(e) {}
             return;
           } else if (silentMs > 18000) {
             const bandLabel = document.getElementById('seeker-band-label');
-            if (bandLabel) bandLabel.innerText = '⚠️ HIDER OFFLINE';
+            if (bandLabel) bandLabel.innerText = 'HIDER OFFLINE';
             if (!this.hiderWarnSpoken) {
               this.hiderWarnSpoken = true;
               window.hotspotAudio.speak("Warning! Hider connection lost. Waiting for signal.");
@@ -1669,7 +1679,7 @@ class HotspotApp {
             : '<span class="dist-sub">waiting for hider…</span>';
         }
         if (pulseRing) {
-          pulseRing.style.borderColor = '#64748B';
+          pulseRing.style.borderColor = '#4C5BA8';
           pulseRing.style.boxShadow = 'none';
           pulseRing.style.animationDuration = '2200ms';
         }
@@ -1752,8 +1762,8 @@ class HotspotApp {
           if (note) {
             note.style.display = 'block';
             note.innerText = usable
-              ? '📡 Arrow points at the hider — hold the phone flat'
-              : '📡 No compass — arrow is relative to NORTH';
+              ? 'Arrow points at the hider — hold the phone flat'
+              : 'No compass — arrow is relative to NORTH';
             note.style.color = usable ? 'var(--accent-cyan)' : 'var(--accent-amber)';
           }
         }
@@ -1837,7 +1847,7 @@ class HotspotApp {
     let bg, text;
     if (distFromCenter > this.boundaryRadius) {
       bg = '#EF4444';
-      text = `🛑 OUT OF BOUNDS — ${Math.round(distFromCenter - this.boundaryRadius)}ft past the ${this.boundaryRadius}ft line. Head back!`;
+      text = `OUT OF BOUNDS — ${Math.round(distFromCenter - this.boundaryRadius)}ft past the ${this.boundaryRadius}ft line. Head back!`;
       if (!this.outOfBoundsSpoken) {
         this.outOfBoundsSpoken = true;
         if ('vibrate' in navigator) { try { navigator.vibrate([200, 100, 200]); } catch(e) {} }
@@ -1846,11 +1856,11 @@ class HotspotApp {
     } else if (distFromCenter > 0.8 * this.boundaryRadius) {
       this.outOfBoundsSpoken = false;
       bg = '#F59E0B';
-      text = `⚠️ NEAR THE EDGE — only ${roomLeft}ft of room left`;
+      text = `NEAR THE EDGE — only ${roomLeft}ft of room left`;
     } else {
       this.outOfBoundsSpoken = false;
       bg = 'rgba(34, 197, 94, 0.20)';
-      text = `✅ In bounds — ${roomLeft}ft of room left`;
+      text = `In bounds — ${roomLeft}ft of room left`;
     }
 
     banners.forEach(b => {
@@ -1938,7 +1948,7 @@ class HotspotApp {
 
     if (active) {
       if (pulseRing) pulseRing.classList.add('smoke-blind');
-      if (bandLabel) bandLabel.innerText = '💨 SMOKE SCREEN';
+      if (bandLabel) bandLabel.innerText = 'SMOKE SCREEN';
     } else {
       if (pulseRing) pulseRing.classList.remove('smoke-blind');
     }
@@ -2045,7 +2055,7 @@ class HotspotApp {
     if (this.playerId === tag.seekerId) {
       this.role = 'hider';
       window.hotspotAudio.speak(`YOU TAGGED THE HIDER! You are the new Hider for the next hunt!`);
-      alert(`🎉 YOU TAGGED THE HIDER!\n\nAwesome catch! You are the Hider for the next round!`);
+      alert(`YOU TAGGED THE HIDER!\n\nAwesome catch! You are the Hider for the next round!`);
     }
 
     this.gameState = 'gameover';

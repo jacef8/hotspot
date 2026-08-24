@@ -11,24 +11,30 @@
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
     script-src 'self' 'unsafe-inline' https://unpkg.com https://www.gstatic.com;
-    style-src 'self' 'unsafe-inline' https://unpkg.com;
+    style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com;
     img-src 'self' data: blob: https://unpkg.com https://server.arcgisonline.com;
     connect-src 'self' https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://0.peerjs.com wss://0.peerjs.com https://*.peerjs.com wss://*.peerjs.com https://server.arcgisonline.com stun: turn:;
-    font-src 'self' data:;
+    font-src 'self' data: https://fonts.gstatic.com;
     object-src 'none';
     base-uri 'self';
     form-action 'none';
     frame-ancestors 'none'">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.7.7</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.8.0</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="HOTSPOT">
-  <meta name="theme-color" content="#0A0A0D">
+  <meta name="theme-color" content="#06060A">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="manifest" href="manifest.json">
+
+  <!-- Type: Chakra Petch for the HUD voice, JetBrains Mono for telemetry.
+       Mono here is for measurement - distances, bearings, codes - not costume. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 
   <!-- Leaflet Map CSS + JS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -59,7 +65,7 @@
   </script>
 
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=2.7.7">
+  <link rel="stylesheet" href="style.css?v=2.8.0">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -92,7 +98,7 @@
 
     <!-- Environment / GPS Diagnostic Banner -->
     <div id="gps-warning-banner" class="warning-banner" onclick="window.hotspotApp.requestGpsPermissionDirectly()">
-      📍 Tap to Enable GPS Location Access (Required)
+      Tap to Enable GPS Location Access (Required)
     </div>
 
     <!-- Cloud Sync Failure Banner -->
@@ -100,54 +106,52 @@
 
     <!-- Top Navigation / Sound Bar -->
     <div class="top-bar">
-      <span class="accuracy-tag" style="font-size: 10px; color: var(--accent-cyan); font-weight: 700; cursor: pointer;" onclick="window.hotspotApp.requestGpsPermissionDirectly()">🎯 GPS: Searching...</span>
+      <span class="accuracy-tag" style="font-size: 10px; color: var(--accent-cyan); font-weight: 700; cursor: pointer;" onclick="window.hotspotApp.requestGpsPermissionDirectly()">GPS: Searching...</span>
       <div style="display: flex; gap: 6px;">
-        <button class="icon-btn" onclick="window.hotspotApp.toggleSound()" id="sound-btn">🔊 Voice</button>
-        <button class="icon-btn" onclick="window.hotspotApp.goHome()">🏠 Home</button>
+        <button class="icon-btn" onclick="window.hotspotApp.toggleSound()" id="sound-btn">Voice</button>
+        <button class="icon-btn" onclick="window.hotspotApp.goHome()">Home</button>
       </div>
     </div>
 
     <!-- ==================== SCREEN 1: HOME / MAIN MENU ==================== -->
     <div id="home-screen" class="screen active">
-      <div class="brand-header">
+      <div class="scope-head">
+        <div class="scope-rule"><span>THERMAL PURSUIT SYSTEM</span></div>
         <h1 class="brand-title">HOTSPOT</h1>
-        <div class="brand-subtitle">Extreme Yard Tag & Proximity Hunt</div>
-        <div style="display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap;">
-          <span style="font-size: 11px; background: rgba(0, 240, 255, 0.15); border: 1px solid var(--accent-cyan); color: var(--accent-cyan); padding: 2px 8px; border-radius: 12px; font-weight: 800; cursor: pointer;" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">v2.7.7</span>
-          <span id="cloud-sync-status" style="font-size: 11px; color: var(--text-muted); font-weight: 600; text-align: center; letter-spacing: 0.5px;">
-            🌐 hotspot-yardtag.web.app
-          </span>
+        <div class="scope-meta">
+          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 2.8.0</span>
+          <span id="cloud-sync-status" class="tele">STANDBY</span>
         </div>
       </div>
 
       <div class="card">
-        <div class="card-title">🚀 Solo Test Mode</div>
+        <div class="card-title">Solo Test Mode</div>
         <p class="solo-hint" style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; line-height: 1.3;">
           Plants a virtual hider ~300ft (~100yd) out. Test pulse rings, haptics & announcer instantly!
         </p>
         <button class="btn btn-solo" onclick="window.hotspotApp.startSoloDrill()">
-          🎯 Tap Solo Drill to Test
+          Tap Solo Drill to Test
         </button>
       </div>
 
       <div class="card">
-        <div class="card-title">⚔️ Multiplayer Hunt</div>
+        <div class="card-title">Multiplayer Hunt</div>
         <button class="btn btn-primary" onclick="window.hotspotApp.showScreen('host-setup-screen')">
-          👑 Host a Hunt
+          Host a Hunt
         </button>
         <button class="btn btn-secondary" onclick="window.hotspotApp.showScreen('join-screen')">
-          🏃 Join a Hunt
+          Join a Hunt
         </button>
         <button class="btn btn-secondary" style="margin-bottom: 0;" onclick="window.hotspotApp.showScreen('join-spectator-screen')">
-          👁️ Spectator View
+          Spectator View
         </button>
       </div>
 
       <div class="card" style="margin-bottom: 0;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <div class="card-title" style="margin-bottom: 0;">🏆 Season Records</div>
+          <div class="card-title" style="margin-bottom: 0;">Season Records</div>
           <button class="btn btn-secondary" style="width: auto; min-height: 46px; padding: 8px 14px; font-size: 11px; margin: 0; border-color: rgba(245,158,11,.45); color: var(--accent-amber);" onclick="window.hotspotApp.resetSeasonRecords()">
-            🔄 Reset Season
+            Reset Season
           </button>
         </div>
         <div class="stats-grid">
@@ -165,7 +169,7 @@
           </div>
         </div>
         <button id="pwa-install-btn" class="btn btn-secondary" style="margin-top: 10px; margin-bottom: 0; font-size: 12px; border-color: var(--accent-cyan); color: var(--accent-cyan);" onclick="window.showPwaInstallGuide()">
-          📲 Install App to Home Screen (Full Screen)
+          Install App to Home Screen (Full Screen)
         </button>
       </div>
     </div>
@@ -249,36 +253,36 @@
       <div style="display: flex; gap: 8px; margin-bottom: 8px;">
         <input type="text" id="lobby-nickname-input" class="text-input" style="flex: 1; padding: 10px 14px; font-size: 14px; margin-bottom: 0;" placeholder="Your name">
         <button class="btn btn-secondary" style="width: auto; padding: 10px 14px; font-size: 13px; margin-bottom: 0; border-color: var(--accent-cyan); color: var(--accent-cyan); font-weight: 800;" onclick="window.hotspotApp.updateLobbyNickname()">
-          ✏️ Save Name
+          Save Name
         </button>
       </div>
 
       <!-- Role Toggle Button -->
       <button class="btn btn-secondary" style="border-color: var(--accent-cyan);" onclick="window.hotspotApp.toggleRole()">
-        🔄 Switch Role (Hider ↔ Seeker)
+        Switch Role (Hider Seeker)
       </button>
 
       <div class="card" style="flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 12px;">
         <div>
           <div class="card-title" style="color: var(--accent-amber); font-size: 13px; font-weight: 900; letter-spacing: 1px; margin-bottom: 6px;">
-            👑 GAME HOST & HIDER
+            GAME HOST & HIDER
           </div>
           <div id="lobby-hider-list"></div>
         </div>
 
         <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
           <div class="card-title" style="color: var(--accent-cyan); font-size: 13px; font-weight: 900; letter-spacing: 1px; margin-bottom: 6px;">
-            🎯 SEEKER PACK
+            SEEKER PACK
           </div>
           <div id="lobby-seeker-list" class="player-list" style="flex: 1; overflow-y: auto;"></div>
         </div>
       </div>
 
       <button id="btn-start-round" class="btn btn-primary" onclick="window.hotspotApp.startHeadstart()">
-        ▶ Start Round
+        Start Round
       </button>
       <div id="lobby-wait-msg" style="display: none; text-align: center; padding: 12px; font-weight: 800; color: var(--accent-amber); font-size: 14px; background: rgba(245, 158, 11, 0.1); border-radius: 8px; border: 1px solid var(--accent-amber);">
-        ⏳ Waiting for Host (Hider) to Start Round...
+        Waiting for Host (Hider) to Start Round...
       </div>
     </div>
 
@@ -326,14 +330,14 @@
     <!-- ==================== SCREEN 6: SEEKER LIVE HUNT ==================== -->
     <div id="seeker-screen" class="screen">
       <div class="role-header-banner">
-        <div class="role-badge seeker-role-badge">🎯 YOU ARE THE SEEKER</div>
+        <div class="role-badge seeker-role-badge">YOU ARE THE SEEKER</div>
       </div>
       <div style="text-align: center; padding: 2px 0;">
         <div id="headstart-banner-seeker" class="headstart-counter" style="font-size: 14px; font-weight: 800; color: var(--accent-amber); letter-spacing: 1px;">
-          ⏳ HIDER IS HIDING: 60s
+          HIDER IS HIDING: 60s
         </div>
         <div id="match-timer-seeker" style="font-size: 13px; font-weight: 800; color: var(--accent-cyan); margin-top: 2px;">
-          ⏱️ MATCH TIME: 5:00
+          MATCH TIME: 5:00
         </div>
       </div>
 
@@ -354,18 +358,18 @@
 
       <!-- Solo Drill Indoor Test Controls -->
       <div id="solo-controls-card" class="card" style="display: none; margin-bottom: 8px;">
-        <div class="card-title">🧪 Solo Test Controls (Simulate Movement)</div>
+        <div class="card-title">Solo Test Controls (Simulate Movement)</div>
         <div style="display: flex; gap: 6px;">
-          <button class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(-75)">🚶 Walk -75ft</button>
-          <button class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(75)">🏃 Move +75ft</button>
-          <button class="btn btn-primary" style="flex: 1; font-size: 11px; padding: 8px; background: var(--danger-red);" onclick="window.hotspotApp.instantTagSoloHider()">🎯 Tag Hider</button>
+          <button class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(-75)">Walk -75ft</button>
+          <button class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(75)">Move +75ft</button>
+          <button class="btn btn-primary" style="flex: 1; font-size: 11px; padding: 8px; background: var(--danger-red);" onclick="window.hotspotApp.instantTagSoloHider()">Tag Hider</button>
         </div>
       </div>
 
       <div class="card" style="margin-bottom: 0;">
         <div class="card-title">Tactical Powerup</div>
         <button id="btn-bearing-ping" class="btn btn-secondary" style="margin-bottom: 0;" onclick="window.hotspotApp.usePowerup('bearing')">
-          📡 Bearing Ping (3s Live Arrow)
+          Bearing Ping (3s Live Arrow)
         </button>
       </div>
     </div>
@@ -373,13 +377,13 @@
     <!-- ==================== SCREEN 7: HIDER LIVE HUNT ==================== -->
     <div id="hider-screen" class="screen">
       <div class="role-header-banner">
-        <div class="role-badge hider-role-badge">👑 YOU ARE THE HIDER</div>
+        <div class="role-badge hider-role-badge">YOU ARE THE HIDER</div>
       </div>
       <div style="text-align: center;">
         <div class="brand-subtitle">HIDING TIME REMAINING</div>
         <div id="hider-timer-display" class="headstart-counter" style="font-size: 32px; font-weight: 900; color: var(--accent-amber);">60s</div>
         <div id="match-timer-hider" style="font-size: 14px; font-weight: 800; color: var(--accent-cyan); margin-top: 4px;">
-          ⏱️ MATCH TIME: 5:00
+          MATCH TIME: 5:00
         </div>
       </div>
 
@@ -388,7 +392,7 @@
 
       <!-- Hider Ready Early Button -->
       <button id="btn-hider-ready" class="btn btn-secondary" style="margin: 6px 0; border-color: var(--accent-cyan);" onclick="window.hotspotApp.hiderReadyEarly()">
-        ⚡ Ready Early (I'm Hidden)
+        Ready Early (I'm Hidden)
       </button>
 
       <div class="card hider-radar-box">
@@ -401,10 +405,10 @@
         <div class="card-title">Hider Powerups (1 Use)</div>
         <div class="powerup-grid">
           <button id="btn-powerup-decoy" class="btn-powerup" onclick="window.hotspotApp.usePowerup('decoy')">
-            🎭 Decoy (30s)
+            Decoy (30s)
           </button>
           <button id="btn-powerup-smoke" class="btn-powerup" onclick="window.hotspotApp.usePowerup('smoke')">
-            💨 Smoke (15s)
+            Smoke (15s)
           </button>
         </div>
       </div>
@@ -418,14 +422,14 @@
 
       <!-- Parent / Spectator Game Control Bar -->
       <button id="btn-spectator-start" class="btn btn-primary" style="margin-bottom: 8px; background: linear-gradient(135deg, var(--accent-amber), var(--primary-blaze)); font-weight: 900;" onclick="window.hotspotApp.startHeadstart()">
-        ▶ Start Round (Parent / Host Control)
+        Start Round (Parent / Host Control)
       </button>
 
       <div id="spectator-map"></div>
 
       <!-- Appears only once you pan/zoom; auto-follow pauses until you tap it -->
       <button class="btn btn-secondary map-recenter-btn" style="display: none; margin-bottom: 8px; border-color: var(--accent-cyan); color: var(--accent-cyan); padding: 8px; font-size: 12px;" onclick="window.hotspotReplay.recenterMap()">
-        🎯 Recenter on Players (resume auto-follow)
+        Recenter on Players (resume auto-follow)
       </button>
 
       <div class="card" style="margin-bottom: 0;">
@@ -445,7 +449,7 @@
 
       <!-- Appears only once you pan/zoom the replay map -->
       <button class="btn btn-secondary map-recenter-btn" style="display: none; margin-bottom: 8px; border-color: var(--accent-cyan); color: var(--accent-cyan); padding: 8px; font-size: 12px;" onclick="window.hotspotReplay.recenterMap()">
-        🎯 Recenter on Tracks
+        Recenter on Tracks
       </button>
 
       <div class="card" style="margin-bottom: 8px;">
@@ -453,16 +457,16 @@
         <input type="range" id="replay-slider" min="0" max="100" value="0" style="width: 100%; accent-color: var(--primary-blaze); margin-bottom: 8px;" oninput="window.hotspotReplay.stepReplay(this.value)">
         <div style="display: flex; gap: 6px;">
           <button class="btn btn-primary" style="flex: 1; padding: 10px; margin-bottom: 0;" onclick="window.hotspotReplay.playReplay((pct) => document.getElementById('replay-slider').value = pct)">
-            ▶ Play Tracks
+            Play Tracks
           </button>
           <button class="btn btn-secondary" style="flex: 1; padding: 10px; margin-bottom: 0;" onclick="window.hotspotReplay.pauseReplay()">
-            ⏸ Pause
+            Pause
           </button>
         </div>
       </div>
 
       <button id="btn-rematch" class="btn btn-primary" style="display: none;" onclick="window.hotspotApp.rematch()">
-        🔁 Rematch — Same Room, Rotated Roles
+        Rematch — Same Room, Rotated Roles
       </button>
 
       <button class="btn btn-secondary" style="margin-bottom: 0;" onclick="window.hotspotApp.goHome()">
@@ -527,14 +531,14 @@
         });
       } else {
         alert(
-          "📲 HOW TO INSTALL HOTSPOT APP TO YOUR HOME SCREEN:\n\n" +
+          "HOW TO INSTALL HOTSPOT APP TO YOUR HOME SCREEN:\n\n" +
           "• iPhone / iOS (Safari):\n" +
-          "  1. Tap the Share button (box with arrow ⎋) at the bottom.\n" +
-          "  2. Scroll down and tap 'Add to Home Screen' (➕).\n\n" +
+          "  1. Tap the Share button (box with arrow ) at the bottom.\n" +
+          "  2. Scroll down and tap 'Add to Home Screen' ().\n\n" +
           "• Android (Chrome):\n" +
           "  1. Tap the 3-dots menu (⋮) in top right.\n" +
           "  2. Tap 'Add to Home screen' or 'Install app'.\n\n" +
-          "✨ WHY INSTALL?\n" +
+          "WHY INSTALL?\n" +
           "Removes browser URL bars, runs full-screen, and prevents accidental page swipes while running!"
         );
       }
@@ -561,15 +565,15 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=2.7.7"></script>
-  <script src="geo.js?v=2.7.7"></script>
-  <script src="replay.js?v=2.7.7"></script>
-  <script src="app.js?v=2.7.7"></script>
+  <script src="audio.js?v=2.8.0"></script>
+  <script src="geo.js?v=2.8.0"></script>
+  <script src="replay.js?v=2.8.0"></script>
+  <script src="app.js?v=2.8.0"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=2.7.7').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=2.8.0').catch(() => {});
       });
     }
 

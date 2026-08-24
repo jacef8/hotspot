@@ -271,11 +271,14 @@ class HotspotGeo {
     const hotter = Math.max(tag + 15, 45);
 
     const BANDS = [
-      { band: 'COLD',   label: 'COLD',    color: '#64748B', pulseMs: 1600, min: 250 },
-      { band: 'WARM',   label: 'WARM',    color: '#06B6D4', pulseMs: 1100, min: 100 },
-      { band: 'HOT',    label: 'HOT',     color: '#F59E0B', pulseMs: 700,  min: hotter },
-      { band: 'HOTTER', label: 'HOTTER',  color: '#FF5500', pulseMs: 400,  min: tag },
-      { band: 'REDHOT', label: 'RED HOT', color: '#EF4444', pulseMs: 180,  min: -1 }
+      // Ironbow thermal ramp: cold iron through to white-hot. The band colour
+      // now means the same thing the band name does, instead of five unrelated
+      // accent colours.
+      { band: 'COLD',   label: 'COLD',    color: '#4C5BA8', pulseMs: 1600, min: 250 },
+      { band: 'WARM',   label: 'WARM',    color: '#9B3FA0', pulseMs: 1100, min: 100 },
+      { band: 'HOT',    label: 'HOT',     color: '#E0452A', pulseMs: 700,  min: hotter },
+      { band: 'HOTTER', label: 'HOTTER',  color: '#FF8A00', pulseMs: 400,  min: tag },
+      { band: 'REDHOT', label: 'RED HOT', color: '#FFE9A3', pulseMs: 180,  min: -1 }
     ];
 
     let idx = BANDS.findIndex(b => feet > b.min);
