@@ -19,22 +19,22 @@
     base-uri 'self';
     form-action 'none';
     frame-ancestors 'none'">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v2.8.0</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.0.0</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="HOTSPOT">
-  <meta name="theme-color" content="#06060A">
+  <meta name="theme-color" content="#080A0F">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="manifest" href="manifest.json">
 
-  <!-- Type: Chakra Petch for the HUD voice, JetBrains Mono for telemetry.
-       Mono here is for measurement - distances, bearings, codes - not costume. -->
+  <!-- Type: Outfit carries the display voice, Inter Tight the reading text,
+       JetBrains Mono only where a number is being measured. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@700;800&family=Inter+Tight:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
 
   <!-- Leaflet Map CSS + JS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -65,7 +65,7 @@
   </script>
 
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=2.8.0">
+  <link rel="stylesheet" href="style.css?v=3.0.0">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -102,11 +102,11 @@
     </div>
 
     <!-- Cloud Sync Failure Banner -->
-    <div id="sync-warning-banner" class="warning-banner" style="display: none; background: #B45309;"></div>
+    <div id="sync-warning-banner" class="warning-banner" style="display: none;"></div>
 
     <!-- Top Navigation / Sound Bar -->
     <div class="top-bar">
-      <span class="accuracy-tag" style="font-size: 10px; color: var(--accent-cyan); font-weight: 700; cursor: pointer;" onclick="window.hotspotApp.requestGpsPermissionDirectly()">GPS: Searching...</span>
+      <span class="accuracy-tag" onclick="window.hotspotApp.requestGpsPermissionDirectly()">GPS: Searching...</span>
       <div style="display: flex; gap: 6px;">
         <button class="icon-btn" onclick="window.hotspotApp.toggleSound()" id="sound-btn">Voice</button>
         <button class="icon-btn" onclick="window.hotspotApp.goHome()">Home</button>
@@ -119,31 +119,27 @@
         <div class="scope-rule"><span>THERMAL PURSUIT SYSTEM</span></div>
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="scope-meta">
-          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 2.8.0</span>
+          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.0.0</span>
           <span id="cloud-sync-status" class="tele">STANDBY</span>
         </div>
       </div>
 
       <div class="card">
-        <div class="card-title">Solo Test Mode</div>
-        <p class="solo-hint" style="font-size: 11px; color: var(--text-muted); margin-bottom: 8px; line-height: 1.3;">
-          Plants a virtual hider ~300ft (~100yd) out. Test pulse rings, haptics & announcer instantly!
-        </p>
-        <button class="btn btn-solo" onclick="window.hotspotApp.startSoloDrill()">
-          Tap Solo Drill to Test
-        </button>
-      </div>
-
-      <div class="card">
-        <div class="card-title">Multiplayer Hunt</div>
+        <div class="card-title">Start a hunt</div>
         <button class="btn btn-primary" onclick="window.hotspotApp.showScreen('host-setup-screen')">
           Host a Hunt
         </button>
-        <button class="btn btn-secondary" onclick="window.hotspotApp.showScreen('join-screen')">
-          Join a Hunt
-        </button>
-        <button class="btn btn-secondary" style="margin-bottom: 0;" onclick="window.hotspotApp.showScreen('join-spectator-screen')">
-          Spectator View
+        <div class="powerup-grid" style="margin-top: 9px;">
+          <button class="btn btn-secondary" style="margin: 0;" onclick="window.hotspotApp.showScreen('join-screen')">Join</button>
+          <button class="btn btn-secondary" style="margin: 0;" onclick="window.hotspotApp.showScreen('join-spectator-screen')">Spectate</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">Practice</div>
+        <p class="solo-hint">Plants a virtual hider 300ft out so you can feel the gauge, haptics and announcer without anyone else.</p>
+        <button class="btn btn-solo" onclick="window.hotspotApp.startSoloDrill()">
+          Run Solo Drill
         </button>
       </div>
 
@@ -156,16 +152,34 @@
         </div>
         <div class="stats-grid">
           <div class="stat-box">
+            <svg class="dial" viewBox="0 0 66 66" aria-hidden="true">
+              <circle cx="33" cy="33" r="26" fill="none" stroke="rgba(0,0,0,.7)" stroke-width="7"/>
+              <circle id="dial-1" cx="33" cy="33" r="26" fill="none" stroke="#7DD3FC" stroke-width="6"
+                      stroke-linecap="round" stroke-dasharray="0 164" transform="rotate(-90 33 33)"
+                      style="filter: drop-shadow(0 0 5px rgba(125,211,252,.85)); transition: stroke-dasharray .5s ease;"/>
+            </svg>
             <div class="stat-val" id="stat-total-hunts">0</div>
             <div class="stat-lbl">Hunts</div>
           </div>
           <div class="stat-box">
+            <svg class="dial" viewBox="0 0 66 66" aria-hidden="true">
+              <circle cx="33" cy="33" r="26" fill="none" stroke="rgba(0,0,0,.7)" stroke-width="7"/>
+              <circle id="dial-2" cx="33" cy="33" r="26" fill="none" stroke="#FFD166" stroke-width="6"
+                      stroke-linecap="round" stroke-dasharray="0 164" transform="rotate(-90 33 33)"
+                      style="filter: drop-shadow(0 0 5px rgba(255,209,102,.85)); transition: stroke-dasharray .5s ease;"/>
+            </svg>
             <div class="stat-val" id="stat-fastest-tag">--</div>
-            <div class="stat-lbl">Fastest Tag</div>
+            <div class="stat-lbl">Fastest</div>
           </div>
           <div class="stat-box">
+            <svg class="dial" viewBox="0 0 66 66" aria-hidden="true">
+              <circle cx="33" cy="33" r="26" fill="none" stroke="rgba(0,0,0,.7)" stroke-width="7"/>
+              <circle id="dial-3" cx="33" cy="33" r="26" fill="none" stroke="#FF6B3D" stroke-width="6"
+                      stroke-linecap="round" stroke-dasharray="0 164" transform="rotate(-90 33 33)"
+                      style="filter: drop-shadow(0 0 5px rgba(255,107,61,.85)); transition: stroke-dasharray .5s ease;"/>
+            </svg>
             <div class="stat-val" id="stat-longest-hide">0s</div>
-            <div class="stat-lbl">Longest Hide</div>
+            <div class="stat-lbl">Longest</div>
           </div>
         </div>
         <button id="pwa-install-btn" class="btn btn-secondary" style="margin-top: 10px; margin-bottom: 0; font-size: 12px; border-color: var(--accent-cyan); color: var(--accent-cyan);" onclick="window.showPwaInstallGuide()">
@@ -332,13 +346,9 @@
       <div class="role-header-banner">
         <div class="role-badge seeker-role-badge">YOU ARE THE SEEKER</div>
       </div>
-      <div style="text-align: center; padding: 2px 0;">
-        <div id="headstart-banner-seeker" class="headstart-counter" style="font-size: 14px; font-weight: 800; color: var(--accent-amber); letter-spacing: 1px;">
-          HIDER IS HIDING: 60s
-        </div>
-        <div id="match-timer-seeker" style="font-size: 13px; font-weight: 800; color: var(--accent-cyan); margin-top: 2px;">
-          MATCH TIME: 5:00
-        </div>
+      <div class="rail">
+        <div id="headstart-banner-seeker" class="rail-cell headstart-counter lit">HIDING 60s</div>
+        <div id="match-timer-seeker" class="rail-cell">MATCH 5:00</div>
       </div>
 
       <!-- Yard limit readout — seekers get the same boundary feedback as the hider -->
@@ -347,12 +357,44 @@
       <div class="seeker-radar-container">
         <!-- Pulse Ring -->
         <div id="seeker-pulse-ring" class="pulse-ring-outer">
-          <svg id="bearing-arrow" class="bearing-arrow" viewBox="0 0 24 24" fill="none" stroke="#00F0FF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <!-- The anchor. Arc fills as the seeker closes; the numeral is the
+               distance. 270-degree sweep, r=130 in a 340 box: circumference
+               817, full track 613. -->
+          <svg class="gauge-svg" viewBox="0 0 340 340" role="img"
+               aria-label="Distance to hider">
+            <defs>
+              <linearGradient id="heatgrad" x1="0" y1="1" x2="1" y2="0">
+                <stop id="hg0" offset="0%"   stop-color="#7DD3FC"/>
+                <stop id="hg1" offset="60%"  stop-color="#7DD3FC"/>
+                <stop id="hg2" offset="100%" stop-color="#E8F7FF"/>
+              </linearGradient>
+              <filter id="heatglow" x="-60%" y="-60%" width="220%" height="220%">
+                <feGaussianBlur stdDeviation="9" result="b"/>
+                <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+              </filter>
+            </defs>
+            <circle class="gauge-tickring" cx="170" cy="170" r="163" fill="none"
+                    stroke="rgba(255,255,255,.16)" stroke-width="1" stroke-dasharray="1.5 13"/>
+            <circle cx="170" cy="170" r="130" fill="none" stroke="rgba(0,0,0,.72)"
+                    stroke-width="26" stroke-linecap="round"
+                    stroke-dasharray="613 817" transform="rotate(135 170 170)"/>
+            <circle id="gauge-arc" cx="170" cy="170" r="130" fill="none"
+                    stroke="url(#heatgrad)" stroke-width="22" stroke-linecap="round"
+                    stroke-dasharray="0 817" transform="rotate(135 170 170)"
+                    filter="url(#heatglow)"
+                    style="transition: stroke-dasharray .45s cubic-bezier(.2,.8,.2,1);"/>
+          </svg>
+
+          <svg id="bearing-arrow" class="bearing-arrow" viewBox="0 0 24 24" fill="none"
+               stroke="#7DD3FC" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
             <polygon points="12 2 19 21 12 17 5 21 12 2"></polygon>
           </svg>
-          <div id="seeker-band-label" class="seeker-band-label">STAND BY</div>
-          <div id="bearing-note" style="display: none; position: absolute; bottom: -34px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 10px; font-weight: 700; letter-spacing: .3px;"></div>
-          <div id="seeker-dist-readout"></div>
+
+          <div class="gauge-center">
+            <div id="seeker-band-label" class="seeker-band-label">STAND BY</div>
+            <div id="seeker-dist-readout"></div>
+          </div>
+          <div id="bearing-note"></div>
         </div>
       </div>
 
@@ -565,15 +607,15 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=2.8.0"></script>
-  <script src="geo.js?v=2.8.0"></script>
-  <script src="replay.js?v=2.8.0"></script>
-  <script src="app.js?v=2.8.0"></script>
+  <script src="audio.js?v=3.0.0"></script>
+  <script src="geo.js?v=3.0.0"></script>
+  <script src="replay.js?v=3.0.0"></script>
+  <script src="app.js?v=3.0.0"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=2.8.0').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=3.0.0').catch(() => {});
       });
     }
 

@@ -1115,7 +1115,7 @@ class HotspotApp {
        </div>`;
 
     el.innerHTML =
-      row('app version', 'v2.8.0') +
+      row('app version', 'v3.0.0') +
       (() => {
         // Straight from the stylesheet. If this disagrees with the app version
         // above, the phone is running cached CSS - provable, not a guess.
@@ -1124,7 +1124,7 @@ class HotspotApp {
           css = (getComputedStyle(document.documentElement)
             .getPropertyValue('--css-version') || '').replace(/["']/g, '').trim() || 'missing';
         } catch (e) {}
-        return row('stylesheet', css, css !== '2.8.0');
+        return row('stylesheet', css, css !== '3.0.0');
       })() +
       row('room', this.roomCode || '(none)', !this.roomCode) +
       row('am I host', this.isRoomHost ? 'yes' : 'no') +
@@ -1349,7 +1349,7 @@ class HotspotApp {
       this.gameStartTime = Date.now();
       if (this.headStartTimer) clearInterval(this.headStartTimer);
 
-      document.querySelectorAll('.headstart-counter').forEach(el => el.innerText = 'HUNT IS LIVE!');
+      document.querySelectorAll('.headstart-counter').forEach(el => el.innerText = 'HUNT LIVE');
       const hiderCounter = document.getElementById('hider-timer-display');
       if (hiderCounter) hiderCounter.innerText = 'LIVE!';
 
@@ -1575,6 +1575,39 @@ class HotspotApp {
 
   // Neutral radar: no band, no distance, no colour cue. Used while the hider
   // is still hiding, so nothing about their whereabouts is on screen yet.
+  // ---- the anchor gauge -------------------------------------------------
+  // 270-degree sweep, r=130 in a 340 box. Circumference 817, full track 613.
+  // Fill grows as the seeker closes, so the instrument reads at a glance from
+  // arm's length in the dark without reading a single word.
+  setGauge(distFeet, color) {
+    const arc = document.getElementById('gauge-arc');
+    if (!arc) return;
+
+    let pct = 0;
+    if (typeof distFeet === 'number' && isFinite(distFeet)) {
+      pct = Math.max(0, Math.min(1, 1 - (distFeet / 300)));
+    }
+    arc.setAttribute('stroke-dasharray', (613 * pct).toFixed(1) + ' 817');
+
+    // Drive the gradient stops so the arc itself heats up.
+    const g1 = document.getElementById('hg1');
+    const g2 = document.getElementById('hg2');
+    if (color && g1 && g2) {
+      const hi = { '#4C5BA8': '#9EC5FF', '#5B6BC0': '#9EC5FF' }[color] || color;
+      document.getElementById('hg0').setAttribute('stop-color', color);
+      g1.setAttribute('stop-color', color);
+      g2.setAttribute('stop-color', hi === color ? '#FFFFFF' : hi);
+    }
+  }
+
+  // Season dials: r=26, circumference 163. Every number gets a visual cue.
+  setDial(id, pct, ) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const v = Math.max(0, Math.min(1, pct || 0));
+    el.setAttribute('stroke-dasharray', (163 * v).toFixed(1) + ' 164');
+  }
+
   blankSeekerRadar() {
     this.currentBand = null;
     this.currentDistance = null;
@@ -1585,12 +1618,7 @@ class HotspotApp {
     const distEl = document.getElementById('seeker-dist-readout');
     if (distEl) distEl.innerHTML = '';
 
-    const pulseRing = document.getElementById('seeker-pulse-ring');
-    if (pulseRing) {
-      pulseRing.style.borderColor = '#4C5BA8';
-      pulseRing.style.boxShadow = 'none';
-      pulseRing.style.animationDuration = '2200ms';
-    }
+    this.setGauge(null, '#7DD3FC');
 
     // Let the first real band of the round announce itself.
     if (window.hotspotAudio) {
@@ -1678,11 +1706,7 @@ class HotspotApp {
             ? `<span class="dist-sub">last fix ${Math.round(hiderFixAgeMs / 1000)}s ago</span>`
             : '<span class="dist-sub">waiting for hider…</span>';
         }
-        if (pulseRing) {
-          pulseRing.style.borderColor = '#4C5BA8';
-          pulseRing.style.boxShadow = 'none';
-          pulseRing.style.animationDuration = '2200ms';
-        }
+        this.setGauge(null, '#7DD3FC');
         this.currentBand = null;
         return;
       }
@@ -1716,20 +1740,16 @@ class HotspotApp {
       // Show the actual number and its uncertainty so "close" is interpretable.
       const distEl = document.getElementById('seeker-dist-readout');
       if (distEl && !this.powerups.smokeActive) {
-        const shown = distFeet > 300
-          ? `${Math.round(distFeet / 3)} yd`
-          : `${Math.round(distFeet)} ft`;
+        const far = distFeet > 300;
+        const value = far ? Math.round(distFeet / 3) : Math.round(distFeet);
+        const unit = far ? 'yards' : 'feet';
         distEl.innerHTML =
-          `<span class="dist-main">${shown}</span>` +
-          `<span class="dist-sub">±${marginFeet} ft</span>` +
-          (bandInfo.capped ? '<span class="dist-warn">WEAK GPS</span>' : '');
+          `<span class="dist-main">${value}</span>` +
+          `<span class="dist-sub">${unit} &middot; \u00b1${marginFeet}</span>` +
+          (bandInfo.capped ? '<span class="dist-warn">WEAK GPS FIX</span>' : '');
       }
 
-      if (pulseRing) {
-        pulseRing.style.borderColor = bandInfo.color;
-        pulseRing.style.boxShadow = `0 0 40px ${bandInfo.color}`;
-        pulseRing.style.animationDuration = `${bandInfo.pulseMs}ms`;
-      }
+      this.setGauge(distFeet, bandInfo.color);
 
       const now = Date.now();
       if (!this.lastPulseTime || now - this.lastPulseTime >= bandInfo.pulseMs) {
@@ -2101,6 +2121,13 @@ class HotspotApp {
       if (elHunts) elHunts.innerText = stats.totalHunts;
       if (elFastest) elFastest.innerText = stats.fastestTagSec === 9999 ? '--' : `${stats.fastestTagSec}s`;
       if (elLongest) elLongest.innerText = `${stats.longestHideSec}s`;
+
+      // Give each number a ring. Scales chosen so a normal season reads mid-arc
+      // rather than pinned: 20 hunts, a 20s tag, a 5 minute hide.
+      this.setDial('dial-1', stats.totalHunts / 20);
+      this.setDial('dial-2', stats.fastestTagSec === 9999 ? 0
+        : 1 - Math.min(1, stats.fastestTagSec / 120));
+      this.setDial('dial-3', stats.longestHideSec / 300);
     } catch (e) {}
   }
 }
