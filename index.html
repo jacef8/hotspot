@@ -19,7 +19,7 @@
     base-uri 'self';
     form-action 'none';
     frame-ancestors 'none'">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.0.0</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.0.3</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -65,7 +65,7 @@
   </script>
 
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=3.0.0">
+  <link rel="stylesheet" href="style.css?v=3.0.3">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -119,7 +119,7 @@
         <div class="scope-rule"><span>THERMAL PURSUIT SYSTEM</span></div>
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="scope-meta">
-          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.0.0</span>
+          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.0.3</span>
           <span id="cloud-sync-status" class="tele">STANDBY</span>
         </div>
       </div>
@@ -146,7 +146,7 @@
       <div class="card" style="margin-bottom: 0;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
           <div class="card-title" style="margin-bottom: 0;">Season Records</div>
-          <button class="btn btn-secondary" style="width: auto; min-height: 46px; padding: 8px 14px; font-size: 11px; margin: 0; border-color: rgba(245,158,11,.45); color: var(--accent-amber);" onclick="window.hotspotApp.resetSeasonRecords()">
+          <button class="btn btn-secondary" style="width: auto; min-height: 46px; padding: 8px 14px; font-size: 11px; margin: 0; border-color: rgba(245,158,11,.45); color: var(--warn);" onclick="window.hotspotApp.resetSeasonRecords()">
             Reset Season
           </button>
         </div>
@@ -182,7 +182,7 @@
             <div class="stat-lbl">Longest</div>
           </div>
         </div>
-        <button id="pwa-install-btn" class="btn btn-secondary" style="margin-top: 10px; margin-bottom: 0; font-size: 12px; border-color: var(--accent-cyan); color: var(--accent-cyan);" onclick="window.showPwaInstallGuide()">
+        <button id="pwa-install-btn" class="btn btn-secondary" style="margin-top: 10px; margin-bottom: 0; font-size: 12px; border-color: var(--accent); color: var(--accent);" onclick="window.showPwaInstallGuide()">
           Install App to Home Screen (Full Screen)
         </button>
       </div>
@@ -266,26 +266,26 @@
       <!-- Quick Nickname Editor Bar -->
       <div style="display: flex; gap: 8px; margin-bottom: 8px;">
         <input type="text" id="lobby-nickname-input" class="text-input" style="flex: 1; padding: 10px 14px; font-size: 14px; margin-bottom: 0;" placeholder="Your name">
-        <button class="btn btn-secondary" style="width: auto; padding: 10px 14px; font-size: 13px; margin-bottom: 0; border-color: var(--accent-cyan); color: var(--accent-cyan); font-weight: 800;" onclick="window.hotspotApp.updateLobbyNickname()">
+        <button class="btn btn-secondary" style="width: auto; padding: 10px 14px; font-size: 13px; margin-bottom: 0; border-color: var(--accent); color: var(--accent); font-weight: 800;" onclick="window.hotspotApp.updateLobbyNickname()">
           Save Name
         </button>
       </div>
 
       <!-- Role Toggle Button -->
-      <button class="btn btn-secondary" style="border-color: var(--accent-cyan);" onclick="window.hotspotApp.toggleRole()">
+      <button class="btn btn-secondary" style="border-color: var(--accent);" onclick="window.hotspotApp.toggleRole()">
         Switch Role (Hider Seeker)
       </button>
 
       <div class="card" style="flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 12px;">
         <div>
-          <div class="card-title" style="color: var(--accent-amber); font-size: 13px; font-weight: 900; letter-spacing: 1px; margin-bottom: 6px;">
+          <div class="card-title" style="color: var(--warn); font-size: 13px; font-weight: 900; letter-spacing: 1px; margin-bottom: 6px;">
             GAME HOST & HIDER
           </div>
           <div id="lobby-hider-list"></div>
         </div>
 
         <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
-          <div class="card-title" style="color: var(--accent-cyan); font-size: 13px; font-weight: 900; letter-spacing: 1px; margin-bottom: 6px;">
+          <div class="card-title" style="color: var(--accent); font-size: 13px; font-weight: 900; letter-spacing: 1px; margin-bottom: 6px;">
             SEEKER PACK
           </div>
           <div id="lobby-seeker-list" class="player-list" style="flex: 1; overflow-y: auto;"></div>
@@ -295,7 +295,7 @@
       <button id="btn-start-round" class="btn btn-primary" onclick="window.hotspotApp.startHeadstart()">
         Start Round
       </button>
-      <div id="lobby-wait-msg" style="display: none; text-align: center; padding: 12px; font-weight: 800; color: var(--accent-amber); font-size: 14px; background: rgba(245, 158, 11, 0.1); border-radius: 8px; border: 1px solid var(--accent-amber);">
+      <div id="lobby-wait-msg" style="display: none; text-align: center; padding: 12px; font-weight: 800; color: var(--warn); font-size: 14px; background: rgba(245, 158, 11, 0.1); border-radius: 8px; border: 1px solid var(--warn);">
         Waiting for Host (Hider) to Start Round...
       </div>
     </div>
@@ -404,7 +404,7 @@
         <div style="display: flex; gap: 6px;">
           <button class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(-75)">Walk -75ft</button>
           <button class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(75)">Move +75ft</button>
-          <button class="btn btn-primary" style="flex: 1; font-size: 11px; padding: 8px; background: var(--danger-red);" onclick="window.hotspotApp.instantTagSoloHider()">Tag Hider</button>
+          <button class="btn btn-primary" style="flex: 1; font-size: 11px; padding: 8px; background: var(--bad);" onclick="window.hotspotApp.instantTagSoloHider()">Tag Hider</button>
         </div>
       </div>
 
@@ -423,8 +423,8 @@
       </div>
       <div style="text-align: center;">
         <div class="brand-subtitle">HIDING TIME REMAINING</div>
-        <div id="hider-timer-display" class="headstart-counter" style="font-size: 32px; font-weight: 900; color: var(--accent-amber);">60s</div>
-        <div id="match-timer-hider" style="font-size: 14px; font-weight: 800; color: var(--accent-cyan); margin-top: 4px;">
+        <div id="hider-timer-display" class="headstart-counter" style="font-size: 32px; font-weight: 900; color: var(--warn);">60s</div>
+        <div id="match-timer-hider" style="font-size: 14px; font-weight: 800; color: var(--accent); margin-top: 4px;">
           MATCH TIME: 5:00
         </div>
       </div>
@@ -433,14 +433,14 @@
       <div id="hider-boundary-alert" style="display: none; padding: 8px 12px; border-radius: 8px; font-size: 12px; font-weight: 800; text-align: center; margin: 4px 0; color: #FFF; animation: pulse-ring 1s infinite;"></div>
 
       <!-- Hider Ready Early Button -->
-      <button id="btn-hider-ready" class="btn btn-secondary" style="margin: 6px 0; border-color: var(--accent-cyan);" onclick="window.hotspotApp.hiderReadyEarly()">
+      <button id="btn-hider-ready" class="btn btn-secondary" style="margin: 6px 0; border-color: var(--accent);" onclick="window.hotspotApp.hiderReadyEarly()">
         Ready Early (I'm Hidden)
       </button>
 
       <div class="card hider-radar-box">
         <div class="card-title">Nearest Seeker Distance</div>
         <div id="hider-nearest-dist" class="hider-dist-num">--ft</div>
-        <div style="font-size: 11px; color: var(--text-muted);">Silent Proximity Radar</div>
+        <div style="font-size: 11px; color: var(--ink-3);">Silent Proximity Radar</div>
       </div>
 
       <div class="card" style="margin-bottom: 0;">
@@ -463,14 +463,14 @@
       </div>
 
       <!-- Parent / Spectator Game Control Bar -->
-      <button id="btn-spectator-start" class="btn btn-primary" style="margin-bottom: 8px; background: linear-gradient(135deg, var(--accent-amber), var(--primary-blaze)); font-weight: 900;" onclick="window.hotspotApp.startHeadstart()">
+      <button id="btn-spectator-start" class="btn btn-primary" style="margin-bottom: 8px; background: linear-gradient(135deg, var(--warn), var(--heat-2)); font-weight: 900;" onclick="window.hotspotApp.startHeadstart()">
         Start Round (Parent / Host Control)
       </button>
 
       <div id="spectator-map"></div>
 
       <!-- Appears only once you pan/zoom; auto-follow pauses until you tap it -->
-      <button class="btn btn-secondary map-recenter-btn" style="display: none; margin-bottom: 8px; border-color: var(--accent-cyan); color: var(--accent-cyan); padding: 8px; font-size: 12px;" onclick="window.hotspotReplay.recenterMap()">
+      <button class="btn btn-secondary map-recenter-btn" style="display: none; margin-bottom: 8px; border-color: var(--accent); color: var(--accent); padding: 8px; font-size: 12px;" onclick="window.hotspotReplay.recenterMap()">
         Recenter on Players (resume auto-follow)
       </button>
 
@@ -483,20 +483,20 @@
     <!-- ==================== SCREEN 9: POST-GAME REPLAY ==================== -->
     <div id="replay-screen" class="screen">
       <div class="brand-header" style="margin-bottom: 6px;">
-        <h2 id="replay-headline" class="brand-title" style="font-size: 24px; color: var(--primary-blaze);">ROUND OVER</h2>
+        <h2 id="replay-headline" class="brand-title" style="font-size: 24px; color: var(--heat-2);">ROUND OVER</h2>
         <div id="replay-subhead" class="brand-subtitle">Post-Match Track Replay</div>
       </div>
 
       <div id="replay-map"></div>
 
       <!-- Appears only once you pan/zoom the replay map -->
-      <button class="btn btn-secondary map-recenter-btn" style="display: none; margin-bottom: 8px; border-color: var(--accent-cyan); color: var(--accent-cyan); padding: 8px; font-size: 12px;" onclick="window.hotspotReplay.recenterMap()">
+      <button class="btn btn-secondary map-recenter-btn" style="display: none; margin-bottom: 8px; border-color: var(--accent); color: var(--accent); padding: 8px; font-size: 12px;" onclick="window.hotspotReplay.recenterMap()">
         Recenter on Tracks
       </button>
 
       <div class="card" style="margin-bottom: 8px;">
         <div class="card-title">Replay Timeline Scrubber</div>
-        <input type="range" id="replay-slider" min="0" max="100" value="0" style="width: 100%; accent-color: var(--primary-blaze); margin-bottom: 8px;" oninput="window.hotspotReplay.stepReplay(this.value)">
+        <input type="range" id="replay-slider" min="0" max="100" value="0" style="width: 100%; accent-color: var(--heat-2); margin-bottom: 8px;" oninput="window.hotspotReplay.stepReplay(this.value)">
         <div style="display: flex; gap: 6px;">
           <button class="btn btn-primary" style="flex: 1; padding: 10px; margin-bottom: 0;" onclick="window.hotspotReplay.playReplay((pct) => document.getElementById('replay-slider').value = pct)">
             Play Tracks
@@ -607,15 +607,15 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=3.0.0"></script>
-  <script src="geo.js?v=3.0.0"></script>
-  <script src="replay.js?v=3.0.0"></script>
-  <script src="app.js?v=3.0.0"></script>
+  <script src="audio.js?v=3.0.3"></script>
+  <script src="geo.js?v=3.0.3"></script>
+  <script src="replay.js?v=3.0.3"></script>
+  <script src="app.js?v=3.0.3"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=3.0.0').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=3.0.3').catch(() => {});
       });
     }
 

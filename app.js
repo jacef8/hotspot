@@ -1115,7 +1115,7 @@ class HotspotApp {
        </div>`;
 
     el.innerHTML =
-      row('app version', 'v3.0.0') +
+      row('app version', 'v3.0.3') +
       (() => {
         // Straight from the stylesheet. If this disagrees with the app version
         // above, the phone is running cached CSS - provable, not a guess.
@@ -1124,7 +1124,7 @@ class HotspotApp {
           css = (getComputedStyle(document.documentElement)
             .getPropertyValue('--css-version') || '').replace(/["']/g, '').trim() || 'missing';
         } catch (e) {}
-        return row('stylesheet', css, css !== '3.0.0');
+        return row('stylesheet', css, css !== '3.0.3');
       })() +
       row('room', this.roomCode || '(none)', !this.roomCode) +
       row('am I host', this.isRoomHost ? 'yes' : 'no') +
@@ -1384,11 +1384,11 @@ class HotspotApp {
       if (headline) {
         if (this.tagEvent && this.tagEvent.seekerName) {
           headline.innerText = 'TAGGED!';
-          headline.style.color = 'var(--primary-blaze)';
+          headline.style.color = 'var(--heat-2)';
           if (subhead) subhead.innerText = `${this.tagEvent.seekerName} caught ${this.tagEvent.hiderName}`;
         } else {
           headline.innerText = 'HIDER SURVIVED!';
-          headline.style.color = 'var(--accent-cyan)';
+          headline.style.color = 'var(--accent)';
           if (subhead) subhead.innerText = 'Time expired — nobody was caught';
         }
       }
@@ -1784,7 +1784,7 @@ class HotspotApp {
             note.innerText = usable
               ? 'Arrow points at the hider — hold the phone flat'
               : 'No compass — arrow is relative to NORTH';
-            note.style.color = usable ? 'var(--accent-cyan)' : 'var(--accent-amber)';
+            note.style.color = usable ? 'var(--accent)' : 'var(--warn)';
           }
         }
       }

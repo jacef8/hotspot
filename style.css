@@ -22,7 +22,7 @@
    ========================================================================== */
 
 :root {
-  --css-version: "3.0.0";
+  --css-version: "3.0.3";
   color-scheme: dark;
 
   /* Elevation ladder — lighter is closer */
@@ -34,8 +34,8 @@
   --recess: #05070B;                /* engraved, below canvas */
 
   --ink: #FFFFFF;
-  --ink-2: rgba(255, 255, 255, .74);
-  --ink-3: rgba(255, 255, 255, .48);
+  --ink-2: rgba(255, 255, 255, .82);
+  --ink-3: rgba(255, 255, 255, .64);
 
   /* Chrome: cold */
   --accent: #7DD3FC;
@@ -65,6 +65,19 @@
   --well-sh:
     inset 0 3px 8px rgba(0, 0, 0, .9),
     inset 0 -1px 0 rgba(255, 255, 255, .05);
+
+  /* Legacy aliases. The token layer was renamed but markup still referenced
+     the old names; an undefined var() on `color` resolves to an invalid value,
+     which is how text ended up dark on a dark background. */
+  --text-main: var(--ink);
+  --text-light: var(--ink);
+  --text-muted: var(--ink-3);
+  --accent-cyan: var(--accent);
+  --accent-amber: var(--warn);
+  --primary-blaze: var(--heat-2);
+  --danger-red: var(--bad);
+  --card-bg: var(--e1);
+  --slate-cold: var(--ink-3);
 
   --font-display: 'Outfit', system-ui, sans-serif;
   --font-text: 'Inter Tight', system-ui, sans-serif;
@@ -214,7 +227,7 @@ html, body {
   font-family: var(--font-mono);
   font-size: 9px; font-weight: 700; letter-spacing: .14em;
   text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--ink-2);
   padding: 6px 12px;
   border-radius: 999px;
   background: var(--recess);
@@ -241,11 +254,11 @@ html, body {
   font-family: var(--font-mono);
   font-size: 9.5px; font-weight: 700;
   letter-spacing: .19em; text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--ink-2);
   margin-bottom: 10px;
 }
 
-.solo-hint { font-size: 11px; color: var(--ink-3); line-height: 1.35; margin-bottom: 10px; }
+.solo-hint { font-size: 11.5px; color: var(--ink-2); line-height: 1.35; margin-bottom: 10px; }
 
 /* ---------------------------------------------------------------- controls */
 .btn {
@@ -310,7 +323,7 @@ html, body {
   font-family: var(--font-mono);
   font-size: 9.5px; font-weight: 700;
   letter-spacing: .19em; text-transform: uppercase;
-  color: var(--ink-3);
+  color: var(--ink-2);
   margin-bottom: 6px;
 }
 
@@ -371,7 +384,7 @@ html, body {
   color: var(--ink-3);
 }
 .badge-you { margin-left: 8px; }
-.player-badge.hider .badge-role { color: var(--heat-2); }
+.player-badge.hider .badge-role { color: #FF8F6B; }
 .player-badge.seeker .badge-role { color: var(--accent); }
 
 .roster-empty {
