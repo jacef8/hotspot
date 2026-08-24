@@ -19,7 +19,7 @@
     base-uri 'self';
     form-action 'none';
     frame-ancestors 'none'">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.0.3</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.1.0</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -27,7 +27,9 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="HOTSPOT">
   <meta name="theme-color" content="#080A0F">
-  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon-180.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="manifest" href="manifest.json">
 
   <!-- Type: Outfit carries the display voice, Inter Tight the reading text,
@@ -65,7 +67,7 @@
   </script>
 
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=3.0.3">
+  <link rel="stylesheet" href="style.css?v=3.1.0">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -119,7 +121,7 @@
         <div class="scope-rule"><span>THERMAL PURSUIT SYSTEM</span></div>
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="scope-meta">
-          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.0.3</span>
+          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.1.0</span>
           <span id="cloud-sync-status" class="tele">STANDBY</span>
         </div>
       </div>
@@ -607,15 +609,15 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=3.0.3"></script>
-  <script src="geo.js?v=3.0.3"></script>
-  <script src="replay.js?v=3.0.3"></script>
-  <script src="app.js?v=3.0.3"></script>
+  <script src="audio.js?v=3.1.0"></script>
+  <script src="geo.js?v=3.1.0"></script>
+  <script src="replay.js?v=3.1.0"></script>
+  <script src="app.js?v=3.1.0"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=3.0.3').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=3.1.0').catch(() => {});
       });
     }
 

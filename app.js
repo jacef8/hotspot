@@ -1115,7 +1115,7 @@ class HotspotApp {
        </div>`;
 
     el.innerHTML =
-      row('app version', 'v3.0.3') +
+      row('app version', 'v3.1.0') +
       (() => {
         // Straight from the stylesheet. If this disagrees with the app version
         // above, the phone is running cached CSS - provable, not a guess.
@@ -1124,7 +1124,7 @@ class HotspotApp {
           css = (getComputedStyle(document.documentElement)
             .getPropertyValue('--css-version') || '').replace(/["']/g, '').trim() || 'missing';
         } catch (e) {}
-        return row('stylesheet', css, css !== '3.0.3');
+        return row('stylesheet', css, css !== '3.1.0');
       })() +
       row('room', this.roomCode || '(none)', !this.roomCode) +
       row('am I host', this.isRoomHost ? 'yes' : 'no') +

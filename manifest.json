@@ -1,25 +1,37 @@
 {
-  "name": "HOTSPOT — Proximity Tag & Hunt",
+  "name": "HOTSPOT \u2014 Proximity Tag & Hunt",
   "short_name": "HOTSPOT",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#080C14",
-  "theme_color": "#080C14",
+  "background_color": "#080A0F",
+  "theme_color": "#080A0F",
   "description": "Extreme yard tag and real-world proximity manhunt web app.",
   "icons": [
     {
       "src": "icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
