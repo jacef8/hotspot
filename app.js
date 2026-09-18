@@ -28,7 +28,27 @@ class HotspotApp {
     // Whoever created the room owns the well-known peer id for it. Deliberately
     // NOT tied to hider/seeker, so role swaps and rematches cannot break the mesh.
     this.isRoomHost = false;
-    this.playerId = 'player_' + Math.random().toString(36).substr(2, 6);
+    // A reload or a killed tab used to mint a brand-new id, which left the old
+    // roster entry behind as a ghost twin and dropped the player out of the
+    // round. Reuse the id from a recent session so the same node is simply
+    // taken over again.
+    this.session = this.loadSession();
+    this.playerId = (this.session && this.session.playerId) || ('player_' + Math.random().toString(36).substr(2, 6));
+
+    // Liveness of the two people the room depends on, independent of the roster
+    // (which forgets anyone silent for 15s, long before a "lost" verdict).
+    this.hostSeenAt = 0;
+    this.hiderLastSeenAt = 0;
+    this.hiderSilentMs = 0;
+    this.hiderWarnSpoken = false;
+    // Firebase server clock minus this phone's clock. Every shared timestamp is
+    // expressed in server time, so a phone whose clock is off does not run its
+    // countdown early or late.
+    this.serverOffset = 0;
+    this.serverOffsetKnown = false;
+    this.activeSinceServer = null;
+    this.headStartStartTime = 0;
+    this.lastCloudPosPush = 0;
     // Asked for on the host screen, the join screen AND in the lobby — three
     // inputs for one value. Remember it so it is typed once, ever.
     this.playerName = this.loadSavedName() || ('Runner_' + Math.floor(Math.random() * 899 + 100));
@@ -108,6 +128,63 @@ class HotspotApp {
       ['hotspot_room', 'hotspot_session', 'hotspot_players', 'hotspot_state']
         .forEach(k => { localStorage.removeItem(k); sessionStorage.removeItem(k); });
     } catch(e) {}
+  }
+
+  // --- SESSION RESUME ---
+  // Phone browsers discard background tabs and reload them. The app used to wipe
+  // every trace of the room at boot, so a reload dropped the player back at the
+  // home screen and re-entering the code landed them in the lobby while the
+  // hunt carried on without them. The room, role and id are kept for a few
+  // minutes so a reload puts the player straight back where they were.
+  loadSession() {
+    try {
+      const s = JSON.parse(localStorage.getItem('hotspot_resume') || 'null');
+      if (!s || !s.room || !s.playerId) return null;
+      if (Date.now() - (s.ts || 0) > 10 * 60 * 1000) return null;
+      return s;
+    } catch (e) { return null; }
+  }
+
+  saveSession() {
+    if (!this.roomCode || this.isSoloDrill) return;
+    try {
+      localStorage.setItem('hotspot_resume', JSON.stringify({
+        room: this.roomCode,
+        playerId: this.playerId,
+        role: this.role,
+        host: !!this.isRoomHost,
+        opts: {
+          hs: this.headStartSeconds,
+          boundary: this.boundaryRadius,
+          md: this.matchDurationSeconds,
+          tag: this.tagRadiusFeet,
+          mode: this.gameMode
+        },
+        ts: Date.now()
+      }));
+    } catch (e) {}
+  }
+
+  clearSession() {
+    try { localStorage.removeItem('hotspot_resume'); } catch (e) {}
+  }
+
+  tryResume() {
+    const s = this.session;
+    this.session = null;
+    if (!s || this.roomCode) return;
+    const o = s.opts || {};
+    if (s.host) {
+      this.createRoom(o.hs, o.mode, o.boundary, o.md, o.tag, s.room, s.role);
+    } else {
+      this.joinRoom(s.room, null, s.role || 'seeker', true);
+    }
+  }
+
+  // Firebase's server clock, in this phone's terms. Falls back to the local
+  // clock until the database has reported an offset.
+  serverNow() {
+    return Date.now() + (this.serverOffset || 0);
   }
 
 
@@ -190,6 +267,8 @@ class HotspotApp {
       if (!this.isRoomHost) this.ensureHostConnection();
       this.sendHeartbeat();
       this.refreshTransportStatus();
+      this.saveSession();
+      this.watchdog();
     }, 3000);
 
     this.sendHeartbeat();
@@ -303,11 +382,17 @@ class HotspotApp {
       const onPlayer = (snap) => {
         const p = snap.val();
         if (!p || !p.id || p.id === this.playerId) return;
+        // A node left behind by a phone that died is not a live player. Its
+        // server timestamp says how long ago it was written, so anything
+        // silent for 20s+ is ignored instead of being shown as present for
+        // another 15s and, worse, mistaken for a live hider or host.
+        if (this.serverOffsetKnown && p.ts && this.serverNow() - p.ts > 20000) return;
         this.lastCloudMessageAt = Date.now();
         this.handleCloudMessage({
           type: 'HEARTBEAT',
           senderId: p.id,
           peerId: p.peerId || null,
+          round: p.round || null,
           player: p,
           headStartSeconds: p.headStartSeconds,
           boundaryRadius: p.boundaryRadius,
@@ -339,6 +424,11 @@ class HotspotApp {
       this.rtdb.ref('.info/connected').on('value', (s) => {
         this.rtdbConnected = !!s.val();
         this.refreshTransportStatus();
+      });
+
+      this.rtdb.ref('.info/serverTimeOffset').on('value', (s) => {
+        const off = Number(s.val());
+        if (isFinite(off)) { this.serverOffset = off; this.serverOffsetKnown = true; }
       });
 
       // Appear in the room now, not on the next 3s tick.
@@ -373,13 +463,15 @@ class HotspotApp {
     }
   }
 
-  rtdbPublishSelf(player) {
+  rtdbPublishSelf(player, round) {
     if (!this.rtdbMyRef || !player) return;
     try {
       this.rtdbMyRef.set({
         id: this.playerId,
         name: this.playerName,
         role: this.role,
+        host: !!this.isRoomHost,
+        round: round || null,
         lat: player.lat,
         lng: player.lng,
         accuracy: player.accuracy,
@@ -411,7 +503,10 @@ class HotspotApp {
     try {
       if (this.rtdbPlayersRef) this.rtdbPlayersRef.off();
       if (this.rtdbEventsRef) this.rtdbEventsRef.off();
-      if (this.rtdb) this.rtdb.ref('.info/connected').off();
+      if (this.rtdb) {
+        this.rtdb.ref('.info/connected').off();
+        this.rtdb.ref('.info/serverTimeOffset').off();
+      }
     } catch (e) {}
     this.rtdbPlayersRef = null;
     this.rtdbEventsRef = null;
@@ -421,8 +516,14 @@ class HotspotApp {
     // The host owns the room node. Remove the whole thing on the way out so
     // rooms/<CODE> and its event log do not accumulate in the database forever
     // — nothing else prunes them and there is no TTL.
+    // Deferred a moment so the ROOM_CLOSED event pushed just before this has
+    // reached everyone still in the lobby before the node it lives in vanishes.
     if (this.isRoomHost && this.rtdb && this.roomCode) {
-      try { this.rtdb.ref(`rooms/${this.roomCode}`).remove().catch(() => {}); } catch (e) {}
+      const db = this.rtdb;
+      const code = this.roomCode;
+      setTimeout(() => {
+        try { db.ref(`rooms/${code}`).remove().catch(() => {}); } catch (e) {}
+      }, 2500);
     }
 
     this.teardownRtdbListeners();
@@ -549,10 +650,12 @@ class HotspotApp {
       timestamp: Date.now(),
       roundId: this.currentRoundId,
       peerId: this.myPeerId || null,
+      round: this.roundSnapshot(),
       player: {
         id: this.playerId,
         name: this.playerName,
         role: this.role,
+        host: !!this.isRoomHost,
         lat: isSpectator ? null : (pos ? pos.lat : null),
         lng: isSpectator ? null : (pos ? pos.lng : null),
         accuracy: isSpectator ? null : (pos ? (pos.accuracy || 25) : 25)
@@ -567,7 +670,119 @@ class HotspotApp {
 
     // 2. Publish to the database — throttled, unlike the P2P path.
     if (!includeCloud) return;
-    this.rtdbPublishSelf(data.player);
+    this.rtdbPublishSelf(data.player, data.round);
+  }
+
+  // What round is in progress, in terms a device that was not there for the
+  // start can act on. Every player publishes this beside their position, so a
+  // phone that reloads, or joins late, can pick the hunt up where it stands.
+  // All times are in server time.
+  roundSnapshot() {
+    if (this.isSoloDrill || !this.currentRoundId) return null;
+    if (this.gameState !== 'headstart' && this.gameState !== 'active') return null;
+    return {
+      id: this.currentRoundId,
+      st: this.gameState,
+      hs: this.headStartStartTime || null,
+      as: this.activeSinceServer || null,
+      yc: this.yardCenterPos ? { lat: this.yardCenterPos.lat, lng: this.yardCenterPos.lng } : null
+    };
+  }
+
+  // Adopt a round that started while this device was not in it: a reload, a
+  // rejoin, or a late arrival. Only ever from a lobby, only once per round.
+  maybeCatchUp(data) {
+    const r = data && data.round;
+    if (!r || !r.id || !r.st) return;
+    if (this.gameState !== 'lobby' || !this.roomCode || this.isSoloDrill) return;
+    if (this.seenRoundIds[r.id]) return;
+    if (r.st !== 'headstart' && r.st !== 'active') return;
+
+    this.seenRoundIds[r.id] = true;
+    this.currentRoundId = r.id;
+    this.taggedHiderIds = {};
+    this.appliedTagByRound = {};
+    this.matchTrackHistory = [];
+    if (r.yc) this.yardCenterPos = { lat: r.yc.lat, lng: r.yc.lng };
+    this.hiderLastSeenAt = Date.now();
+
+    const info = {
+      roundId: r.id,
+      headStartStartTime: r.hs || null,
+      headStartSeconds: this.headStartSeconds,
+      yardCenterPos: this.yardCenterPos,
+      activeSince: r.as || null
+    };
+
+    if (r.st === 'headstart') {
+      this.gameState = 'headstart';
+      this.handleGameStateChange('headstart', info);
+    } else {
+      this.gameState = 'active';
+      this.enterRoundScreen();
+      this.handleGameStateChange('active', info);
+    }
+  }
+
+  // Everyone in a round is looking at the screen for their role.
+  enterRoundScreen() {
+    if (this.role === 'hider') {
+      this.showScreen('hider-screen');
+    } else if (this.role === 'seeker') {
+      this.showScreen('seeker-screen');
+    } else if (this.role === 'spectator') {
+      this.showScreen('spectator-screen');
+      window.hotspotReplay.initMap('spectator-map');
+    }
+  }
+
+  // Runs on the 3s tick. Two people hold a room together — the host and the
+  // hider — and neither disappearing used to be noticed. The roster forgets
+  // anyone silent for 15s, so the old "hider lost for 35s" check never had a
+  // hider left to time out and seekers sat on NO SIGNAL indefinitely.
+  watchdog() {
+    if (!this.roomCode || this.isSoloDrill) return;
+    const now = Date.now();
+
+    if (this.gameState === 'lobby') {
+      if (this.isRoomHost) return;
+      if (!this.hostSeenAt && now - this.joinTime > 25000) {
+        this.abandonRoom('NO HOST FOUND', 'Nobody is hosting that code.\n\nCheck the code with the host, or ask them to start a new hunt.');
+      } else if (this.hostSeenAt && now - this.hostSeenAt > 45000) {
+        this.abandonRoom('HOST LEFT', 'The host is no longer in this room.\n\nAsk them to start a new hunt and share the new code.');
+      }
+      return;
+    }
+
+    if (this.gameState !== 'headstart' && this.gameState !== 'active') {
+      this.hiderSilentMs = 0;
+      return;
+    }
+    if (this.role === 'hider') return;
+
+    const last = this.hiderLastSeenAt || now;
+    this.hiderSilentMs = now - last;
+
+    if (this.hiderSilentMs > 35000) {
+      this.abandonRoom('HIDER DISCONNECTED', 'Hider signal was lost for over 35 seconds. Hunt canceled.');
+    } else if (this.hiderSilentMs > 18000) {
+      if (!this.hiderWarnSpoken) {
+        this.hiderWarnSpoken = true;
+        window.hotspotAudio.speak('Warning! Hider connection lost. Waiting for signal.');
+      }
+    } else {
+      this.hiderWarnSpoken = false;
+    }
+  }
+
+  // Tell the player why they are being sent home, then actually send them.
+  abandonRoom(headline, detail) {
+    this.stopPulseLoop();
+    if (this.headStartTimer) { clearInterval(this.headStartTimer); this.headStartTimer = null; }
+    try { window.hotspotAudio.speak(headline.charAt(0) + headline.slice(1).toLowerCase() + '.'); } catch (e) {}
+    this.showScreen('home-screen');
+    try { this.leaveRoom(); } catch (e) {}
+    alert(`${headline}\n\n${detail}`);
   }
 
   broadcastCloud(data) {
@@ -590,6 +805,9 @@ class HotspotApp {
       if (p && p.id) {
         this.players[p.id] = { ...this.players[p.id], ...p, lastSeen: Date.now() };
 
+        if (p.host) this.hostSeenAt = Date.now();
+        if (p.role === 'hider') this.hiderLastSeenAt = Date.now();
+
         if (p.role === 'hider') {
           // Everyone who is not the hider dials the hider, forming the mesh hub.
           if (this.role !== 'hider' && data.peerId) {
@@ -599,10 +817,16 @@ class HotspotApp {
         const activeHider = this.getActiveHider();
         this.hiderId = activeHider ? activeHider.id : null;
 
-        if (data.headStartSeconds) this.headStartSeconds = data.headStartSeconds;
-        if (data.boundaryRadius) this.boundaryRadius = data.boundaryRadius;
-        if (data.matchDurationSeconds) this.matchDurationSeconds = data.matchDurationSeconds;
-        if (data.tagRadiusFeet) this.tagRadiusFeet = data.tagRadiusFeet;
+        // The host chose these, so only the host's heartbeat sets them. Every
+        // heartbeat carries its sender's copy, and letting any phone overwrite
+        // the rest made the settings last-writer-wins: a phone holding a stale
+        // or default value could quietly change the match length for everyone.
+        if (p.host) {
+          if (data.headStartSeconds) this.headStartSeconds = data.headStartSeconds;
+          if (data.boundaryRadius) this.boundaryRadius = data.boundaryRadius;
+          if (data.matchDurationSeconds) this.matchDurationSeconds = data.matchDurationSeconds;
+          if (data.tagRadiusFeet) this.tagRadiusFeet = data.tagRadiusFeet;
+        }
 
         // The room creator is the mesh hub and relays every heartbeat to all
         // other connected devices, so seekers see each other. Keyed on host,
@@ -621,7 +845,17 @@ class HotspotApp {
           });
         }
 
+        this.maybeCatchUp(data);
         this.updateLobbyList();
+      }
+      return;
+    }
+
+    if (data.type === 'ROOM_CLOSED') {
+      // Only pulls people out of the lobby. Once a round is over they may still
+      // be looking at the replay, and that is theirs to leave.
+      if (this.gameState === 'lobby' && this.roomCode && !this.isRoomHost) {
+        this.abandonRoom('HOST LEFT', `${data.name || 'The host'} closed the room.\n\nAsk them to start a new hunt and share the new code.`);
       }
       return;
     }
@@ -633,6 +867,12 @@ class HotspotApp {
       if (this.seenRoundIds[data.roundId]) return;
       this.seenRoundIds[data.roundId] = true;
       if (this.gameState !== 'lobby') return;
+
+      // The start message is the authoritative statement of this round's rules.
+      if (data.headStartSeconds) this.headStartSeconds = data.headStartSeconds;
+      if (data.boundaryRadius) this.boundaryRadius = data.boundaryRadius;
+      if (data.matchDurationSeconds) this.matchDurationSeconds = data.matchDurationSeconds;
+      if (data.tagRadiusFeet) this.tagRadiusFeet = data.tagRadiusFeet;
 
       this.currentRoundId = data.roundId;
       this.gameState = 'headstart';
@@ -646,6 +886,7 @@ class HotspotApp {
       this.handleGameStateChange('active', data);
       return;
     }
+
 
     if (data.type === 'HIDER_ABANDONED') {
       if (this.gameState === 'active' || this.gameState === 'headstart') {
@@ -757,7 +998,7 @@ class HotspotApp {
   }
 
   // --- MULTIPLAYER ROOM SETUP ---
-  createRoom(headStartSec = 60, mode = 'classic', boundaryFeet = 250, matchDurationSec = 300, tagRadiusFeet = 20) {
+  createRoom(headStartSec = 60, mode = 'classic', boundaryFeet = 250, matchDurationSec = 300, tagRadiusFeet = 20, resumeCode = null, resumeRole = null) {
     // Fully leave whatever room we were in. Without this the previous room's
     // roster, database listeners and player node all survived into the new one,
     // which is why players from the last game kept showing up under a new code.
@@ -769,16 +1010,20 @@ class HotspotApp {
     this.gameMode = mode;
     this.matchDurationSeconds = parseInt(matchDurationSec, 10) || 300;
     this.tagRadiusFeet = parseInt(tagRadiusFeet, 10) || 20;
-    this.roomCode = this.generateRoomCode();
+    // resumeCode: a host whose page reloaded takes its own room back rather than
+    // abandoning it and leaving everyone else stranded under the old code.
+    this.roomCode = resumeCode || this.generateRoomCode();
     this.isRoomHost = true;   // owns the well-known peer id for this room
     this.hostIdRetries = 0;
     this.joinTime = Date.now();
+    this.hostSeenAt = Date.now();
+    this.hiderLastSeenAt = 0;
     this.currentRoundId = null;
     this.seenRoundIds = {};
     this.taggedHiderIds = {};
     this.appliedTagByRound = {};
-    this.role = 'hider';
-    this.hiderId = this.playerId;
+    this.role = resumeRole || 'hider';
+    this.hiderId = this.role === 'hider' ? this.playerId : null;
     this.gameState = 'lobby';
 
     const currentGeo = (window.hotspotGeo && window.hotspotGeo.currentPosition) ? window.hotspotGeo.currentPosition : null;
@@ -788,7 +1033,7 @@ class HotspotApp {
       [this.playerId]: {
         id: this.playerId,
         name: this.playerName,
-        role: 'hider',
+        role: this.role,
         lat: pos ? pos.lat : null,
         lng: pos ? pos.lng : null
       }
@@ -799,8 +1044,9 @@ class HotspotApp {
     this.showScreen('lobby-screen');
 
     this.initCloudSync();
+    this.saveSession();
 
-    window.hotspotAudio.speak(`Hunt created. Code is ${this.roomCode.split('').join(' ')}`);
+    if (!resumeCode) window.hotspotAudio.speak(`Hunt created. Code is ${this.roomCode.split('').join(' ')}`);
   }
 
   generateRoomCode() {
@@ -822,6 +1068,16 @@ class HotspotApp {
         name: this.playerName
       });
     }
+
+    // The host walking out of the lobby used to leave everyone else sitting in
+    // a dead room with no start button and no explanation.
+    if (this.isRoomHost && this.roomCode && !this.isSoloDrill && this.gameState === 'lobby') {
+      this.broadcastCloud({ type: 'ROOM_CLOSED', name: this.playerName });
+    }
+
+    // Leaving on purpose. A reload never gets here, which is exactly why the
+    // saved session survives one and not the other.
+    this.clearSession();
 
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
@@ -847,6 +1103,12 @@ class HotspotApp {
     this.currentRoundId = null;
     this.isRoomHost = false;
     this.hostIdRetries = 0;
+    this.hostSeenAt = 0;
+    this.hiderLastSeenAt = 0;
+    this.hiderSilentMs = 0;
+    this.hiderWarnSpoken = false;
+    this.activeSinceServer = null;
+    this.headStartStartTime = 0;
     this.isSoloDrill = false;
     this.gameState = 'lobby';
     this.players = {};
@@ -990,7 +1252,7 @@ class HotspotApp {
     window.hotspotAudio.speak(`Name updated to ${newName}`);
   }
 
-  joinRoom(code, nickname, role = 'seeker') {
+  joinRoom(code, nickname, role = 'seeker', resumed = false) {
     const cleanCode = code ? code.trim().toUpperCase() : '';
     if (cleanCode.length !== 6) {
       alert('Please enter the full 6-character room code from the host.');
@@ -1009,6 +1271,8 @@ class HotspotApp {
     this.roomCode = code.toUpperCase().trim();
     this.isRoomHost = false;
     this.joinTime = Date.now();
+    this.hostSeenAt = 0;
+    this.hiderLastSeenAt = 0;
     this.currentRoundId = null;
     this.seenRoundIds = {};
     this.taggedHiderIds = {};
@@ -1035,8 +1299,9 @@ class HotspotApp {
     this.showScreen('lobby-screen');
 
     this.initCloudSync();
+    this.saveSession();
 
-    window.hotspotAudio.speak(`Joined hunt ${this.roomCode.split('').join(' ')}`);
+    if (!resumed) window.hotspotAudio.speak(`Joined hunt ${this.roomCode.split('').join(' ')}`);
   }
 
   toggleRole() {
@@ -1067,6 +1332,7 @@ class HotspotApp {
     // Publish immediately over every transport so the other phones redraw now
     // rather than on the next 3s tick.
     this.sendHeartbeat();
+    this.saveSession();
     this.updateLobbyList();
     window.hotspotAudio.speak(`You are now the ${this.role.toUpperCase()}`);
   }
@@ -1115,7 +1381,7 @@ class HotspotApp {
        </div>`;
 
     el.innerHTML =
-      row('app version', 'v3.1.0') +
+      row('app version', 'v3.1.2') +
       (() => {
         // Straight from the stylesheet. If this disagrees with the app version
         // above, the phone is running cached CSS - provable, not a guess.
@@ -1124,13 +1390,15 @@ class HotspotApp {
           css = (getComputedStyle(document.documentElement)
             .getPropertyValue('--css-version') || '').replace(/["']/g, '').trim() || 'missing';
         } catch (e) {}
-        return row('stylesheet', css, css !== '3.1.0');
+        return row('stylesheet', css, css !== '3.1.2');
       })() +
       row('room', this.roomCode || '(none)', !this.roomCode) +
       row('am I host', this.isRoomHost ? 'yes' : 'no') +
       row('my role', this.role) +
       row('my id', this.playerId) +
       row('online', navigator.onLine ? 'yes' : 'NO', !navigator.onLine) +
+      row('clock vs server', this.serverOffsetKnown ? Math.round(this.serverOffset) + 'ms' : 'unknown', Math.abs(this.serverOffset) > 5000) +
+      row('hider silent', this.hiderSilentMs ? Math.round(this.hiderSilentMs / 1000) + 's' : '-', this.hiderSilentMs > 18000) +
       '<hr style="border:0;border-top:1px solid #1E293B;margin:6px 0">' +
       row('database', this.rtdbConnected ? 'CONNECTED' : 'not connected', !this.rtdbConnected) +
       row('db node written', this.rtdbMyRef ? 'yes' : 'NO', !this.rtdbMyRef) +
@@ -1226,7 +1494,10 @@ class HotspotApp {
       return;
     }
 
-    const startTime = Date.now();
+    // Server time, not this phone's clock: every device measures the countdown
+    // against this stamp, and a phone whose clock is off would otherwise run it
+    // early or late.
+    const startTime = this.serverNow();
     this.headStartStartTime = startTime;
 
     // The yard centre must be the HIDER's start point, not whoever pressed
@@ -1278,24 +1549,21 @@ class HotspotApp {
     }
 
     this.gameState = 'active';
-    this.broadcastCloud({ type: 'HIDER_READY_EARLY', roundId: this.currentRoundId });
-    this.handleGameStateChange('active');
+    const activeSince = this.serverNow();
+    this.broadcastCloud({ type: 'HIDER_READY_EARLY', roundId: this.currentRoundId, activeSince });
+    this.handleGameStateChange('active', { activeSince });
   }
 
   handleGameStateChange(newState, roomData = null) {
     if (newState === 'headstart') {
-      const startTime = (roomData && roomData.headStartStartTime) ? roomData.headStartStartTime : (this.headStartStartTime || Date.now());
+      const startTime = (roomData && roomData.headStartStartTime) ? roomData.headStartStartTime : (this.headStartStartTime || this.serverNow());
       const duration = (roomData && roomData.headStartSeconds) ? roomData.headStartSeconds : this.headStartSeconds;
       if (roomData && roomData.yardCenterPos) this.yardCenterPos = roomData.yardCenterPos;
+      this.headStartStartTime = startTime;
+      this.activeSinceServer = null;
+      this.hiderLastSeenAt = Date.now();
 
-      if (this.role === 'hider') {
-        this.showScreen('hider-screen');
-      } else if (this.role === 'seeker') {
-        this.showScreen('seeker-screen');
-      } else if (this.role === 'spectator') {
-        this.showScreen('spectator-screen');
-        window.hotspotReplay.initMap('spectator-map');
-      }
+      this.enterRoundScreen();
 
       // No proximity information while the hider is still hiding. The radar
       // used to sit on a stale COLD/HOT reading during the countdown, which
@@ -1307,7 +1575,7 @@ class HotspotApp {
       if (this.headStartTimer) clearInterval(this.headStartTimer);
 
       this.headStartTimer = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const elapsed = Math.floor((this.serverNow() - startTime) / 1000);
         const remaining = Math.max(0, duration - elapsed);
         this.headStartRemaining = remaining;
 
@@ -1338,15 +1606,30 @@ class HotspotApp {
           window.hotspotAudio.playCountdownBeep(true);
           window.hotspotAudio.speak('PACK RELEASED! HUNT IS LIVE!');
 
-          if (this.role === 'hider') {
-            this.broadcastCloud({ type: 'HIDER_READY_EARLY' });
+          // The clock ran out by itself. The state itself has to change here as
+          // well as the screen: this line used to call handleGameStateChange
+          // alone, which left the hider's own device sitting in 'headstart' for
+          // the whole hunt — no nearest-seeker readout, a match clock frozen on
+          // its starting value, and no result screen when the match ended.
+          // Seekers only escaped it because the hider's message flipped them.
+          const activeSince = startTime + duration * 1000;
+          if (this.gameState === 'headstart') {
+            this.gameState = 'active';
+            if (this.role === 'hider') {
+              this.broadcastCloud({ type: 'HIDER_READY_EARLY', roundId: this.currentRoundId, activeSince });
+            }
+            this.handleGameStateChange('active', { activeSince });
           }
-          this.handleGameStateChange('active');
         }
       }, 1000);
 
     } else if (newState === 'active') {
-      this.gameStartTime = Date.now();
+      // One shared moment for "the hunt went live", in server time, so every
+      // device counts the same match clock and a rejoining phone resumes it
+      // part-way through instead of restarting it.
+      this.activeSinceServer = (roomData && roomData.activeSince) || this.serverNow();
+      this.gameStartTime = Date.now() - Math.max(0, this.serverNow() - this.activeSinceServer);
+      if (this.hiderLastSeenAt === 0) this.hiderLastSeenAt = Date.now();
       if (this.headStartTimer) clearInterval(this.headStartTimer);
 
       document.querySelectorAll('.headstart-counter').forEach(el => el.innerText = 'HUNT LIVE');
@@ -1417,7 +1700,7 @@ class HotspotApp {
       return;
     }
 
-    const matchStartTime = Date.now();
+    const matchStartTime = this.activeSinceServer || this.serverNow();
 
     this.matchTimer = setInterval(() => {
       if (this.gameState !== 'active') {
@@ -1426,7 +1709,7 @@ class HotspotApp {
         return;
       }
 
-      const elapsedSec = Math.floor((Date.now() - matchStartTime) / 1000);
+      const elapsedSec = Math.floor((this.serverNow() - matchStartTime) / 1000);
       const remainingSec = Math.max(0, this.matchDurationSeconds - elapsedSec);
 
       const mins = Math.floor(remainingSec / 60);
@@ -1525,9 +1808,15 @@ class HotspotApp {
     }
 
     // Push position over the P2P DataChannel on every GPS tick — free and
-    // instant. The database write is left to the throttled 3s interval.
+    // instant. With a direct link the database write is left to the 3s
+    // interval; without one (two phones on cellular often cannot form a link)
+    // the database is the ONLY path, so it gets a position once a second
+    // instead of leaving the other phone on 3s-old data.
     if (this.roomCode && (this.gameState === 'headstart' || this.gameState === 'active')) {
-      this.sendHeartbeat(false);
+      const now = Date.now();
+      const cloudDue = this.peerCount() === 0 && now - this.lastCloudPosPush >= 1000;
+      if (cloudDue) this.lastCloudPosPush = now;
+      this.sendHeartbeat(cloudDue);
     }
   }
 
@@ -1660,28 +1949,9 @@ class HotspotApp {
           hiderPos = { lat: hiderPlayer.lat, lng: hiderPlayer.lng };
         }
 
-        // Connection loss detection: notify Seekers if Hider stops sending heartbeats
-        if (hiderPlayer && hiderPlayer.lastSeen) {
-          const silentMs = Date.now() - hiderPlayer.lastSeen;
-          if (silentMs > 35000) {
-            this.stopPulseLoop();
-            if (this.headStartTimer) clearInterval(this.headStartTimer);
-            window.hotspotAudio.speak("Hider connection lost completely. Hunt canceled!");
-            alert("HIDER DISCONNECTED!\n\nHider signal was lost for over 35 seconds. Hunt canceled.");
-            this.showScreen('home-screen');
-            try { this.leaveRoom(); } catch(e) {}
-            return;
-          } else if (silentMs > 18000) {
-            const bandLabel = document.getElementById('seeker-band-label');
-            if (bandLabel) bandLabel.innerText = 'HIDER OFFLINE';
-            if (!this.hiderWarnSpoken) {
-              this.hiderWarnSpoken = true;
-              window.hotspotAudio.speak("Warning! Hider connection lost. Waiting for signal.");
-            }
-          } else {
-            this.hiderWarnSpoken = false;
-          }
-        }
+        // Hider-gone detection lives in watchdog(). It cannot live here: the
+        // roster drops a silent hider after 15s, so by the time a 18s / 35s
+        // threshold was reached there was no hider left in this loop to judge.
       }
 
       if (this.decoyPos) {
@@ -1700,11 +1970,13 @@ class HotspotApp {
         const bandLabel = document.getElementById('seeker-band-label');
         const distEl = document.getElementById('seeker-dist-readout');
         const pulseRing = document.getElementById('seeker-pulse-ring');
-        if (bandLabel && !this.powerups.smokeActive) bandLabel.innerText = 'NO SIGNAL';
+        if (bandLabel && !this.powerups.smokeActive) {
+          bandLabel.innerText = this.hiderSilentMs > 18000 ? 'HIDER OFFLINE' : 'NO SIGNAL';
+        }
         if (distEl) {
           distEl.innerHTML = hiderPos
             ? `<span class="dist-sub">last fix ${Math.round(hiderFixAgeMs / 1000)}s ago</span>`
-            : '<span class="dist-sub">waiting for hider…</span>';
+            : `<span class="dist-sub">${this.hiderSilentMs > 18000 ? 'hider lost — hunt cancels in ' + Math.max(0, Math.ceil((35000 - this.hiderSilentMs) / 1000)) + 's' : 'waiting for hider…'}</span>`;
         }
         this.setGauge(null, '#7DD3FC');
         this.currentBand = null;
@@ -2133,3 +2405,5 @@ class HotspotApp {
 }
 
 window.hotspotApp = new HotspotApp();
+// After a reload, put the player straight back in the room they were in.
+setTimeout(() => { try { window.hotspotApp.tryResume(); } catch (e) {} }, 0);

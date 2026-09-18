@@ -22,7 +22,7 @@
    ========================================================================== */
 
 :root {
-  --css-version: "3.1.0";
+  --css-version: "3.1.2";
   color-scheme: dark;
 
   /* Elevation ladder — lighter is closer */
@@ -624,6 +624,11 @@ html, body {
   .text-input, .select-input { padding: 10px 12px; font-size: 14px; }
   .input-group { margin-bottom: 8px; }
   .solo-hint { display: none; }
+  #voice-row { margin-top: 5px !important; }
+  #voice-row .btn { min-height: 38px !important; padding: 6px 14px !important; }
+  .stat-box { padding: 8px 4px 7px; }
+  .dial { width: 40px; height: 40px; }
+  .stat-val { top: 20px; }
   .pulse-ring-outer { width: min(62vw, 250px); }
   #seeker-dist-readout .dist-main { font-size: clamp(42px, 15vw, 72px); }
 }

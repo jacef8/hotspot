@@ -26,9 +26,106 @@ class HotspotAudio {
       if (this.synth.onvoiceschanged !== undefined) {
         this.synth.onvoiceschanged = () => {
           this.voices = this.synth.getVoices();
+          this.chosenVoice = null;
+          this.populateVoiceSelect();
         };
       }
     }
+    // Voices often load a beat after the page does; the picker fills in when
+    // they arrive, and once now in case they are already here.
+    setTimeout(() => this.populateVoiceSelect(), 0);
+  }
+
+  // --- VOICE SELECTION ---
+  // Every phone ships a different set of voices and the difference between the
+  // best and the worst is enormous: an on-device "compact" voice sounds like a
+  // 1990s toy, a network or "enhanced" neural voice sounds like a person. The old
+  // code took the first voice whose name contained "US", "Google" or "Natural",
+  // which on an iPhone falls through to the default (worst) voice. Rank instead.
+  scoreVoice(v) {
+    const name = (v.name || '');
+    const lang = (v.lang || '').replace('_', '-');
+    if (!/^en/i.test(lang)) return -1000;
+
+    let s = 0;
+    if (/^en-US$/i.test(lang)) s += 30;
+    else if (/^en-(GB|AU|CA|IE|ZA|NZ)$/i.test(lang)) s += 12;
+    else s += 4;
+
+    // Neural / high-quality tiers, in the words the platforms use for them.
+    if (/neural|natural/i.test(name)) s += 70;
+    if (/premium/i.test(name)) s += 65;
+    if (/enhanced/i.test(name)) s += 55;
+    if (/siri/i.test(name)) s += 45;
+    if (/online/i.test(name)) s += 25;
+    // Chrome/Android network voices are the good ones; the local ones are not.
+    if (/google/i.test(name)) s += v.localService === false ? 40 : 18;
+    if (v.localService === false) s += 12;
+
+    // Voices that read as a person rather than a demo.
+    if (/\b(ava|allison|evan|nathan|zoe|tom|jenny|aria|guy|davis|samantha|aaron|nicky|noelle)\b/i.test(name)) s += 22;
+
+    // The bottom of the barrel.
+    if (/compact/i.test(name)) s -= 35;
+    if (/espeak|festival|flite/i.test(name)) s -= 90;
+    if (/\b(albert|bad news|bahh|bells|boing|bubbles|cellos|deranged|good news|hysterical|junior|kathy|organ|princess|ralph|trinoids|whisper|zarvox|fred|superstar|wobble|jester)\b/i.test(name)) s -= 200;
+    return s;
+  }
+
+  englishVoices() {
+    const list = (this.voices && this.voices.length) ? this.voices : (this.synth ? this.synth.getVoices() : []);
+    return list.filter(v => /^en/i.test((v.lang || '').replace('_', '-')))
+               .sort((a, b) => this.scoreVoice(b) - this.scoreVoice(a));
+  }
+
+  pickVoice() {
+    if (this.chosenVoice) return this.chosenVoice;
+    const list = this.englishVoices();
+    if (!list.length) return null;
+
+    let saved = null;
+    try { saved = localStorage.getItem('hotspot_voice'); } catch (e) {}
+    if (saved && saved !== 'auto') {
+      const hit = list.find(v => v.voiceURI === saved || v.name === saved);
+      if (hit) { this.chosenVoice = hit; return hit; }
+    }
+    this.chosenVoice = list[0];
+    return this.chosenVoice;
+  }
+
+  populateVoiceSelect() {
+    const sel = document.getElementById('voice-select');
+    if (!sel) return;
+    const list = this.englishVoices();
+    if (!list.length) {
+      sel.innerHTML = '<option value="auto">Phone default</option>';
+      return;
+    }
+    let saved = 'auto';
+    try { saved = localStorage.getItem('hotspot_voice') || 'auto'; } catch (e) {}
+    const auto = list[0];
+    const esc = window.hsEscape || ((x) => x);
+    sel.innerHTML =
+      `<option value="auto">Best available — ${esc(auto.name)}</option>` +
+      list.map(v => `<option value="${esc(v.voiceURI || v.name)}">${esc(v.name)} (${esc(v.lang)})</option>`).join('');
+    sel.value = [...sel.options].some(o => o.value === saved) ? saved : 'auto';
+    sel.onchange = () => {
+      try { localStorage.setItem('hotspot_voice', sel.value); } catch (e) {}
+      this.chosenVoice = null;
+      this.testVoice();
+    };
+  }
+
+  testVoice() {
+    this.speak('Hot! You are closing in. Stay low and keep moving.');
+  }
+
+  // Sentence case for shouted words. Engines read capitals inconsistently —
+  // some spell them, some stress them — and the result is the "yelling robot".
+  humanize(text) {
+    return String(text)
+      .replace(/\b([A-Z])([A-Z]+)\b/g, (m, a, b) => (m === 'GPS' ? m : a + b.toLowerCase()))
+      .replace(/!{2,}/g, '!');
   }
 
   setupUnlockListeners() {
@@ -92,7 +189,7 @@ class HotspotAudio {
     return this.audioFxEnabled;
   }
 
-  speak(text, rate = 1.1, pitch = 1.0) {
+  speak(text, rate = 1.0, pitch = 1.0) {
     if (!this.speechEnabled || !this.synth) return;
     if (this.isHiderSilent()) return; // SILENT FOR HIDER!
 
@@ -104,16 +201,23 @@ class HotspotAudio {
 
       this.synth.cancel();
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = rate;
-      utterance.pitch = pitch;
+      const utterance = new SpeechSynthesisUtterance(this.humanize(text));
+      // Rate and pitch are held near natural. The old callouts went up to 1.3x
+      // speed and 1.2 pitch for "excitement", which is exactly what makes a
+      // synthetic voice sound synthetic. Urgency now comes from the words.
+      utterance.rate = Math.max(0.92, Math.min(1.08, rate));
+      utterance.pitch = Math.max(0.94, Math.min(1.06, pitch));
+      utterance.lang = 'en-US';
 
       if (!this.voices || this.voices.length === 0) {
         this.voices = this.synth.getVoices();
       }
 
-      const engVoice = this.voices.find(v => v.lang.startsWith('en') && (v.name.includes('Natural') || v.name.includes('Google') || v.name.includes('US')));
-      if (engVoice) utterance.voice = engVoice;
+      const voice = this.pickVoice();
+      if (voice) {
+        utterance.voice = voice;
+        if (voice.lang) utterance.lang = voice.lang;
+      }
 
       this.synth.speak(utterance);
     } catch (e) {
@@ -260,23 +364,46 @@ class HotspotAudio {
     this.lastSpokenBand = band;
     this.lastSpokenTime = now;
 
-    switch (band) {
-      case 'COLD':
-        this.speak('Signal Cold. Keep searching!', 1.0, 0.9);
-        break;
-      case 'WARM':
-        this.speak('Getting warm! Keep pushing!', 1.1, 1.0);
-        break;
-      case 'HOT':
-        this.speak('Hot! You are closing in!', 1.15, 1.05);
-        break;
-      case 'HOTTER':
-        this.speak('Hotter! Very close now!', 1.25, 1.1);
-        break;
-      case 'REDHOT':
-        this.speak('RED HOT! THEY ARE RIGHT THERE!', 1.3, 1.2);
-        break;
-    }
+    // A person calling this out would not say the same sentence every time.
+    // Several natural phrasings per band, never the same one twice running.
+    const LINES = {
+      COLD: [
+        'Nothing yet. Keep searching.',
+        'Still cold. Try a different direction.',
+        'You are a long way off.'
+      ],
+      WARM: [
+        'Getting warmer.',
+        'Warmer. You are on the right track.',
+        'That is warmer. Keep going.'
+      ],
+      HOT: [
+        'Hot. You are getting close.',
+        'Hot now. Stay with it.',
+        'You are close. Slow down and look around.'
+      ],
+      HOTTER: [
+        'Very close now.',
+        'Hotter. They are right around here.',
+        'Almost on top of them.'
+      ],
+      REDHOT: [
+        'Red hot. They are right there.',
+        'Right on top of them. Look around.',
+        'They are within reach.'
+      ]
+    };
+
+    const pool = LINES[band];
+    if (!pool) return;
+    this.lastLineIdx = this.lastLineIdx || {};
+    let i = Math.floor(Math.random() * pool.length);
+    if (pool.length > 1 && i === this.lastLineIdx[band]) i = (i + 1) % pool.length;
+    this.lastLineIdx[band] = i;
+
+    // Close calls run a touch quicker; nothing goes far from natural speech.
+    const rate = band === 'REDHOT' ? 1.08 : band === 'HOTTER' ? 1.05 : 1.0;
+    this.speak(pool[i], rate, 1.0);
   }
 }
 

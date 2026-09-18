@@ -10,16 +10,16 @@
        still required because the screens use inline onclick handlers. -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
-    script-src 'self' 'unsafe-inline' https://unpkg.com https://www.gstatic.com;
+    script-src 'self' 'unsafe-inline' https://unpkg.com https://www.gstatic.com https://*.firebaseio.com https://*.firebasedatabase.app;
     style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com;
     img-src 'self' data: blob: https://unpkg.com https://server.arcgisonline.com;
     connect-src 'self' https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://0.peerjs.com wss://0.peerjs.com https://*.peerjs.com wss://*.peerjs.com https://server.arcgisonline.com stun: turn:;
     font-src 'self' data: https://fonts.gstatic.com;
+    frame-src https://*.firebaseio.com https://*.firebasedatabase.app;
     object-src 'none';
     base-uri 'self';
-    form-action 'none';
-    frame-ancestors 'none'">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.1.0</title>
+    form-action 'none'">
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.1.2</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -67,7 +67,7 @@
   </script>
 
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=3.1.0">
+  <link rel="stylesheet" href="style.css?v=3.1.2">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -121,7 +121,7 @@
         <div class="scope-rule"><span>THERMAL PURSUIT SYSTEM</span></div>
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="scope-meta">
-          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.1.0</span>
+          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.1.2</span>
           <span id="cloud-sync-status" class="tele">STANDBY</span>
         </div>
       </div>
@@ -143,6 +143,14 @@
         <button class="btn btn-solo" onclick="window.hotspotApp.startSoloDrill()">
           Run Solo Drill
         </button>
+        <div id="voice-row" style="display: flex; align-items: center; gap: 8px; margin-top: 9px;">
+          <select id="voice-select" class="select-input" aria-label="Announcer voice" style="flex: 1; min-width: 0; margin: 0;">
+            <option value="auto">Announcer voice</option>
+          </select>
+          <button class="btn btn-secondary" style="width: auto; margin: 0; min-height: 46px; padding: 8px 16px; font-size: 12px;" onclick="window.hotspotAudio.testVoice()">
+            Test
+          </button>
+        </div>
       </div>
 
       <div class="card" style="margin-bottom: 0;">
@@ -609,21 +617,22 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=3.1.0"></script>
-  <script src="geo.js?v=3.1.0"></script>
-  <script src="replay.js?v=3.1.0"></script>
-  <script src="app.js?v=3.1.0"></script>
+  <script src="audio.js?v=3.1.2"></script>
+  <script src="geo.js?v=3.1.2"></script>
+  <script src="replay.js?v=3.1.2"></script>
+  <script src="app.js?v=3.1.2"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=3.1.0').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=3.1.2').catch(() => {});
       });
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-      window.hotspotApp = new HotspotApp();
-    });
+    // The app is created once, at the bottom of app.js. It used to be created a
+    // second time here on DOMContentLoaded, which replaced window.hotspotApp and
+    // orphaned the first instance: two GPS watchers, and anything the first one
+    // was doing (such as resuming a room) invisible to the buttons.
   </script>
 </body>
 </html>
