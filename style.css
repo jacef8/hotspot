@@ -22,7 +22,7 @@
    ========================================================================== */
 
 :root {
-  --css-version: "3.1.2";
+  --css-version: "3.2.0";
   color-scheme: dark;
 
   /* Elevation ladder — lighter is closer */
@@ -276,10 +276,16 @@ html, body {
   box-shadow: var(--raise-2);
   transition: transform .12s ease, filter .16s ease;
   position: relative; z-index: 20;
+  /* Every control is tapped one-handed, outdoors, often while moving. The
+     short-screen rules trim padding, so the floor is set here instead. */
+  min-height: 44px;
 }
 .btn:last-child { margin-bottom: 0; }
 .btn:active { transform: translateY(1px); filter: brightness(1.08); }
 .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+/* Not available right now (a power-up during hiding time, or already spent). */
+.btn:disabled { opacity: .35; cursor: default; }
+.btn:disabled:active { transform: none; filter: none; }
 
 /* The dominant action is filled and lit; nothing else competes. */
 .btn-primary {
@@ -310,8 +316,10 @@ html, body {
   font-family: var(--font-mono);
   font-size: 10px; font-weight: 700; letter-spacing: .1em;
   cursor: pointer;
+  min-height: 44px;
 }
-.btn-powerup:disabled { opacity: .35; }
+.btn-powerup:disabled { opacity: .35; cursor: default; }
+.btn-powerup:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 .powerup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
 
@@ -386,6 +394,42 @@ html, body {
 .badge-you { margin-left: 8px; }
 .player-badge.hider .badge-role { color: #FF8F6B; }
 .player-badge.seeker .badge-role { color: var(--accent); }
+.badge-role { flex: 0 0 auto; white-space: nowrap; }
+
+/* A player whose phone has no location fix. Status, so it takes the warning
+   colour; it is a marker inside the row, not a control. */
+.badge-nogps {
+  color: var(--warn);
+  margin-right: 8px;
+  padding-right: 8px;
+  border-right: 1px solid rgba(255, 255, 255, .16);
+}
+
+/* One quiet line under a roster: who is watching, or a reminder. */
+.roster-note {
+  font-family: var(--font-mono);
+  font-size: 10px; letter-spacing: .08em;
+  color: var(--ink-2);
+  text-align: center;
+  flex-shrink: 0;
+}
+.roster-note.warn { color: var(--warn); margin-bottom: 8px; }
+
+/* What a player who cannot press Start (or Rematch) is waiting for. Cut into
+   the surface like the other read-only wells, so it does not read as a button. */
+.lobby-wait {
+  flex-shrink: 0;
+  text-align: center;
+  padding: 13px 12px;
+  border-radius: var(--r-s);
+  background: var(--recess);
+  box-shadow: var(--well-sh);
+  font-family: var(--font-mono);
+  font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  color: var(--warn);
+  margin-bottom: 9px;
+}
+.lobby-wait:last-child { margin-bottom: 0; }
 
 .roster-empty {
   font-family: var(--font-mono);
@@ -519,7 +563,7 @@ html, body {
   color: var(--ink);
 }
 
-.headstart-counter, #match-timer-seeker, #match-timer-hider, #hider-timer-display {
+.headstart-counter, #match-timer-seeker, #match-timer-hider, #match-timer-spectator, #hider-timer-display {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
   letter-spacing: .08em;
@@ -625,12 +669,18 @@ html, body {
   .input-group { margin-bottom: 8px; }
   .solo-hint { display: none; }
   #voice-row { margin-top: 5px !important; }
-  #voice-row .btn { min-height: 38px !important; padding: 6px 14px !important; }
+  #voice-row .btn { min-height: 44px !important; padding: 6px 14px !important; }
   .stat-box { padding: 8px 4px 7px; }
   .dial { width: 40px; height: 40px; }
   .stat-val { top: 20px; }
   .pulse-ring-outer { width: min(62vw, 250px); }
   #seeker-dist-readout .dist-main { font-size: clamp(42px, 15vw, 72px); }
+}
+
+/* The smallest phones, with the GPS banner taking two lines off the top: drop
+   the ornamental rule above the wordmark so the last button stays on screen. */
+@media (max-height: 660px) {
+  .scope-rule { display: none; }
 }
 
 @media (max-height: 600px) {

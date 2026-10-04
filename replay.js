@@ -78,11 +78,11 @@ class HotspotReplay {
 
     this.boundaryCircle = L.circle(latLng, {
       radius: radiusMeters,
-      color: '#F59E0B',
+      color: '#FFB020',
       weight: 2,
       dashArray: '6, 6',
       fill: true,
-      fillColor: '#F59E0B',
+      fillColor: '#FFB020',
       fillOpacity: 0.07
     }).addTo(this.map);
     this.boundaryCircle.bindTooltip(`Yard limit — ${radiusFeet}ft`, { permanent: false });
@@ -95,6 +95,9 @@ class HotspotReplay {
       this.markers = {};
       this.polylines = {};
       this.accuracyCircles = {};
+      // The yard circle belonged to the map just removed. Left set, the next
+      // setBoundary call updated that dead layer and drew nothing on this one.
+      this.boundaryCircle = null;
     }
 
     const container = document.getElementById(elementId);
@@ -141,10 +144,13 @@ class HotspotReplay {
     }, 200);
   }
 
-  updateSpectatorView(playersData) {
+  // replayMode: positions come from the recorded tracks (each with its full
+  // trail so far) rather than live, and the view is left where the user put it.
+  updateSpectatorView(playersData, replayMode = false) {
     if (!this.map) return;
 
     const bounds = [];
+    const present = {};
 
     Object.values(playersData).forEach(player => {
       // Spectators watch; they are not pieces on the board.
@@ -153,9 +159,14 @@ class HotspotReplay {
 
       const latlng = [player.lat, player.lng];
       bounds.push(latlng);
+      present[player.id] = true;
 
       const isHider = player.role === 'hider';
-      const color = isHider ? '#FF5500' : '#00F0FF';
+      // The app's own palette: the target is hot, everyone else is cold.
+      const color = isHider ? '#FF6B3D' : '#7DD3FC';
+      // Accuracy arrives in feet; Leaflet draws radii in metres. Passing feet
+      // straight through drew every uncertainty ring 3.3 times too large.
+      const accuracyMeters = (player.accuracy || 33) / 3.28084;
 
       // Update or create marker
       if (!this.markers[player.id]) {
@@ -187,7 +198,7 @@ class HotspotReplay {
           .addTo(this.map)
           .bindTooltip(`${window.hsEscape(player.name)} (${window.hsEscape(String(player.role).toUpperCase())})`, { permanent: true, direction: 'top' });
 
-        this.polylines[player.id] = L.polyline([latlng], {
+        this.polylines[player.id] = L.polyline(player.trail || [latlng], {
           color: color,
           weight: 4,
           opacity: 0.7,
@@ -195,7 +206,7 @@ class HotspotReplay {
         }).addTo(this.map);
 
         this.accuracyCircles[player.id] = L.circle(latlng, {
-          radius: player.accuracy || 10,
+          radius: accuracyMeters,
           color: color,
           fillColor: color,
           fillOpacity: 0.15,
@@ -205,16 +216,37 @@ class HotspotReplay {
       } else {
         this.markers[player.id].setLatLng(latlng);
         this.accuracyCircles[player.id].setLatLng(latlng);
-        if (player.accuracy) {
-          this.accuracyCircles[player.id].setRadius(player.accuracy);
-        }
+        this.accuracyCircles[player.id].setRadius(accuracyMeters);
 
-        // Add to breadcrumb trail
-        const points = this.polylines[player.id].getLatLngs();
-        points.push(latlng);
-        this.polylines[player.id].setLatLngs(points);
+        if (player.trail) {
+          // Replay: the trail is exactly the track up to this moment, so
+          // scrubbing backwards shortens it again.
+          this.polylines[player.id].setLatLngs(player.trail);
+        } else {
+          // Live: add a breadcrumb only when the player has actually moved.
+          // This runs four times a second and used to append every time.
+          const points = this.polylines[player.id].getLatLngs();
+          const last = points[points.length - 1];
+          if (!last || last.lat !== latlng[0] || last.lng !== latlng[1]) {
+            points.push(latlng);
+            this.polylines[player.id].setLatLngs(points);
+          }
+        }
       }
     });
+
+    // Anyone no longer on the field comes off the map. A player who left used
+    // to stay pinned at their last position for the rest of the hunt.
+    Object.keys(this.markers).forEach((id) => {
+      if (present[id]) return;
+      [this.markers, this.polylines, this.accuracyCircles].forEach((group) => {
+        if (group[id]) { try { this.map.removeLayer(group[id]); } catch (e) {} delete group[id]; }
+      });
+    });
+
+    // The replay keeps the whole field in view (set once when it loads), so
+    // the map does not lurch about while the tracks play.
+    if (replayMode) return;
 
     // Remember the field extent even while the user is panning, so Recenter
     // has somewhere to snap back to.
@@ -227,10 +259,11 @@ class HotspotReplay {
     }
   }
 
-  loadReplayData(tracks, tagEvent = null) {
-    this.replayTracks = tracks; // Array of { playerId, name, role, points: [{lat, lng, timestamp}] }
+  loadReplayData(tracks, tagEvent = null, fallbackCenter = null) {
+    this.pauseReplay();
+    this.replayTracks = tracks || []; // Array of { playerId, name, role, points: [{lat, lng, timestamp}] }
     this.tagEvent = tagEvent;
-    this.replayStep = 0;
+    this.replayPct = 100;
     this.isPlaying = false;
 
     // Full extent of every track, so Recenter works on the replay map too.
@@ -255,25 +288,33 @@ class HotspotReplay {
         this.initMap('replay-map', allPoints[0], 18);
         this.lastBounds = allPoints;
         this.markProgrammatic();
-        this.map.fitBounds(allPoints, { padding: [30, 30], maxZoom: 19 });
+        if (this.map) this.map.fitBounds(allPoints, { padding: [30, 30], maxZoom: 19 });
+      } else if (fallbackCenter && fallbackCenter.lat && fallbackCenter.lng) {
+        // Nothing was recorded; at least open on the yard instead of leaving
+        // whatever map was on screen before.
+        this.initMap('replay-map', [fallbackCenter.lat, fallbackCenter.lng], 18);
+      } else {
+        this.initMap('replay-map');
       }
     }
 
-    if (this.tagEvent && this.tagEvent.lat) {
+    if (this.map && this.tagEvent && this.tagEvent.lat) {
       const tagMarkerHtml = `
         <div style="
-          background: #EF4444;
+          background: #FF4257;
           width: 32px;
           height: 32px;
           border-radius: 50%;
           border: 3px solid #FFF;
-          box-shadow: 0 0 20px #EF4444;
+          box-shadow: 0 0 20px #FF4257;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 16px;
+          color: #FFF;
+          font-weight: 800;
+          font-size: 15px;
         ">
-          🎯
+          &#10005;
         </div>
       `;
       L.marker([this.tagEvent.lat, this.tagEvent.lng], {
@@ -289,54 +330,77 @@ class HotspotReplay {
           this.markProgrammatic();
           this.map.setView([this.tagEvent.lat, this.tagEvent.lng], 19);
         }
+        // Open on the finished picture: everyone where they ended up, with the
+        // whole of their trail behind them. Play runs it again from the start.
+        this.stepReplay(100);
       }
     }, 250);
   }
 
+  // First and last moment anything was recorded, across every track.
+  replayRange() {
+    let t0 = Infinity, t1 = -Infinity;
+    (this.replayTracks || []).forEach((t) => (t.points || []).forEach((p) => {
+      if (p.timestamp < t0) t0 = p.timestamp;
+      if (p.timestamp > t1) t1 = p.timestamp;
+    }));
+    return isFinite(t0) ? { t0, t1 } : null;
+  }
+
+  // Move the replay to a moment in TIME. It used to step every track by point
+  // count, and tracks do not have the same number of points — your own is
+  // logged every second, everyone else's only when a heartbeat arrives — so
+  // the players were not shown where they were at the same instant.
   stepReplay(progressPercent) {
-    if (!this.replayTracks || this.replayTracks.length === 0) return;
+    const range = this.replayRange();
+    if (!range) return;
 
-    // Find max points count
-    const maxPoints = Math.max(...this.replayTracks.map(t => t.points.length));
-    const targetStep = Math.floor((progressPercent / 100) * (maxPoints - 1));
-
-    this.replayStep = targetStep;
+    const pct = Math.max(0, Math.min(100, Number(progressPercent) || 0));
+    this.replayPct = pct;
+    const t = range.t0 + (range.t1 - range.t0) * (pct / 100);
 
     const currentPlayers = {};
-    this.replayTracks.forEach(track => {
-      const point = track.points[Math.min(targetStep, track.points.length - 1)];
-      if (point) {
-        currentPlayers[track.playerId] = {
-          id: track.playerId,
-          name: track.name,
-          role: track.role,
-          lat: point.lat,
-          lng: point.lng,
-          accuracy: point.accuracy || 8
-        };
-      }
+    this.replayTracks.forEach((track) => {
+      const pts = track.points || [];
+      if (!pts.length) return;
+      // Everything this player had done by time t. Before their first recorded
+      // point, stand them on it — that is where they were, near enough.
+      let upto = pts.filter((p) => p.timestamp <= t);
+      if (!upto.length) upto = [pts[0]];
+      const point = upto[upto.length - 1];
+      currentPlayers[track.playerId] = {
+        id: track.playerId,
+        name: track.name,
+        role: track.role,
+        lat: point.lat,
+        lng: point.lng,
+        accuracy: point.accuracy || 25,
+        trail: upto.map((p) => [p.lat, p.lng])
+      };
     });
 
-    this.updateSpectatorView(currentPlayers);
+    this.updateSpectatorView(currentPlayers, true);
   }
 
   playReplay(onProgressUpdate) {
     if (this.isPlaying) return;
+    const range = this.replayRange();
+    if (!range) return;
+
+    // Play on a finished replay starts over; it used to do nothing at all.
+    if ((this.replayPct || 0) >= 100) this.replayPct = 0;
     this.isPlaying = true;
 
-    const maxPoints = Math.max(...this.replayTracks.map(t => t.points.length));
+    // The whole round in about twenty seconds, never slower than it happened.
+    const roundSec = Math.max(1, (range.t1 - range.t0) / 1000);
+    const stepPct = 100 / (Math.min(roundSec, 20) * 10);
 
     this.replayInterval = setInterval(() => {
-      this.replayStep += 1;
-      if (this.replayStep >= maxPoints) {
-        this.pauseReplay();
-        this.replayStep = maxPoints - 1;
-      }
-
-      const percent = (this.replayStep / (maxPoints - 1)) * 100;
-      this.stepReplay(percent);
-      if (onProgressUpdate) onProgressUpdate(percent);
-    }, 1000 / this.playbackSpeed);
+      const pct = Math.min(100, (this.replayPct || 0) + stepPct * this.playbackSpeed);
+      this.stepReplay(pct);
+      if (onProgressUpdate) onProgressUpdate(pct);
+      if (pct >= 100) this.pauseReplay();
+    }, 100);
   }
 
   pauseReplay() {

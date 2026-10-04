@@ -149,8 +149,14 @@ class HotspotAudio {
     });
   }
 
+  // The hider's phone stays quiet so it cannot give the hiding spot away — but
+  // only while there is a spot to give away. This used to key on the role
+  // alone, so whoever was the hider heard nothing anywhere: no room code read
+  // out when hosting, a silent Test button, a silent rematch lobby.
   isHiderSilent() {
-    return window.hotspotApp && window.hotspotApp.role === 'hider';
+    const app = window.hotspotApp;
+    if (!app || app.role !== 'hider') return false;
+    return app.gameState === 'headstart' || app.gameState === 'active';
   }
 
   // Proximity cues (band callouts and pulse beeps) must not play on a hider's

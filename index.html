@@ -19,7 +19,7 @@
     object-src 'none';
     base-uri 'self';
     form-action 'none'">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.1.2</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.2.0</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -67,7 +67,7 @@
   </script>
 
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=3.1.2">
+  <link rel="stylesheet" href="style.css?v=3.2.0">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -87,8 +87,8 @@
   <!-- Diagnostics overlay — opened by tapping the version badge -->
   <div id="diag-panel" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(10,10,13,.97); overflow-y:auto; padding:16px; font-family:ui-monospace,Menlo,Consolas,monospace;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-      <strong style="font-size:15px; color:#00F0FF; letter-spacing:1px;">DIAGNOSTICS</strong>
-      <button onclick="window.hotspotApp.toggleDiagnostics()" style="background:#1E293B; color:#F8FAFC; border:0; border-radius:8px; padding:8px 14px; font-weight:800;">Close</button>
+      <strong style="font-size:15px; color:var(--accent); letter-spacing:1px;">DIAGNOSTICS</strong>
+      <button onclick="window.hotspotApp.toggleDiagnostics()" style="background:var(--e2-hi); color:var(--ink); min-height:44px; border:0; border-radius:8px; padding:8px 14px; font-weight:800;">Close</button>
     </div>
     <div id="diag-body" style="font-size:12px; line-height:1.5;"></div>
     <p style="font-size:11px; opacity:.6; margin-top:12px; line-height:1.4;">
@@ -121,7 +121,7 @@
         <div class="scope-rule"><span>THERMAL PURSUIT SYSTEM</span></div>
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="scope-meta">
-          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.1.2</span>
+          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.2.0</span>
           <span id="cloud-sync-status" class="tele">STANDBY</span>
         </div>
       </div>
@@ -237,14 +237,6 @@
         </div>
 
         <div class="input-group">
-          <label class="input-label">Game Mode</label>
-          <select id="setup-gamemode" class="select-input">
-            <option value="classic" selected>Classic Tag (First Tag Wins)</option>
-            <option value="infection">Infection Mode (Pack Grows!)</option>
-          </select>
-        </div>
-
-        <div class="input-group">
           <label class="input-label">Hunt Time Limit</label>
           <select id="setup-matchduration" class="select-input">
             <option value="180">3 Minutes (Fast Blitz)</option>
@@ -281,32 +273,40 @@
         </button>
       </div>
 
-      <!-- Role Toggle Button -->
-      <button class="btn btn-secondary" style="border-color: var(--accent);" onclick="window.hotspotApp.toggleRole()">
-        Switch Role (Hider Seeker)
+      <!-- Role button: its label says what it will do (set in updateLobbyList) -->
+      <button id="btn-switch-role" class="btn btn-secondary" style="border-color: var(--accent);" onclick="window.hotspotApp.toggleRole()">
+        Become the Hider
       </button>
 
-      <div class="card" style="flex: 1; overflow: hidden; display: flex; flex-direction: column; gap: 12px;">
+      <div class="card" style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 12px;">
         <div>
           <div class="card-title" style="color: var(--warn); font-size: 13px; font-weight: 900; letter-spacing: 1px; margin-bottom: 6px;">
-            GAME HOST & HIDER
+            HIDER
           </div>
           <div id="lobby-hider-list"></div>
         </div>
 
-        <div style="flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+        <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden;">
           <div class="card-title" style="color: var(--accent); font-size: 13px; font-weight: 900; letter-spacing: 1px; margin-bottom: 6px;">
-            SEEKER PACK
+            SEEKERS
           </div>
           <div id="lobby-seeker-list" class="player-list" style="flex: 1; overflow-y: auto;"></div>
         </div>
+
+        <!-- Spectators are in the room too; they were on nobody's list -->
+        <div id="lobby-watchers" class="roster-note" style="display: none;"></div>
       </div>
 
-      <button id="btn-start-round" class="btn btn-primary" onclick="window.hotspotApp.startHeadstart()">
+      <!-- Shown only where the browser cannot hold the screen awake for us -->
+      <div id="lobby-wake-note" class="roster-note warn" style="display: none;">
+        Keep your screen on during the hunt — a locked phone drops out
+      </div>
+
+      <button id="btn-start-round" class="btn btn-primary" style="display: none;" onclick="window.hotspotApp.startHeadstart()">
         Start Round
       </button>
-      <div id="lobby-wait-msg" style="display: none; text-align: center; padding: 12px; font-weight: 800; color: var(--warn); font-size: 14px; background: rgba(245, 158, 11, 0.1); border-radius: 8px; border: 1px solid var(--warn);">
-        Waiting for Host (Hider) to Start Round...
+      <div id="lobby-wait-msg" class="lobby-wait" style="display: none;">
+        Looking for this room…
       </div>
     </div>
 
@@ -318,7 +318,7 @@
 
       <div class="card" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
         <div class="input-group">
-          <label class="input-label">Room Code (4 or 6 characters)</label>
+          <label class="input-label">Room Code (6 characters, from the host)</label>
           <input type="text" id="join-code-input" class="text-input" maxlength="6" placeholder="e.g. K7RQ4M" style="text-transform: uppercase; font-size: 22px; text-align: center; letter-spacing: 4px;" onkeydown="if(event.key==='Enter') window.joinRoomAction()">
         </div>
 
@@ -336,18 +336,19 @@
     <!-- ==================== SCREEN 5: JOIN SPECTATOR ==================== -->
     <div id="join-spectator-screen" class="screen">
       <div class="brand-header">
-        <h2 class="brand-title" style="font-size: 24px;">Spectator</h2>
+        <h2 class="brand-title" style="font-size: 24px;">Spectate</h2>
       </div>
 
       <div class="card" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
         <div class="input-group">
-          <label class="input-label">6-Character Room Code</label>
-          <input type="text" id="spectator-code-input" class="text-input" maxlength="6" placeholder="e.g. K7RQ4M" style="text-transform: uppercase; font-size: 22px; text-align: center;" onkeydown="if(event.key==='Enter') window.joinSpectatorAction()">
+          <label class="input-label">Room Code (6 characters, from the host)</label>
+          <input type="text" id="spectator-code-input" class="text-input" maxlength="6" placeholder="e.g. K7RQ4M" style="text-transform: uppercase; font-size: 22px; text-align: center; letter-spacing: 4px;" onkeydown="if(event.key==='Enter') window.joinSpectatorAction()">
         </div>
+        <p class="solo-hint" style="display: block; margin: 0;">You wait in the lobby with everyone else. The live map opens when the round starts, and you can start the round yourself.</p>
       </div>
 
       <button class="btn btn-primary" onclick="window.joinSpectatorAction()">
-        Launch Spectator Map
+        Join as Spectator
       </button>
     </div>
 
@@ -357,8 +358,8 @@
         <div class="role-badge seeker-role-badge">YOU ARE THE SEEKER</div>
       </div>
       <div class="rail">
-        <div id="headstart-banner-seeker" class="rail-cell headstart-counter lit">HIDING 60s</div>
-        <div id="match-timer-seeker" class="rail-cell">MATCH 5:00</div>
+        <div id="headstart-banner-seeker" class="rail-cell headstart-counter lit">HIDING TIME</div>
+        <div id="match-timer-seeker" class="rail-cell">MATCH TIME</div>
       </div>
 
       <!-- Yard limit readout — seekers get the same boundary feedback as the hider -->
@@ -469,13 +470,15 @@
     <!-- ==================== SCREEN 8: SPECTATOR GOD VIEW ==================== -->
     <div id="spectator-screen" class="screen">
       <div class="brand-header" style="margin-bottom: 6px;">
-        <h2 class="brand-title" style="font-size: 20px;">Spectator Map (Parent Control)</h2>
+        <h2 class="brand-title" style="font-size: 20px;">Spectator Map</h2>
       </div>
 
-      <!-- Parent / Spectator Game Control Bar -->
-      <button id="btn-spectator-start" class="btn btn-primary" style="margin-bottom: 8px; background: linear-gradient(135deg, var(--warn), var(--heat-2)); font-weight: 900;" onclick="window.hotspotApp.startHeadstart()">
-        Start Round (Parent / Host Control)
-      </button>
+      <!-- Round status. A "Start Round" button used to sit here, on a screen
+           that only exists once a round is already running. -->
+      <div class="rail">
+        <div class="rail-cell headstart-counter lit">HIDING TIME</div>
+        <div id="match-timer-spectator" class="rail-cell">MATCH TIME</div>
+      </div>
 
       <div id="spectator-map"></div>
 
@@ -484,9 +487,9 @@
         Recenter on Players (resume auto-follow)
       </button>
 
-      <div class="card" style="margin-bottom: 0;">
-        <div class="card-title">Live Field Stats</div>
-        <div id="spectator-leaderboard" class="player-list"></div>
+      <div class="card" style="margin-bottom: 0; flex-shrink: 0; max-height: 34%; display: flex; flex-direction: column; overflow: hidden;">
+        <div class="card-title">On the field — distance to the hider</div>
+        <div id="spectator-leaderboard" class="player-list" style="overflow-y: auto;"></div>
       </div>
     </div>
 
@@ -520,6 +523,8 @@
       <button id="btn-rematch" class="btn btn-primary" style="display: none;" onclick="window.hotspotApp.rematch()">
         Rematch — Same Room, Rotated Roles
       </button>
+      <!-- For everyone who cannot start the rematch: who they are waiting on -->
+      <div id="rematch-wait" class="lobby-wait" style="display: none;"></div>
 
       <button class="btn btn-secondary" style="margin-bottom: 0;" onclick="window.hotspotApp.goHome()">
         Back to Home
@@ -532,37 +537,31 @@
   <script>
     window.createRoomAction = function() {
       const hs = document.getElementById('setup-headstart').value;
-      const gm = document.getElementById('setup-gamemode').value;
       const b = document.getElementById('setup-boundary').value;
       const md = document.getElementById('setup-matchduration').value;
       const tr = document.getElementById('setup-tagradius').value;
       const name = document.getElementById('host-nickname').value;
       if (name && name.trim()) window.hotspotApp.saveName(name);
-      window.hotspotApp.createRoom(hs, gm, b, md, tr);
+      window.hotspotApp.createRoom(hs, 'classic', b, md, tr);
     };
 
     window.joinRoomAction = function() {
       const codeEl = document.getElementById('join-code-input');
       const nickEl = document.getElementById('join-nickname-input');
       const code = codeEl ? codeEl.value : '';
-      const nick = nickEl ? nickEl.value : 'Chaser';
-      
-      const cleanCode = code ? code.trim() : '';
-      if (!cleanCode || (cleanCode.length !== 4 && cleanCode.length !== 6)) {
-        alert('Please type in the Room Code from the host!');
-        return;
-      }
-      window.hotspotApp.joinRoom(cleanCode, nick, 'seeker');
+      const nick = nickEl ? nickEl.value : '';
+
+      // joinRoom does the checking and says exactly what is wrong. This used to
+      // let a 4-character code through to it, only for joinRoom to refuse it.
+      window.hotspotApp.joinRoom(code, nick, 'seeker');
     };
 
     window.joinSpectatorAction = function() {
       const codeEl = document.getElementById('spectator-code-input');
       const code = codeEl ? codeEl.value : '';
-      if (!code || !code.trim()) {
-        alert('Please enter a room code.');
-        return;
-      }
-      window.hotspotApp.joinRoom(code, 'Spectator', 'spectator');
+      // No nickname passed: a spectator keeps their own saved name. Passing
+      // the word "Spectator" here used to overwrite it for good.
+      window.hotspotApp.joinRoom(code, null, 'spectator');
     };
 
     let deferredPrompt = null;
@@ -617,15 +616,15 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=3.1.2"></script>
-  <script src="geo.js?v=3.1.2"></script>
-  <script src="replay.js?v=3.1.2"></script>
-  <script src="app.js?v=3.1.2"></script>
+  <script src="audio.js?v=3.2.0"></script>
+  <script src="geo.js?v=3.2.0"></script>
+  <script src="replay.js?v=3.2.0"></script>
+  <script src="app.js?v=3.2.0"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=3.1.2').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=3.2.0').catch(() => {});
       });
     }
 

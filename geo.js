@@ -9,6 +9,7 @@ class HotspotGeo {
     this.watchId = null;
     this.currentPosition = { lat: 37.774929, lng: -122.419416, timestamp: Date.now() }; // Default fallback
     this.accuracyFeet = 25;
+    this.hasRealFix = false;   // true once the phone has reported an actual position
     this.positionHistory = [];
     this.lagBuffers = {};   // keyed per target; see getBufferedPosition
     this.soloHiderPosition = null;
@@ -35,7 +36,12 @@ class HotspotGeo {
     this.onPositionUpdate = onUpdate;
     this.onError = onError;
 
-    if (this.onPositionUpdate && this.currentPosition) {
+    // Nothing is reported until the phone has a real fix. This used to emit the
+    // built-in fallback coordinate straight away, which the app then broadcast
+    // as if it were the player's location — a phone with GPS switched off
+    // showed up 2,000 miles away and the round started anyway. The fallback
+    // now exists only so the solo drill has somewhere to stand.
+    if (this.hasRealFix && this.onPositionUpdate) {
       this.onPositionUpdate({
         ...this.currentPosition,
         accuracy: this.accuracyFeet,
@@ -94,8 +100,12 @@ class HotspotGeo {
 
     this.currentPosition = { lat, lng, timestamp };
     this.accuracyFeet = accuracyFeet;
+    this.hasRealFix = true;
 
+    // Bounded: this is only a short recent history, and it used to grow for as
+    // long as the app stayed open.
     this.positionHistory.push({ lat, lng, accuracy: accuracyFeet, timestamp });
+    if (this.positionHistory.length > 120) this.positionHistory.shift();
 
     if (this.onPositionUpdate) {
       this.onPositionUpdate({
