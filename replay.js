@@ -106,7 +106,7 @@ class HotspotReplay {
     // Leaflet is loaded from a CDN. If it did not arrive, skip the map rather
     // than throwing — this runs inside the post-tag gameover handler.
     if (typeof L === 'undefined') {
-      container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:12px;color:#94A3B8;text-align:center;padding:12px;">Map unavailable — no connection to map server.</div>';
+      container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:15px;font-weight:600;color:rgba(255,255,255,.9);text-align:center;padding:12px;">Map unavailable — no connection to map server.</div>';
       return;
     }
 
@@ -173,17 +173,17 @@ class HotspotReplay {
         const iconHtml = `
           <div style="
             background: ${color};
-            width: 18px;
-            height: 18px;
+            width: 22px;
+            height: 22px;
             border-radius: 50%;
             border: 3px solid #FFF;
-            box-shadow: 0 0 12px ${color};
+            box-shadow: 0 0 6px ${color};
             display: flex;
             align-items: center;
             justify-content: center;
             color: #000;
-            font-weight: bold;
-            font-size: 10px;
+            font-weight: 800;
+            font-size: 13px;
           ">
             ${isHider ? 'H' : 'S'}
           </div>
@@ -191,7 +191,7 @@ class HotspotReplay {
         const customIcon = L.divIcon({
           html: iconHtml,
           className: 'custom-player-marker',
-          iconSize: [24, 24]
+          iconSize: [28, 28]
         });
 
         this.markers[player.id] = L.marker(latlng, { icon: customIcon })

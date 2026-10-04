@@ -22,7 +22,7 @@
    ========================================================================== */
 
 :root {
-  --css-version: "3.2.0";
+  --css-version: "3.2.1";
   color-scheme: dark;
 
   /* Elevation ladder — lighter is closer */
@@ -34,8 +34,10 @@
   --recess: #05070B;                /* engraved, below canvas */
 
   --ink: #FFFFFF;
-  --ink-2: rgba(255, 255, 255, .82);
-  --ink-3: rgba(255, 255, 255, .64);
+  /* Secondary inks sit well above the 64% floor: this is read outdoors, at
+     arm's length, often at dusk. */
+  --ink-2: rgba(255, 255, 255, .90);
+  --ink-3: rgba(255, 255, 255, .74);
 
   /* Chrome: cold */
   --accent: #7DD3FC;
@@ -55,12 +57,12 @@
     inset 0 1px 0 rgba(255, 255, 255, .10),
     inset 0 -1px 0 rgba(0, 0, 0, .5),
     0 1px 2px rgba(0, 0, 0, .6),
-    0 18px 34px -14px rgba(0, 0, 0, .92);
+    0 6px 14px -8px rgba(0, 0, 0, .9);   /* short and sharp: a wide soft cloud makes the type on top look fuzzy */
 
   --raise-2:
     inset 0 1px 0 rgba(255, 255, 255, .13),
     inset 0 -1px 0 rgba(0, 0, 0, .5),
-    0 10px 20px -8px rgba(0, 0, 0, .95);
+    0 5px 12px -7px rgba(0, 0, 0, .9);
 
   --well-sh:
     inset 0 3px 8px rgba(0, 0, 0, .9),
@@ -131,8 +133,9 @@ html, body {
   background: linear-gradient(180deg, #6E1420, #4A0C15);
   color: #FFD9DE;
   padding: 7px 12px;
-  font-family: var(--font-mono);
-  font-size: 10px; font-weight: 700; letter-spacing: .07em;
+  /* A sentence the player has to read and act on: text face, 14px. */
+  font-family: var(--font-text);
+  font-size: 14px; font-weight: 700; letter-spacing: 0;
   text-align: center; line-height: 1.3;
   display: none; flex-shrink: 0;
   position: relative; z-index: 40;
@@ -147,7 +150,7 @@ html, body {
 
 .accuracy-tag {
   font-family: var(--font-mono);
-  font-size: 9.5px; font-weight: 700; letter-spacing: .16em;
+  font-size: 13px; font-weight: 700; letter-spacing: .1em;
   text-transform: uppercase;
   color: var(--accent);
   cursor: pointer;
@@ -155,15 +158,15 @@ html, body {
 
 /* Icon buttons are circles in a dock */
 .icon-btn {
-  width: 44px; height: 44px;
+  width: 50px; height: 50px;
   display: grid; place-items: center;
   border-radius: 50%;
   border: 1px solid rgba(255, 255, 255, .07);
   background: linear-gradient(160deg, var(--e2-hi), var(--e2));
   box-shadow: var(--raise-2);
-  color: var(--ink-2);
+  color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 9px; font-weight: 700; letter-spacing: .04em;
+  font-size: 13px; font-weight: 700; letter-spacing: 0;
   cursor: pointer;
   position: relative; z-index: 20;
 }
@@ -194,7 +197,7 @@ html, body {
 .scope-rule {
   display: flex; align-items: center; gap: 10px;
   font-family: var(--font-mono);
-  font-size: 9px; letter-spacing: .22em;
+  font-size: 12px; letter-spacing: .14em;
   color: var(--ink-3);
   margin-bottom: 8px;
 }
@@ -209,14 +212,15 @@ html, body {
   font-size: clamp(38px, 12vw, 54px);
   letter-spacing: -.045em;
   line-height: .9;
-  color: var(--ink);
-  text-shadow: 0 0 44px rgba(125, 211, 252, .45);
+  color: var(--ink);   /* no glow: sharp beats hazy */
 }
+
+h2.brand-title { letter-spacing: -.02em; line-height: 1.05; }
 
 .brand-subtitle {
   font-family: var(--font-mono);
-  font-size: 9.5px; letter-spacing: .19em; text-transform: uppercase;
-  color: var(--ink-3);
+  font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--ink-2);
   margin-top: 7px;
 }
 
@@ -225,7 +229,7 @@ html, body {
 /* Status chips are pills sunk into a well — the only sanctioned pill */
 .tele {
   font-family: var(--font-mono);
-  font-size: 9px; font-weight: 700; letter-spacing: .14em;
+  font-size: 12px; font-weight: 700; letter-spacing: .12em;
   text-transform: uppercase;
   color: var(--ink-2);
   padding: 6px 12px;
@@ -252,13 +256,13 @@ html, body {
 
 .card-title {
   font-family: var(--font-mono);
-  font-size: 9.5px; font-weight: 700;
-  letter-spacing: .19em; text-transform: uppercase;
+  font-size: 12px; font-weight: 700;
+  letter-spacing: .13em; text-transform: uppercase;
   color: var(--ink-2);
   margin-bottom: 10px;
 }
 
-.solo-hint { font-size: 11.5px; color: var(--ink-2); line-height: 1.35; margin-bottom: 10px; }
+.solo-hint { font-size: 14px; color: var(--ink-2); line-height: 1.35; margin-bottom: 10px; }
 
 /* ---------------------------------------------------------------- controls */
 .btn {
@@ -267,7 +271,7 @@ html, body {
   border-radius: var(--r-s);
   border: 1px solid rgba(255, 255, 255, .07);
   font-family: var(--font-display);
-  font-size: 14px; font-weight: 700; letter-spacing: -.01em;
+  font-size: 16px; font-weight: 700; letter-spacing: -.01em;
   display: flex; align-items: center; justify-content: center; gap: 8px;
   margin-bottom: 9px;
   cursor: pointer; flex-shrink: 0;
@@ -284,7 +288,7 @@ html, body {
 .btn:active { transform: translateY(1px); filter: brightness(1.08); }
 .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 /* Not available right now (a power-up during hiding time, or already spent). */
-.btn:disabled { opacity: .35; cursor: default; }
+.btn:disabled { opacity: .5; cursor: default; }
 .btn:disabled:active { transform: none; filter: none; }
 
 /* The dominant action is filled and lit; nothing else competes. */
@@ -294,7 +298,7 @@ html, body {
   font-weight: 800;
   border-color: rgba(255, 255, 255, .38);
   box-shadow:
-    0 6px 18px rgba(125, 211, 252, .38),
+    0 3px 8px -2px rgba(125, 211, 252, .5),   /* a tight lit edge, not a haze */
     inset 0 1px 0 rgba(255, 255, 255, .65),
     inset 0 -1px 0 rgba(0, 0, 0, .28);
 }
@@ -312,13 +316,13 @@ html, body {
   border: 1px solid rgba(255, 255, 255, .07);
   background: linear-gradient(160deg, var(--e2-hi), var(--e2));
   box-shadow: var(--raise-2);
-  color: var(--ink-2);
-  font-family: var(--font-mono);
-  font-size: 10px; font-weight: 700; letter-spacing: .1em;
+  color: var(--ink);
+  font-family: var(--font-display);
+  font-size: 15px; font-weight: 700; letter-spacing: 0;
   cursor: pointer;
-  min-height: 44px;
+  min-height: 48px;
 }
-.btn-powerup:disabled { opacity: .35; cursor: default; }
+.btn-powerup:disabled { opacity: .5; cursor: default; }
 .btn-powerup:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 .powerup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
@@ -329,8 +333,8 @@ html, body {
 .input-label {
   display: block;
   font-family: var(--font-mono);
-  font-size: 9.5px; font-weight: 700;
-  letter-spacing: .19em; text-transform: uppercase;
+  font-size: 12px; font-weight: 700;
+  letter-spacing: .13em; text-transform: uppercase;
   color: var(--ink-2);
   margin-bottom: 6px;
 }
@@ -344,7 +348,7 @@ html, body {
   box-shadow: var(--well-sh);
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 15px;
+  font-size: 16px;
   outline: none;
   position: relative; z-index: 20;
 }
@@ -372,23 +376,23 @@ html, body {
 }
 .player-badge.hider::before {
   background: var(--heat-2);
-  box-shadow: 0 0 12px rgba(255, 107, 61, .95);
+  box-shadow: 0 0 6px rgba(255, 107, 61, .95);
 }
 .player-badge.seeker::before {
   background: var(--accent);
-  box-shadow: 0 0 12px rgba(125, 211, 252, .9);
+  box-shadow: 0 0 6px rgba(125, 211, 252, .9);
 }
 
 .badge-name {
   flex: 1 1 auto; min-width: 0;
   font-family: var(--font-display);
-  font-size: 15px; font-weight: 700; letter-spacing: -.01em;
+  font-size: 17px; font-weight: 700; letter-spacing: -.01em;
   color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .badge-you, .badge-role {
   font-family: var(--font-mono);
-  font-size: 9px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase;
+  font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
   color: var(--ink-3);
 }
 .badge-you { margin-left: 8px; }
@@ -407,8 +411,9 @@ html, body {
 
 /* One quiet line under a roster: who is watching, or a reminder. */
 .roster-note {
-  font-family: var(--font-mono);
-  font-size: 10px; letter-spacing: .08em;
+  /* Sentences, so the text face rather than tracked-out mono capitals. */
+  font-family: var(--font-text);
+  font-size: 14px; font-weight: 600; letter-spacing: 0; line-height: 1.3;
   color: var(--ink-2);
   text-align: center;
   flex-shrink: 0;
@@ -424,18 +429,18 @@ html, body {
   border-radius: var(--r-s);
   background: var(--recess);
   box-shadow: var(--well-sh);
-  font-family: var(--font-mono);
-  font-size: 11px; font-weight: 700; letter-spacing: .06em;
+  font-family: var(--font-text);
+  font-size: 15px; font-weight: 700; letter-spacing: 0; line-height: 1.3;
   color: var(--warn);
   margin-bottom: 9px;
 }
 .lobby-wait:last-child { margin-bottom: 0; }
 
 .roster-empty {
-  font-family: var(--font-mono);
-  font-size: 10px; letter-spacing: .1em;
-  color: var(--ink-3);
-  text-align: center; padding: 14px 8px;
+  font-family: var(--font-text);
+  font-size: 14px; font-weight: 600; letter-spacing: 0;
+  color: var(--ink-2);
+  text-align: center; padding: 12px 8px;
   border-radius: var(--r-s);
   background: var(--recess);
   box-shadow: var(--well-sh);
@@ -449,7 +454,6 @@ html, body {
   font-variant-numeric: tabular-nums;
   color: var(--ink);
   line-height: 1.05;
-  text-shadow: 0 0 40px rgba(125, 211, 252, .55);
 }
 
 /* ============================== THE ANCHOR ================================
@@ -493,28 +497,30 @@ html, body {
   letter-spacing: -.055em;
   line-height: .86;
   font-variant-numeric: tabular-nums;
-  color: var(--ink);
-  text-shadow: 0 0 44px rgba(125, 211, 252, .5);
+  color: var(--ink);   /* crisp white numeral, no halo */
 }
 #seeker-dist-readout .dist-sub {
   font-family: var(--font-mono);
-  font-size: 10px; font-weight: 700; letter-spacing: .19em; text-transform: uppercase;
-  color: var(--ink-3);
+  font-size: 14px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  line-height: 1.25;
+  color: var(--ink-2);
   margin-top: 9px;
 }
 #seeker-dist-readout .dist-warn {
   font-family: var(--font-mono);
-  font-size: 9px; font-weight: 700; letter-spacing: .14em;
+  font-size: 12px; font-weight: 700; letter-spacing: .12em;
   color: var(--warn);
-  margin-top: 5px;
+  margin-top: 6px;
 }
 
 .seeker-band-label {
-  font-family: var(--font-mono);
-  font-size: 11px; font-weight: 700;
-  letter-spacing: .26em; text-transform: uppercase;
-  color: var(--ink-2);
-  margin-bottom: 10px;
+  /* COLD / WARM / HOT is half of what the seeker is reading. It was an 11px
+     caption; it is now the second-largest thing on the screen. */
+  font-family: var(--font-display);
+  font-size: clamp(22px, 7vw, 30px); font-weight: 800;
+  letter-spacing: .06em; text-transform: uppercase; line-height: 1.05;
+  color: var(--ink);
+  margin-bottom: 8px;
 }
 
 .bearing-arrow {
@@ -524,14 +530,14 @@ html, body {
   margin-left: -17px;
   display: none;
   transition: transform .2s ease-out;
-  filter: drop-shadow(0 0 8px rgba(125, 211, 252, .9));
+  filter: drop-shadow(0 0 5px rgba(125, 211, 252, .9));
 }
 
 #bearing-note {
-  position: absolute; bottom: -6px; left: 50%; transform: translateX(-50%);
-  white-space: nowrap;
-  font-family: var(--font-mono);
-  font-size: 9px; font-weight: 700; letter-spacing: .12em;
+  position: absolute; bottom: -8px; left: 0; right: 0;
+  text-align: center; line-height: 1.25;
+  font-family: var(--font-text);
+  font-size: 14px; font-weight: 700; letter-spacing: 0;
   display: none;
 }
 
@@ -549,11 +555,11 @@ html, body {
 }
 
 .rail-cell {
-  padding: 8px 6px;
+  padding: 9px 6px;
   border-radius: 999px;
   text-align: center;
   font-family: var(--font-mono);
-  font-size: 10px; font-weight: 700; letter-spacing: .1em;
+  font-size: 13px; font-weight: 700; letter-spacing: .04em;
   color: var(--ink-2);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
@@ -566,12 +572,12 @@ html, body {
 .headstart-counter, #match-timer-seeker, #match-timer-hider, #match-timer-spectator, #hider-timer-display {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  letter-spacing: .08em;
+  letter-spacing: .04em;
 }
 
 #seeker-boundary-alert, #hider-boundary-alert {
-  font-family: var(--font-mono);
-  font-size: 10px; font-weight: 700; letter-spacing: .07em;
+  font-family: var(--font-text);
+  font-size: 15px; font-weight: 700; letter-spacing: 0; line-height: 1.25;
   text-align: center;
   padding: 9px 12px;
   border-radius: var(--r-s);
@@ -585,7 +591,7 @@ html, body {
 
 .role-badge {
   font-family: var(--font-mono);
-  font-size: 9.5px; font-weight: 700; letter-spacing: .22em; text-transform: uppercase;
+  font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
   padding: 7px 16px;
   border-radius: 999px;
   background: var(--recess);
@@ -604,8 +610,16 @@ html, body {
   letter-spacing: -.05em;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
-  text-shadow: 0 0 40px rgba(255, 107, 61, .5);
   line-height: .9;
+}
+/* The "±23ft" beside it. Letter-spacing is inherited as a fixed length, so the
+   big numeral's tight tracking was crushing these small letters into each
+   other; it has to be reset here. */
+.dist-margin {
+  font-size: .34em; font-weight: 700;
+  letter-spacing: 0;
+  color: var(--ink-2);
+  margin-left: .3em;
 }
 
 /* -------------------------------------------------- season records as dials */
@@ -625,17 +639,17 @@ html, body {
 
 .stat-val {
   font-family: var(--font-mono);
-  font-size: 13px; font-weight: 700;
+  font-size: 14px; font-weight: 700;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
-  position: absolute; top: 26px; left: 0; right: 0; text-align: center;
+  position: absolute; top: 25px; left: 0; right: 0; text-align: center;
   pointer-events: none;
 }
 
 .stat-lbl {
   font-family: var(--font-mono);
-  font-size: 8px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
-  color: var(--ink-3);
+  font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-2);
 }
 
 /* ------------------------------------------------------------------- maps */
@@ -654,8 +668,19 @@ html, body {
   width: 100%; margin-bottom: 10px; accent-color: var(--accent);
 }
 
+/* The one sentence on the result screen that says what happened. It was
+   styled as a 9.5px caption. */
+.result-line {
+  font-family: var(--font-text);
+  font-size: 17px; font-weight: 700; line-height: 1.25;
+  color: var(--ink);
+  margin-top: 6px;
+}
+
 /* -------------------------------------------------------------- diagnostics */
 #diag-panel { font-family: var(--font-mono); }
+#diag-body { font-size: 14px; line-height: 1.5; color: var(--ink); }
+#diag-panel p { font-size: 13px; color: var(--ink-2); margin-top: 12px; line-height: 1.4; }
 
 /* ------------------------------------------------------------ short screens */
 @media (max-height: 720px) {
@@ -663,30 +688,41 @@ html, body {
   .brand-title { font-size: clamp(28px, 9vw, 38px); }
   .scope-head, .brand-header { margin-bottom: 6px; }
   .card { padding: 11px; margin-bottom: 8px; border-radius: 16px; }
-  .card-title { margin-bottom: 8px; }
-  .btn { padding: 11px 14px; font-size: 13px; margin-bottom: 7px; }
-  .text-input, .select-input { padding: 10px 12px; font-size: 14px; }
+  .card-title { margin-bottom: 6px; }
+  .scope-meta { margin-top: 7px; }
+  #pwa-install-btn { margin-top: 7px !important; }
+  /* Short screens give up padding and margins. They do not give up type size. */
+  .btn { padding: 10px 14px; margin-bottom: 7px; }
+  .text-input, .select-input { padding: 10px 12px; }
   .input-group { margin-bottom: 8px; }
   .solo-hint { display: none; }
   #voice-row { margin-top: 5px !important; }
   #voice-row .btn { min-height: 44px !important; padding: 6px 14px !important; }
-  .stat-box { padding: 8px 4px 7px; }
+  .stat-box { padding: 7px 4px 6px; gap: 4px; }
   .dial { width: 40px; height: 40px; }
-  .stat-val { top: 20px; }
+  .stat-val { top: 18px; }
   .pulse-ring-outer { width: min(62vw, 250px); }
   #seeker-dist-readout .dist-main { font-size: clamp(42px, 15vw, 72px); }
 }
 
 /* The smallest phones, with the GPS banner taking two lines off the top: drop
    the ornamental rule above the wordmark so the last button stays on screen. */
-@media (max-height: 660px) {
+@media (max-height: 700px) {
   .scope-rule { display: none; }
+}
+
+/* The smallest phones (640 tall). Still only spacing: a slimmer top bar and
+   tighter cards, so the home screen keeps its last button with the GPS banner up. */
+@media (max-height: 660px) {
+  .top-bar { padding: 6px 13px 4px; }
+  .icon-btn { width: 46px; height: 46px; }
+  .card { padding: 10px; margin-bottom: 7px; }
 }
 
 @media (max-height: 600px) {
   .brand-title { font-size: 24px; }
   .card { padding: 9px; margin-bottom: 6px; }
-  .btn { padding: 9px 12px; font-size: 12px; margin-bottom: 5px; }
+  .btn { padding: 9px 12px; margin-bottom: 5px; }
   .pulse-ring-outer { width: min(52vw, 200px); }
 }
 

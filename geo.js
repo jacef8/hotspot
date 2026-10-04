@@ -50,7 +50,7 @@ class HotspotGeo {
     }
 
     if (!('geolocation' in navigator)) {
-      if (this.onError) this.onError('Geolocation is not supported by this browser.');
+      if (this.onError) this.onError('This browser cannot share location.');
       return;
     }
 
@@ -119,17 +119,19 @@ class HotspotGeo {
   }
 
   handlePosError(err) {
-    let msg = 'Unable to get location.';
+    // Each of these is shown in the banner at the top of the screen, which is
+    // also the button that retries — so each says what to do and stays short.
+    let msg = 'No location yet. Tap here to try again.';
     if (err && err.code === 1) { // PERMISSION_DENIED
-      msg = 'GPS Permission Denied. Please enable Location access in browser settings.';
+      msg = 'Location is blocked. Allow it in your browser settings, then tap here.';
     } else if (err && err.code === 2) { // POSITION_UNAVAILABLE
-      msg = 'Location unavailable. Ensure GPS / Location is turned ON.';
+      msg = 'No location signal. Turn on Location, then tap here.';
     } else if (err && err.code === 3) { // TIMEOUT
-      msg = 'Location request timed out. Searching for GPS satellites...';
+      msg = 'Still looking for GPS. Tap here to try again.';
     }
 
     if (this.isProtocolWarning) {
-      msg = 'Opened as local file — GPS requires HTTPS web server (e.g. Railway, Vercel, HTTPS).';
+      msg = 'Opened as a local file. GPS only works from the https web address.';
     }
 
     if (this.onError) this.onError(msg);

@@ -19,7 +19,7 @@
     object-src 'none';
     base-uri 'self';
     form-action 'none'">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.2.0</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.2.1</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -67,7 +67,7 @@
   </script>
 
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=3.2.0">
+  <link rel="stylesheet" href="style.css?v=3.2.1">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -85,13 +85,13 @@
 <body>
 
   <!-- Diagnostics overlay — opened by tapping the version badge -->
-  <div id="diag-panel" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(10,10,13,.97); overflow-y:auto; padding:16px; font-family:ui-monospace,Menlo,Consolas,monospace;">
+  <div id="diag-panel" style="display:none; position:fixed; inset:0; z-index:9999; background:#080A0F; overflow-y:auto; padding:16px; font-family:ui-monospace,Menlo,Consolas,monospace;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
       <strong style="font-size:15px; color:var(--accent); letter-spacing:1px;">DIAGNOSTICS</strong>
       <button onclick="window.hotspotApp.toggleDiagnostics()" style="background:var(--e2-hi); color:var(--ink); min-height:44px; border:0; border-radius:8px; padding:8px 14px; font-weight:800;">Close</button>
     </div>
-    <div id="diag-body" style="font-size:12px; line-height:1.5;"></div>
-    <p style="font-size:11px; opacity:.6; margin-top:12px; line-height:1.4;">
+    <div id="diag-body"></div>
+    <p>
       Both phones should show the same room, database CONNECTED, and each other under "players seen".
     </p>
   </div>
@@ -100,7 +100,7 @@
 
     <!-- Environment / GPS Diagnostic Banner -->
     <div id="gps-warning-banner" class="warning-banner" onclick="window.hotspotApp.requestGpsPermissionDirectly()">
-      Tap to Enable GPS Location Access (Required)
+      Tap here to turn on GPS. The game needs your location.
     </div>
 
     <!-- Cloud Sync Failure Banner -->
@@ -121,7 +121,7 @@
         <div class="scope-rule"><span>THERMAL PURSUIT SYSTEM</span></div>
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="scope-meta">
-          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.2.0</span>
+          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.2.1</span>
           <span id="cloud-sync-status" class="tele">STANDBY</span>
         </div>
       </div>
@@ -147,7 +147,7 @@
           <select id="voice-select" class="select-input" aria-label="Announcer voice" style="flex: 1; min-width: 0; margin: 0;">
             <option value="auto">Announcer voice</option>
           </select>
-          <button class="btn btn-secondary" style="width: auto; margin: 0; min-height: 46px; padding: 8px 16px; font-size: 12px;" onclick="window.hotspotAudio.testVoice()">
+          <button class="btn btn-secondary" style="width: auto; margin: 0; min-height: 46px; padding: 8px 16px;" onclick="window.hotspotAudio.testVoice()">
             Test
           </button>
         </div>
@@ -156,7 +156,7 @@
       <div class="card" style="margin-bottom: 0;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
           <div class="card-title" style="margin-bottom: 0;">Season Records</div>
-          <button class="btn btn-secondary" style="width: auto; min-height: 46px; padding: 8px 14px; font-size: 11px; margin: 0; border-color: rgba(245,158,11,.45); color: var(--warn);" onclick="window.hotspotApp.resetSeasonRecords()">
+          <button class="btn btn-secondary" style="width: auto; min-height: 46px; padding: 8px 14px; font-size: 14px; margin: 0; border-color: rgba(245,158,11,.45); color: var(--warn);" onclick="window.hotspotApp.resetSeasonRecords()">
             Reset Season
           </button>
         </div>
@@ -192,8 +192,8 @@
             <div class="stat-lbl">Longest</div>
           </div>
         </div>
-        <button id="pwa-install-btn" class="btn btn-secondary" style="margin-top: 10px; margin-bottom: 0; font-size: 12px; border-color: var(--accent); color: var(--accent);" onclick="window.showPwaInstallGuide()">
-          Install App to Home Screen (Full Screen)
+        <button id="pwa-install-btn" class="btn btn-secondary" style="margin-top: 10px; margin-bottom: 0; border-color: var(--accent); color: var(--accent);" onclick="window.showPwaInstallGuide()">
+          Install App to Home Screen
         </button>
       </div>
     </div>
@@ -206,44 +206,44 @@
 
       <div class="card" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
         <div class="input-group">
-          <label class="input-label">Hiding Time (before seekers are released)</label>
+          <label class="input-label">Hiding time before seekers start</label>
           <select id="setup-headstart" class="select-input">
-            <option value="30">30 Seconds</option>
-            <option value="60" selected>60 Seconds (Standard)</option>
-            <option value="90">90 Seconds</option>
-            <option value="120">120 Seconds (Large Yard)</option>
+            <option value="30">30 seconds</option>
+            <option value="60" selected>60 seconds (standard)</option>
+            <option value="90">90 seconds</option>
+            <option value="120">120 seconds (large yard)</option>
           </select>
         </div>
 
         <div class="input-group">
           <label class="input-label">Yard Boundary Limit</label>
           <select id="setup-boundary" class="select-input">
-            <option value="150">150 Feet (~50 Yards)</option>
-            <option value="250" selected>250 Feet (~80 Yards - Standard)</option>
-            <option value="350">350 Feet (~115 Yards - Large Yard)</option>
-            <option value="500">500 Feet (~165 Yards - Park)</option>
-            <option value="0">No Boundary Limit</option>
+            <option value="150">150 feet (small yard)</option>
+            <option value="250" selected>250 feet (standard)</option>
+            <option value="350">350 feet (large yard)</option>
+            <option value="500">500 feet (park)</option>
+            <option value="0">No boundary</option>
           </select>
         </div>
 
         <div class="input-group">
-          <label class="input-label">Tag Distance (how close counts as a catch)</label>
+          <label class="input-label">Tag distance (catch range)</label>
           <select id="setup-tagradius" class="select-input">
-            <option value="12">12 Feet (Touch Range — needs a strong GPS fix)</option>
-            <option value="20" selected>20 Feet (Standard)</option>
-            <option value="30">30 Feet (Forgiving)</option>
-            <option value="40">40 Feet (Loose — weak GPS / heavy tree cover)</option>
+            <option value="12">12 feet (needs strong GPS)</option>
+            <option value="20" selected>20 feet (standard)</option>
+            <option value="30">30 feet (forgiving)</option>
+            <option value="40">40 feet (weak GPS, trees)</option>
           </select>
         </div>
 
         <div class="input-group">
           <label class="input-label">Hunt Time Limit</label>
           <select id="setup-matchduration" class="select-input">
-            <option value="180">3 Minutes (Fast Blitz)</option>
-            <option value="300" selected>5 Minutes (Standard)</option>
-            <option value="420">7 Minutes (Extended)</option>
-            <option value="600">10 Minutes (Large Park)</option>
-            <option value="0">No Time Limit (Until Tagged)</option>
+            <option value="180">3 minutes (fast)</option>
+            <option value="300" selected>5 minutes (standard)</option>
+            <option value="420">7 minutes (long)</option>
+            <option value="600">10 minutes (large park)</option>
+            <option value="0">No time limit</option>
           </select>
         </div>
 
@@ -267,8 +267,8 @@
 
       <!-- Quick Nickname Editor Bar -->
       <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-        <input type="text" id="lobby-nickname-input" class="text-input" style="flex: 1; padding: 10px 14px; font-size: 14px; margin-bottom: 0;" placeholder="Your name">
-        <button class="btn btn-secondary" style="width: auto; padding: 10px 14px; font-size: 13px; margin-bottom: 0; border-color: var(--accent); color: var(--accent); font-weight: 800;" onclick="window.hotspotApp.updateLobbyNickname()">
+        <input type="text" id="lobby-nickname-input" class="text-input" style="flex: 1; padding: 10px 14px; margin-bottom: 0;" placeholder="Your name">
+        <button class="btn btn-secondary" style="width: auto; padding: 10px 14px; margin-bottom: 0; border-color: var(--accent); color: var(--accent); font-weight: 800;" onclick="window.hotspotApp.updateLobbyNickname()">
           Save Name
         </button>
       </div>
@@ -280,14 +280,14 @@
 
       <div class="card" style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 12px;">
         <div>
-          <div class="card-title" style="color: var(--warn); font-size: 13px; font-weight: 900; letter-spacing: 1px; margin-bottom: 6px;">
+          <div class="card-title" style="color: var(--warn); font-size: 14px; font-weight: 900; letter-spacing: 1px; margin-bottom: 6px;">
             HIDER
           </div>
           <div id="lobby-hider-list"></div>
         </div>
 
         <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden;">
-          <div class="card-title" style="color: var(--accent); font-size: 13px; font-weight: 900; letter-spacing: 1px; margin-bottom: 6px;">
+          <div class="card-title" style="color: var(--accent); font-size: 14px; font-weight: 900; letter-spacing: 1px; margin-bottom: 6px;">
             SEEKERS
           </div>
           <div id="lobby-seeker-list" class="player-list" style="flex: 1; overflow-y: auto;"></div>
@@ -318,7 +318,7 @@
 
       <div class="card" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
         <div class="input-group">
-          <label class="input-label">Room Code (6 characters, from the host)</label>
+          <label class="input-label">Room code — 6 characters</label>
           <input type="text" id="join-code-input" class="text-input" maxlength="6" placeholder="e.g. K7RQ4M" style="text-transform: uppercase; font-size: 22px; text-align: center; letter-spacing: 4px;" onkeydown="if(event.key==='Enter') window.joinRoomAction()">
         </div>
 
@@ -341,7 +341,7 @@
 
       <div class="card" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
         <div class="input-group">
-          <label class="input-label">Room Code (6 characters, from the host)</label>
+          <label class="input-label">Room code — 6 characters</label>
           <input type="text" id="spectator-code-input" class="text-input" maxlength="6" placeholder="e.g. K7RQ4M" style="text-transform: uppercase; font-size: 22px; text-align: center; letter-spacing: 4px;" onkeydown="if(event.key==='Enter') window.joinSpectatorAction()">
         </div>
         <p class="solo-hint" style="display: block; margin: 0;">You wait in the lobby with everyone else. The live map opens when the round starts, and you can start the round yourself.</p>
@@ -363,7 +363,7 @@
       </div>
 
       <!-- Yard limit readout — seekers get the same boundary feedback as the hider -->
-      <div id="seeker-boundary-alert" style="display: none; padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 800; text-align: center; margin: 4px 0; color: #FFF;"></div>
+      <div id="seeker-boundary-alert" style="display: none;"></div>
 
       <div class="seeker-radar-container">
         <!-- Pulse Ring -->
@@ -380,7 +380,7 @@
                 <stop id="hg2" offset="100%" stop-color="#E8F7FF"/>
               </linearGradient>
               <filter id="heatglow" x="-60%" y="-60%" width="220%" height="220%">
-                <feGaussianBlur stdDeviation="9" result="b"/>
+                <feGaussianBlur stdDeviation="4" result="b"/>
                 <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
               </filter>
             </defs>
@@ -411,11 +411,11 @@
 
       <!-- Solo Drill Indoor Test Controls -->
       <div id="solo-controls-card" class="card" style="display: none; margin-bottom: 8px;">
-        <div class="card-title">Solo Test Controls (Simulate Movement)</div>
+        <div class="card-title">Solo test controls</div>
         <div style="display: flex; gap: 6px;">
-          <button class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(-75)">Walk -75ft</button>
-          <button class="btn btn-secondary" style="flex: 1; font-size: 11px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(75)">Move +75ft</button>
-          <button class="btn btn-primary" style="flex: 1; font-size: 11px; padding: 8px; background: var(--bad);" onclick="window.hotspotApp.instantTagSoloHider()">Tag Hider</button>
+          <button class="btn btn-secondary" style="flex: 1; font-size: 14px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(-75)">Walk -75ft</button>
+          <button class="btn btn-secondary" style="flex: 1; font-size: 14px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(75)">Move +75ft</button>
+          <button class="btn btn-primary" style="flex: 1; font-size: 14px; padding: 8px; background: var(--bad);" onclick="window.hotspotApp.instantTagSoloHider()">Tag Hider</button>
         </div>
       </div>
 
@@ -435,13 +435,13 @@
       <div style="text-align: center;">
         <div class="brand-subtitle">HIDING TIME REMAINING</div>
         <div id="hider-timer-display" class="headstart-counter" style="font-size: 32px; font-weight: 900; color: var(--warn);">60s</div>
-        <div id="match-timer-hider" style="font-size: 14px; font-weight: 800; color: var(--accent); margin-top: 4px;">
+        <div id="match-timer-hider" style="font-size: 16px; font-weight: 800; color: var(--accent); margin-top: 4px;">
           MATCH TIME: 5:00
         </div>
       </div>
 
       <!-- Yard Boundary Warning Banner -->
-      <div id="hider-boundary-alert" style="display: none; padding: 8px 12px; border-radius: 8px; font-size: 12px; font-weight: 800; text-align: center; margin: 4px 0; color: #FFF; animation: pulse-ring 1s infinite;"></div>
+      <div id="hider-boundary-alert" style="display: none;"></div>
 
       <!-- Hider Ready Early Button -->
       <button id="btn-hider-ready" class="btn btn-secondary" style="margin: 6px 0; border-color: var(--accent);" onclick="window.hotspotApp.hiderReadyEarly()">
@@ -451,7 +451,7 @@
       <div class="card hider-radar-box">
         <div class="card-title">Nearest Seeker Distance</div>
         <div id="hider-nearest-dist" class="hider-dist-num">--ft</div>
-        <div style="font-size: 11px; color: var(--ink-3);">Silent Proximity Radar</div>
+        <div style="font-size: 14px; font-weight: 600; color: var(--ink-2); margin-top: 6px;">Silent — only you can see this</div>
       </div>
 
       <div class="card" style="margin-bottom: 0;">
@@ -483,12 +483,12 @@
       <div id="spectator-map"></div>
 
       <!-- Appears only once you pan/zoom; auto-follow pauses until you tap it -->
-      <button class="btn btn-secondary map-recenter-btn" style="display: none; margin-bottom: 8px; border-color: var(--accent); color: var(--accent); padding: 8px; font-size: 12px;" onclick="window.hotspotReplay.recenterMap()">
-        Recenter on Players (resume auto-follow)
+      <button class="btn btn-secondary map-recenter-btn" style="display: none; margin-bottom: 8px; border-color: var(--accent); color: var(--accent); padding: 8px;" onclick="window.hotspotReplay.recenterMap()">
+        Recenter on Players
       </button>
 
       <div class="card" style="margin-bottom: 0; flex-shrink: 0; max-height: 34%; display: flex; flex-direction: column; overflow: hidden;">
-        <div class="card-title">On the field — distance to the hider</div>
+        <div class="card-title">Distance to the hider</div>
         <div id="spectator-leaderboard" class="player-list" style="overflow-y: auto;"></div>
       </div>
     </div>
@@ -497,13 +497,13 @@
     <div id="replay-screen" class="screen">
       <div class="brand-header" style="margin-bottom: 6px;">
         <h2 id="replay-headline" class="brand-title" style="font-size: 24px; color: var(--heat-2);">ROUND OVER</h2>
-        <div id="replay-subhead" class="brand-subtitle">Post-Match Track Replay</div>
+        <div id="replay-subhead" class="result-line">Post-match track replay</div>
       </div>
 
       <div id="replay-map"></div>
 
       <!-- Appears only once you pan/zoom the replay map -->
-      <button class="btn btn-secondary map-recenter-btn" style="display: none; margin-bottom: 8px; border-color: var(--accent); color: var(--accent); padding: 8px; font-size: 12px;" onclick="window.hotspotReplay.recenterMap()">
+      <button class="btn btn-secondary map-recenter-btn" style="display: none; margin-bottom: 8px; border-color: var(--accent); color: var(--accent); padding: 8px;" onclick="window.hotspotReplay.recenterMap()">
         Recenter on Tracks
       </button>
 
@@ -616,15 +616,15 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=3.2.0"></script>
-  <script src="geo.js?v=3.2.0"></script>
-  <script src="replay.js?v=3.2.0"></script>
-  <script src="app.js?v=3.2.0"></script>
+  <script src="audio.js?v=3.2.1"></script>
+  <script src="geo.js?v=3.2.1"></script>
+  <script src="replay.js?v=3.2.1"></script>
+  <script src="app.js?v=3.2.1"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=3.2.0').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=3.2.1').catch(() => {});
       });
     }
 

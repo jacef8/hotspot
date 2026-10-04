@@ -1727,12 +1727,12 @@ class HotspotApp {
     });
     const row = (k, v, bad) =>
       `<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;">
-         <span style="opacity:.6">${k}</span>
+         <span style="opacity:.78">${k}</span>
          <span style="text-align:right;font-weight:700;color:${bad ? 'var(--bad)' : 'var(--ink)'}">${v}</span>
        </div>`;
 
     el.innerHTML =
-      row('app version', 'v3.2.0') +
+      row('app version', 'v3.2.1') +
       (() => {
         // Straight from the stylesheet. If this disagrees with the app version
         // above, the phone is running cached CSS - provable, not a guess.
@@ -1741,7 +1741,7 @@ class HotspotApp {
           css = (getComputedStyle(document.documentElement)
             .getPropertyValue('--css-version') || '').replace(/["']/g, '').trim() || 'missing';
         } catch (e) {}
-        return row('stylesheet', css, css !== '3.2.0');
+        return row('stylesheet', css, css !== '3.2.1');
       })() +
       row('room', this.roomCode || '(none)', !this.roomCode) +
       row('am I host', this.isRoomHost ? 'yes' : 'no') +
@@ -2245,10 +2245,10 @@ class HotspotApp {
       warnBox.style.display = 'none';
     } else if (warnBox) {
       if (pos.isProtocolWarning) {
-        warnBox.innerText = 'Opened as local file — GPS requires HTTPS web server.';
+        warnBox.innerText = 'Opened as a local file. GPS only works from the https web address.';
         warnBox.style.display = 'block';
       } else if (pos.accuracy > 50) {
-        warnBox.innerText = `Weak GPS Fix (±${Math.round(pos.accuracy)}ft) — Move out from under heavy tree canopy!`;
+        warnBox.innerText = `Weak GPS (±${Math.round(pos.accuracy)}ft). Move out from under the trees.`;
         warnBox.style.display = 'block';
       } else {
         warnBox.style.display = 'none';
@@ -2299,7 +2299,7 @@ class HotspotApp {
       return;
     }
 
-    warnBox.innerText = `Tap to Allow GPS Access: ${errMessage}`;
+    warnBox.innerText = errMessage;
     warnBox.style.display = 'block';
 
     // Don't keep claiming a fix the phone does not have. The top bar used to
@@ -2434,7 +2434,7 @@ class HotspotApp {
 
     if (!this.myPosition) {
       // Say so, rather than leaving the radar on whatever it showed last.
-      if (this.role === 'seeker') this.showRadarNotice('NO GPS', 'your phone has no location fix');
+      if (this.role === 'seeker') this.showRadarNotice('NO GPS', 'no location on this phone');
       if (this.role === 'hider') {
         const d = document.getElementById('hider-nearest-dist');
         if (d) d.innerText = 'NO GPS';
@@ -2476,10 +2476,10 @@ class HotspotApp {
         if (hiderPos) {
           this.showRadarNotice('NO SIGNAL', `last fix ${Math.round(hiderFixAgeMs / 1000)}s ago`);
         } else if (this.hiderSilentMs > 18000) {
-          this.showRadarNotice('HIDER OFFLINE', 'hider lost — hunt cancels in ' + Math.max(0, Math.ceil((35000 - this.hiderSilentMs) / 1000)) + 's');
+          this.showRadarNotice('HIDER OFFLINE', 'hunt cancels in ' + Math.max(0, Math.ceil((35000 - this.hiderSilentMs) / 1000)) + 's');
         } else if (hiderPlayerForAcc) {
           // The hider is here and talking, but their phone has no location.
-          this.showRadarNotice('NO GPS', 'the hider’s phone has no location fix');
+          this.showRadarNotice('NO GPS', 'hider has no location');
         } else {
           this.showRadarNotice('NO SIGNAL', 'waiting for hider…');
         }
@@ -2526,7 +2526,7 @@ class HotspotApp {
         const unit = far ? 'yards' : 'feet';
         distEl.innerHTML =
           `<span class="dist-main">${value}</span>` +
-          `<span class="dist-sub">${unit}${this.isSoloDrill ? ' &middot; simulated' : ' &middot; \u00b1' + marginFeet}</span>` +
+          `<span class="dist-sub">${unit}${this.isSoloDrill ? ' &middot; drill' : ' &middot; \u00b1' + marginFeet}</span>` +
           (bandInfo.capped ? '<span class="dist-warn">WEAK GPS FIX</span>' : '');
       }
 
@@ -2563,8 +2563,8 @@ class HotspotApp {
           if (note) {
             note.style.display = 'block';
             note.innerText = usable
-              ? 'Arrow points at the hider — hold the phone flat'
-              : 'No compass — arrow is relative to NORTH';
+              ? 'Arrow points at the hider. Hold the phone flat.'
+              : 'No compass. Arrow is measured from north.';
             note.style.color = usable ? 'var(--accent)' : 'var(--warn)';
           }
         }
@@ -2610,7 +2610,7 @@ class HotspotApp {
           const shown = Math.round(closestDistFeet) > 300
             ? `${Math.round(closestDistFeet / 3)}yd`
             : `${Math.round(closestDistFeet)}ft`;
-          distEl.innerHTML = `${shown}<span style="font-size:.35em;opacity:.65;font-weight:600;"> ±${margin}ft</span>`;
+          distEl.innerHTML = `${shown}<span class="dist-margin">±${margin}ft</span>`;
         }
       } else {
         if (distEl) distEl.innerText = '--ft';
@@ -2641,10 +2641,10 @@ class HotspotApp {
     );
     const roomLeft = Math.max(0, Math.round(this.boundaryRadius - distFromCenter));
 
-    let bg, text;
+    let bg, fg, text;
     if (distFromCenter > this.boundaryRadius) {
-      bg = '#EF4444';
-      text = `OUT OF BOUNDS — ${Math.round(distFromCenter - this.boundaryRadius)}ft past the ${this.boundaryRadius}ft line. Head back!`;
+      bg = '#C8102E'; fg = '#FFFFFF';
+      text = `OUT OF BOUNDS — ${Math.round(distFromCenter - this.boundaryRadius)}ft over the line. Head back!`;
       if (!this.outOfBoundsSpoken) {
         this.outOfBoundsSpoken = true;
         if ('vibrate' in navigator) { try { navigator.vibrate([200, 100, 200]); } catch(e) {} }
@@ -2652,17 +2652,18 @@ class HotspotApp {
       }
     } else if (distFromCenter > 0.8 * this.boundaryRadius) {
       this.outOfBoundsSpoken = false;
-      bg = '#F59E0B';
-      text = `NEAR THE EDGE — only ${roomLeft}ft of room left`;
+      bg = '#FFB020'; fg = '#1A1100';
+      text = `NEAR THE EDGE — ${roomLeft}ft of room left`;
     } else {
       this.outOfBoundsSpoken = false;
-      bg = 'rgba(34, 197, 94, 0.20)';
+      bg = 'rgba(52, 211, 153, 0.22)'; fg = '#FFFFFF';
       text = `In bounds — ${roomLeft}ft of room left`;
     }
 
     banners.forEach(b => {
       b.style.display = 'block';
       b.style.background = bg;
+      b.style.color = fg;
       b.innerText = text;
     });
   }

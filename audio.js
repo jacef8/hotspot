@@ -106,7 +106,7 @@ class HotspotAudio {
     const auto = list[0];
     const esc = window.hsEscape || ((x) => x);
     sel.innerHTML =
-      `<option value="auto">Best available — ${esc(auto.name)}</option>` +
+      `<option value="auto">Auto: ${esc(auto.name)}</option>` +
       list.map(v => `<option value="${esc(v.voiceURI || v.name)}">${esc(v.name)} (${esc(v.lang)})</option>`).join('');
     sel.value = [...sel.options].some(o => o.value === saved) ? saved : 'auto';
     sel.onchange = () => {
