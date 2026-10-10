@@ -22,7 +22,7 @@
    ========================================================================== */
 
 :root {
-  --css-version: "3.2.1";
+  --css-version: "3.3.0";
   color-scheme: dark;
 
   /* Elevation ladder — lighter is closer */
@@ -127,6 +127,15 @@ html, body {
 }
 
 @keyframes breathe { to { transform: translateX(-50%) scale(1.12); } }
+
+/* The living background (ambient.js) draws into this canvas when WebGL is
+   available. The CSS glow above is the fallback and is hidden once it does. */
+#ambient-canvas {
+  position: absolute; inset: 0; z-index: 0;
+  width: 100%; height: 100%;
+  display: block; pointer-events: none;
+}
+#app-container.has-ambient::before { display: none; }
 
 /* ------------------------------------------------------------------ chrome */
 .warning-banner {
@@ -360,6 +369,12 @@ h2.brand-title { letter-spacing: -.02em; line-height: 1.05; }
 
 /* ------------------------------------------------------------------ roster */
 .player-list { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: hidden; }
+
+/* The three panels that scroll. scroll.js hands each to Lenis; these are the
+   few rules Lenis expects on an element it drives. */
+.scroll-well { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.scroll-well.lenis-smooth, #diag-panel.lenis-smooth { scroll-behavior: auto; }
+.lenis.lenis-stopped { overflow: clip; }
 
 .player-badge {
   display: flex; align-items: center; gap: 10px;

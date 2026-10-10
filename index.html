@@ -10,7 +10,7 @@
        still required because the screens use inline onclick handlers. -->
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'self';
-    script-src 'self' 'unsafe-inline' https://unpkg.com https://www.gstatic.com https://*.firebaseio.com https://*.firebasedatabase.app;
+    script-src 'self' 'unsafe-inline' https://unpkg.com https://cdn.jsdelivr.net https://www.gstatic.com https://*.firebaseio.com https://*.firebasedatabase.app;
     style-src 'self' 'unsafe-inline' https://unpkg.com https://fonts.googleapis.com;
     img-src 'self' data: blob: https://unpkg.com https://server.arcgisonline.com;
     connect-src 'self' https://*.firebaseio.com wss://*.firebaseio.com https://*.firebasedatabase.app wss://*.firebasedatabase.app https://0.peerjs.com wss://0.peerjs.com https://*.peerjs.com wss://*.peerjs.com https://server.arcgisonline.com stun: turn:;
@@ -19,7 +19,7 @@
     object-src 'none';
     base-uri 'self';
     form-action 'none'">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.2.1</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.3.0</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -67,7 +67,7 @@
   </script>
 
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=3.2.1">
+  <link rel="stylesheet" href="style.css?v=3.3.0">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -85,7 +85,8 @@
 <body>
 
   <!-- Diagnostics overlay — opened by tapping the version badge -->
-  <div id="diag-panel" style="display:none; position:fixed; inset:0; z-index:9999; background:#080A0F; overflow-y:auto; padding:16px; font-family:ui-monospace,Menlo,Consolas,monospace;">
+  <div id="diag-panel" style="display:none; position:fixed; inset:0; z-index:9999; background:#080A0F; overflow-y:auto; font-family:ui-monospace,Menlo,Consolas,monospace;">
+   <div id="diag-scroll" style="padding:16px;">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
       <strong style="font-size:15px; color:var(--accent); letter-spacing:1px;">DIAGNOSTICS</strong>
       <button onclick="window.hotspotApp.toggleDiagnostics()" style="background:var(--e2-hi); color:var(--ink); min-height:44px; border:0; border-radius:8px; padding:8px 14px; font-weight:800;">Close</button>
@@ -94,6 +95,7 @@
     <p>
       Both phones should show the same room, database CONNECTED, and each other under "players seen".
     </p>
+   </div>
   </div>
 
   <div id="app-container">
@@ -121,7 +123,7 @@
         <div class="scope-rule"><span>THERMAL PURSUIT SYSTEM</span></div>
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="scope-meta">
-          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.2.1</span>
+          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.3.0</span>
           <span id="cloud-sync-status" class="tele">STANDBY</span>
         </div>
       </div>
@@ -290,7 +292,10 @@
           <div class="card-title" style="color: var(--accent); font-size: 14px; font-weight: 900; letter-spacing: 1px; margin-bottom: 6px;">
             SEEKERS
           </div>
-          <div id="lobby-seeker-list" class="player-list" style="flex: 1; overflow-y: auto;"></div>
+          <!-- Outer well scrolls (Lenis); the inner list is what app.js rebuilds -->
+          <div id="lobby-seeker-scroll" class="scroll-well" style="flex: 1;">
+            <div id="lobby-seeker-list" class="player-list"></div>
+          </div>
         </div>
 
         <!-- Spectators are in the room too; they were on nobody's list -->
@@ -489,7 +494,9 @@
 
       <div class="card" style="margin-bottom: 0; flex-shrink: 0; max-height: 34%; display: flex; flex-direction: column; overflow: hidden;">
         <div class="card-title">Distance to the hider</div>
-        <div id="spectator-leaderboard" class="player-list" style="overflow-y: auto;"></div>
+        <div id="spectator-board-scroll" class="scroll-well" style="flex: 1;">
+          <div id="spectator-leaderboard" class="player-list"></div>
+        </div>
       </div>
     </div>
 
@@ -616,15 +623,22 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=3.2.1"></script>
-  <script src="geo.js?v=3.2.1"></script>
-  <script src="replay.js?v=3.2.1"></script>
-  <script src="app.js?v=3.2.1"></script>
+  <script src="audio.js?v=3.3.0"></script>
+  <script src="geo.js?v=3.3.0"></script>
+  <script src="replay.js?v=3.3.0"></script>
+  <script src="app.js?v=3.3.0"></script>
+
+  <!-- Smooth scrolling (Lenis) for the three panels that scroll, and the
+       living background (Three.js). Both are extras: if either fails to load
+       the app runs exactly as before. -->
+  <script src="https://cdn.jsdelivr.net/npm/lenis@1.3.26/dist/lenis.min.js"></script>
+  <script src="scroll.js?v=3.3.0"></script>
+  <script type="module" src="ambient.js?v=3.3.0"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=3.2.1').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=3.3.0').catch(() => {});
       });
     }
 

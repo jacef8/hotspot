@@ -1220,6 +1220,7 @@ class HotspotApp {
     this.gameStartTime = Date.now();
     this.beginRoundBookkeeping();
     this.acquireWakeLock();
+    this.ambientMode('hunt');
 
     // The drill has to work on a couch with no GPS at all. Without a fix, stand
     // on the built-in practice point; if a real fix turns up mid-drill the
@@ -1465,6 +1466,7 @@ class HotspotApp {
     const readyBtn = document.getElementById('btn-hider-ready');
     if (readyBtn) readyBtn.style.display = '';
 
+    this.ambientMode('idle');
     this.triggerSmokeVisual(false);
     this.blankSeekerRadar();
     if (window.hotspotGeo.clearLagBuffers) window.hotspotGeo.clearLagBuffers();
@@ -1523,6 +1525,7 @@ class HotspotApp {
 
     const readyBtn = document.getElementById('btn-hider-ready');
     if (readyBtn) readyBtn.style.display = '';
+    this.ambientMode('idle');
     this.triggerSmokeVisual(false);
     this.blankSeekerRadar();
     if (window.hotspotGeo.clearLagBuffers) window.hotspotGeo.clearLagBuffers();
@@ -1732,7 +1735,7 @@ class HotspotApp {
        </div>`;
 
     el.innerHTML =
-      row('app version', 'v3.2.1') +
+      row('app version', 'v3.3.0') +
       (() => {
         // Straight from the stylesheet. If this disagrees with the app version
         // above, the phone is running cached CSS - provable, not a guess.
@@ -1741,7 +1744,7 @@ class HotspotApp {
           css = (getComputedStyle(document.documentElement)
             .getPropertyValue('--css-version') || '').replace(/["']/g, '').trim() || 'missing';
         } catch (e) {}
-        return row('stylesheet', css, css !== '3.2.1');
+        return row('stylesheet', css, css !== '3.3.0');
       })() +
       row('room', this.roomCode || '(none)', !this.roomCode) +
       row('am I host', this.isRoomHost ? 'yes' : 'no') +
@@ -1749,6 +1752,22 @@ class HotspotApp {
       row('my id', this.playerId) +
       row('online', navigator.onLine ? 'yes' : 'NO', !navigator.onLine) +
       row('screen kept awake', this.wakeLock ? 'yes' : (this.roomCode ? 'NO' : '-'), !!this.roomCode && !this.wakeLock) +
+      (() => {
+        // What is drawing the background, and what it costs per frame.
+        const a = window.hotspotAmbient;
+        if (!a) {
+          const why = window.hotspotAmbientError ? ' (' + window.hsEscape(String(window.hotspotAmbientError)).slice(0, 40) + ')' : '';
+          return row('background', 'CSS fallback' + why, true);
+        }
+        const s = a.status();
+        return row('background', `WebGL ${s.mode} · ${s.particles} pts · ${s.fps} fps · ${s.frameMs}ms`, s.paused && document.visibilityState === 'visible');
+      })() +
+      (() => {
+        const sc = window.hotspotScroll;
+        if (!sc) return row('smooth scroll', 'not loaded', true);
+        if (sc.ok) return row('smooth scroll', sc.instances.length + ' panels');
+        return row('smooth scroll', 'off' + (sc.error ? ' (' + window.hsEscape(String(sc.error)) + ')' : ''), true);
+      })() +
       row('clock vs server', this.serverOffsetKnown ? Math.round(this.serverOffset) + 'ms' : 'unknown', Math.abs(this.serverOffset) > 5000) +
       row('hider silent', this.hiderSilentMs ? Math.round(this.hiderSilentMs / 1000) + 's' : '-', this.hiderSilentMs > 18000) +
       '<hr style="border:0;border-top:1px solid rgba(255,255,255,.12);margin:6px 0">' +
@@ -1974,6 +1993,7 @@ class HotspotApp {
       // used to sit on a stale COLD/HOT reading during the countdown, which
       // leaks a hint before the hunt has even started.
       this.blankSeekerRadar();
+      this.ambientMode('hunt');
 
       // The clock cells used to keep whatever the previous round ended on, so
       // round two's hiding time opened with "MATCH TIME: 0:00".
@@ -2072,10 +2092,12 @@ class HotspotApp {
         }
       }
 
+      this.ambientMode('hunt');
       this.startPulseLoop();
       this.startMatchTimer();
     } else if (newState === 'gameover') {
       this.stopPulseLoop();
+      this.ambientMode('idle');
       if (this.headStartTimer) clearInterval(this.headStartTimer);
       if (this.matchTimer) clearInterval(this.matchTimer);
 
@@ -2366,6 +2388,31 @@ class HotspotApp {
     }
   }
 
+  // --- living background (ambient.js) ---
+  ambient() { return window.hotspotAmbient || null; }
+
+  // Heat for the background from a distance in feet, following the proximity
+  // bands: cold beyond 250ft, climbing through warm and hot to white-hot at
+  // the catch. Anything that is not a real distance (no fix, no signal) is cold.
+  ambientHeat(distFeet) {
+    const a = this.ambient();
+    if (!a) return;
+    if (typeof distFeet !== 'number' || !isFinite(distFeet)) { a.setHeat(0); return; }
+    const stops = [[300, 0], [250, 0.15], [100, 0.45], [45, 0.7], [20, 0.88], [0, 1]];
+    let heat = 0;
+    for (let i = 0; i < stops.length - 1; i++) {
+      const [d0, h0] = stops[i], [d1, h1] = stops[i + 1];
+      if (distFeet <= d0 && distFeet >= d1) { heat = h0 + (h1 - h0) * ((d0 - distFeet) / (d0 - d1)); break; }
+    }
+    a.setHeat(heat);
+  }
+
+  // 'hunt' runs the background lighter, to leave the battery for the GPS.
+  ambientMode(mode) {
+    const a = this.ambient();
+    if (a) a.setMode(mode);
+  }
+
   // Season dials: r=26, circumference 163. Every number gets a visual cue.
   setDial(id, pct, ) {
     const el = document.getElementById(id);
@@ -2385,6 +2432,7 @@ class HotspotApp {
     if (distEl) distEl.innerHTML = '';
 
     this.setGauge(null, '#7DD3FC');
+    this.ambientHeat(null);
 
     // Let the first real band of the round announce itself.
     if (window.hotspotAudio) {
@@ -2413,6 +2461,7 @@ class HotspotApp {
     if (bandLabel && !this.powerups.smokeActive) bandLabel.innerText = label;
     if (distEl) distEl.innerHTML = `<span class="dist-sub">${detail}</span>`;
     this.setGauge(null, '#7DD3FC');
+    this.ambientHeat(null);
     this.currentBand = null;
   }
 
@@ -2531,6 +2580,7 @@ class HotspotApp {
       }
 
       this.setGauge(distFeet, bandInfo.color);
+      this.ambientHeat(distFeet);
 
       const now = Date.now();
       if (!this.lastPulseTime || now - this.lastPulseTime >= bandInfo.pulseMs) {
@@ -2612,8 +2662,11 @@ class HotspotApp {
             : `${Math.round(closestDistFeet)}ft`;
           distEl.innerHTML = `${shown}<span class="dist-margin">±${margin}ft</span>`;
         }
+        // The hider's own screen warms as the pack closes in.
+        this.ambientHeat(closestDistFeet);
       } else {
         if (distEl) distEl.innerText = '--ft';
+        this.ambientHeat(null);
       }
 
     }
@@ -2834,6 +2887,9 @@ class HotspotApp {
     this.gameState = 'gameover';
 
     window.hotspotAudio.playTagScream();
+    // The catch sends a burst through the background.
+    const amb = this.ambient();
+    if (amb) { amb.setHeat(1); amb.pulse(1); }
 
     if (this.isSoloDrill) {
       // A drill has no next round and nobody to swap roles with.
