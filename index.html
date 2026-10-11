@@ -19,7 +19,7 @@
     object-src 'none';
     base-uri 'self';
     form-action 'none'">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.3.0</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.4.0</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -67,7 +67,7 @@
   </script>
 
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=3.3.0">
+  <link rel="stylesheet" href="style.css?v=3.4.0">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -98,6 +98,23 @@
    </div>
   </div>
 
+  <!-- Invite overlay: a QR code to scan across the yard, and a link to send -->
+  <div id="invite-panel" class="overlay" style="display:none;" role="dialog" aria-label="Invite players">
+    <div class="overlay-inner">
+      <div class="overlay-head">
+        <strong class="overlay-title">INVITE PLAYERS</strong>
+        <button class="btn btn-secondary" style="width:auto; margin:0; padding:8px 16px;" onclick="window.hotspotApp.closeInvite()">Close</button>
+      </div>
+      <div class="qr-tile" id="invite-qr" role="img" aria-label="QR code for this room"></div>
+      <div class="brand-subtitle" style="margin-top: 14px;">SCAN WITH THE PHONE CAMERA</div>
+      <div id="invite-code" class="room-code" style="margin-top: 4px;">------</div>
+      <div class="invite-hint">or type the code into Join</div>
+      <button id="btn-invite-share" class="btn btn-primary" style="margin-top: 14px;" onclick="window.hotspotApp.shareInvite()">Send link</button>
+      <button id="btn-invite-copy" class="btn btn-secondary" onclick="window.hotspotApp.copyInvite('btn-invite-copy')">Copy link</button>
+      <div id="invite-link" class="invite-link"></div>
+    </div>
+  </div>
+
   <div id="app-container">
 
     <!-- Environment / GPS Diagnostic Banner -->
@@ -123,7 +140,7 @@
         <div class="scope-rule"><span>THERMAL PURSUIT SYSTEM</span></div>
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="scope-meta">
-          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.3.0</span>
+          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.4.0</span>
           <span id="cloud-sync-status" class="tele">STANDBY</span>
         </div>
       </div>
@@ -264,7 +281,7 @@
     <div id="lobby-screen" class="screen">
       <div class="brand-header">
         <div class="brand-subtitle">ROOM CODE</div>
-        <div id="lobby-code-display" class="room-code">------</div>
+        <div id="lobby-code-display" class="room-code" onclick="window.hotspotApp.openInvite()" title="Tap to invite players">------</div>
       </div>
 
       <!-- Quick Nickname Editor Bar -->
@@ -275,10 +292,18 @@
         </button>
       </div>
 
-      <!-- Role button: its label says what it will do (set in updateLobbyList) -->
-      <button id="btn-switch-role" class="btn btn-secondary" style="border-color: var(--accent);" onclick="window.hotspotApp.toggleRole()">
-        Become the Hider
-      </button>
+      <!-- Role button (its label says what it will do; set in updateLobbyList)
+           beside the invite button: a QR code to scan or a link to send, so
+           nobody has to read a six-character code out loud. -->
+      <div class="lobby-actions">
+        <button id="btn-switch-role" class="btn btn-secondary" style="border-color: var(--accent);" onclick="window.hotspotApp.toggleRole()">
+          Become the Hider
+        </button>
+        <button id="btn-invite" class="btn btn-secondary" style="width: auto; padding-left: 14px; padding-right: 14px; border-color: var(--accent); color: var(--accent);" onclick="window.hotspotApp.openInvite()" aria-label="Invite players with a QR code or link">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 14h3v3h-3zM20 14h1M14 20h2M20 18v3h-2"/></svg>
+          Invite
+        </button>
+      </div>
 
       <div class="card" style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 12px;">
         <div>
@@ -425,9 +450,10 @@
       </div>
 
       <div class="card" style="margin-bottom: 0;">
-        <div class="card-title">Tactical Powerup</div>
-        <button id="btn-bearing-ping" class="btn btn-secondary" style="margin-bottom: 0;" onclick="window.hotspotApp.usePowerup('bearing')">
-          Bearing Ping (3s Live Arrow)
+        <div class="card-title">Tactical Powerup — reusable after a cooldown</div>
+        <button id="btn-bearing-ping" class="btn btn-secondary" style="margin-bottom: 0;" data-label="Bearing Ping (3s Live Arrow)" data-short="Bearing Ping" onclick="window.hotspotApp.usePowerup('bearing')">
+          <span class="btn-text">Bearing Ping (3s Live Arrow)</span>
+          <span class="cd-bar" aria-hidden="true"><i></i></span>
         </button>
       </div>
     </div>
@@ -460,13 +486,15 @@
       </div>
 
       <div class="card" style="margin-bottom: 0;">
-        <div class="card-title">Hider Powerups (1 Use)</div>
+        <div class="card-title">Hider Powerups — reusable after a cooldown</div>
         <div class="powerup-grid">
-          <button id="btn-powerup-decoy" class="btn-powerup" onclick="window.hotspotApp.usePowerup('decoy')">
-            Decoy (30s)
+          <button id="btn-powerup-decoy" class="btn-powerup" data-label="Decoy (30s)" data-short="Decoy" onclick="window.hotspotApp.usePowerup('decoy')">
+            <span class="btn-text">Decoy (30s)</span>
+            <span class="cd-bar" aria-hidden="true"><i></i></span>
           </button>
-          <button id="btn-powerup-smoke" class="btn-powerup" onclick="window.hotspotApp.usePowerup('smoke')">
-            Smoke (15s)
+          <button id="btn-powerup-smoke" class="btn-powerup" data-label="Smoke (15s)" data-short="Smoke" onclick="window.hotspotApp.usePowerup('smoke')">
+            <span class="btn-text">Smoke (15s)</span>
+            <span class="cd-bar" aria-hidden="true"><i></i></span>
           </button>
         </div>
       </div>
@@ -623,22 +651,24 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=3.3.0"></script>
-  <script src="geo.js?v=3.3.0"></script>
-  <script src="replay.js?v=3.3.0"></script>
-  <script src="app.js?v=3.3.0"></script>
+  <script src="audio.js?v=3.4.0"></script>
+  <script src="geo.js?v=3.4.0"></script>
+  <script src="replay.js?v=3.4.0"></script>
+  <script src="app.js?v=3.4.0"></script>
 
   <!-- Smooth scrolling (Lenis) for the three panels that scroll, and the
        living background (Three.js). Both are extras: if either fails to load
        the app runs exactly as before. -->
   <script src="https://cdn.jsdelivr.net/npm/lenis@1.3.26/dist/lenis.min.js"></script>
-  <script src="scroll.js?v=3.3.0"></script>
-  <script type="module" src="ambient.js?v=3.3.0"></script>
+  <script src="scroll.js?v=3.4.0"></script>
+  <!-- QR code for inviting players (drawn locally, nothing is sent anywhere) -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+  <script type="module" src="ambient.js?v=3.4.0"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=3.3.0').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=3.4.0').catch(() => {});
       });
     }
 

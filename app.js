@@ -21,6 +21,7 @@ class HotspotApp {
     this.joinTime = 0;
     this.currentRoundId = null;
     this.seenRoundIds = {};
+    this.seenEventIds = {};
     this.taggedHiderIds = {};
     this.appliedTagByRound = {};
     this.lastCloudMessageAt = 0;
@@ -88,14 +89,13 @@ class HotspotApp {
     this.resumePowerups = null;
     this.roomProbe = null;
 
-    this.powerups = {
-      decoyUsed: false,
-      smokeUsed: false,
-      bearingPingUsed: false,
-      decoyActive: false,
-      smokeActive: false,
-      bearingActive: false
-    };
+    // How long each power-up takes to come back after a use, in seconds. The
+    // effect itself runs inside that: Decoy 30s, Smoke 15s, Bearing Ping 3s.
+    this.powerupCooldownSec = { decoy: 60, smoke: 45, bearing: 30 };
+    this.powerupsLive = false;
+    this.powerupTimer = null;
+
+    this.powerups = this.freshPowerups();
 
     this.decoyPos = null;
     this.matchTrackHistory = [];
@@ -177,11 +177,10 @@ class HotspotApp {
         },
         // One-use power-ups already spent this round, so a reload cannot hand
         // them back.
+        // Cooldowns still running this round, so a reload cannot skip them.
         pu: this.currentRoundId ? {
           round: this.currentRoundId,
-          decoy: !!this.powerups.decoyUsed,
-          smoke: !!this.powerups.smokeUsed,
-          bearing: !!this.powerups.bearingPingUsed
+          readyAt: { ...this.powerups.readyAt }
         } : null,
         ts: Date.now()
       }));
@@ -829,10 +828,11 @@ class HotspotApp {
     // Rejoining the round this phone was already in: anything spent stays spent.
     const pu = this.resumePowerups;
     this.resumePowerups = null;
-    if (pu && pu.round === r.id) {
-      this.powerups.decoyUsed = !!pu.decoy;
-      this.powerups.smokeUsed = !!pu.smoke;
-      this.powerups.bearingPingUsed = !!pu.bearing;
+    if (pu && pu.round === r.id && pu.readyAt) {
+      Object.keys(this.powerups.readyAt).forEach((k) => {
+        const t = Number(pu.readyAt[k]);
+        if (isFinite(t) && t > 0) this.powerups.readyAt[k] = t;
+      });
     }
 
     const info = {
@@ -1024,6 +1024,10 @@ class HotspotApp {
     if (!this.roomCode || this.isSoloDrill) return;
     data.senderId = this.playerId;
     data.timestamp = Date.now();
+    // Every event travels twice, once per transport. The id lets the receiver
+    // act on it once: a smoke or decoy used to arrive twice and say its line
+    // twice.
+    data.eid = this.playerId + ':' + Date.now().toString(36) + ':' + Math.random().toString(36).slice(2, 7);
 
     // Direct link for speed, database so devices without a peer link still get it.
     this.broadcastPeer(data);
@@ -1082,6 +1086,14 @@ class HotspotApp {
         this.updateLobbyList();
       }
       return;
+    }
+
+    // Second copy of an event already handled (see broadcastCloud).
+    if (data.eid) {
+      if (this.seenEventIds[data.eid]) return;
+      this.seenEventIds[data.eid] = Date.now();
+      const keys = Object.keys(this.seenEventIds);
+      if (keys.length > 300) keys.slice(0, 100).forEach((k) => { delete this.seenEventIds[k]; });
     }
 
     if (data.type === 'ROOM_CLOSED') {
@@ -1440,14 +1452,7 @@ class HotspotApp {
     this.syncFailCount = 0;
     this.matchTrackHistory = [];
     this.tagEvent = null;
-    this.powerups = {
-      decoyUsed: false,
-      smokeUsed: false,
-      bearingPingUsed: false,
-      decoyActive: false,
-      smokeActive: false,
-      bearingActive: false
-    };
+    this.powerups = this.freshPowerups();
 
     const banner = document.getElementById('sync-warning-banner');
     if (banner) banner.style.display = 'none';
@@ -1455,10 +1460,7 @@ class HotspotApp {
     const homeLabel = document.getElementById('cloud-sync-status');
     if (homeLabel) homeLabel.innerText = 'STANDBY';
 
-    ['btn-powerup-decoy', 'btn-powerup-smoke', 'btn-bearing-ping'].forEach((id) => {
-      const b = document.getElementById(id);
-      if (b) b.disabled = false;
-    });
+    this.setPowerupButtons(false);
 
     const soloControls = document.getElementById('solo-controls-card');
     if (soloControls) soloControls.style.display = 'none';
@@ -1510,18 +1512,8 @@ class HotspotApp {
     this.outOfBoundsSpoken = false;
     this.yardCenterPos = null;
 
-    this.powerups = {
-      decoyUsed: false,
-      smokeUsed: false,
-      bearingPingUsed: false,
-      decoyActive: false,
-      smokeActive: false,
-      bearingActive: false
-    };
-    ['btn-powerup-decoy', 'btn-powerup-smoke', 'btn-bearing-ping'].forEach((id) => {
-      const b = document.getElementById(id);
-      if (b) b.disabled = false;
-    });
+    this.powerups = this.freshPowerups();
+    this.setPowerupButtons(false);
 
     const readyBtn = document.getElementById('btn-hider-ready');
     if (readyBtn) readyBtn.style.display = '';
@@ -1705,6 +1697,129 @@ class HotspotApp {
     return hiders.sort((a, b) => String(a.id).localeCompare(String(b.id)))[0];
   }
 
+  // --- INVITING PLAYERS ---
+  // The room code is six characters that had to be read out and typed in. A
+  // QR code on one phone's screen, or a link sent by text, carries the same
+  // code and lands the player straight in the room.
+  inviteLink(role = 'seeker') {
+    if (!this.roomCode || this.isSoloDrill) return null;
+    const base = location.origin + location.pathname.replace(/index\.html$/, '');
+    return `${base}?${role === 'spectator' ? 'watch' : 'join'}=${this.roomCode}`;
+  }
+
+  openInvite() {
+    const link = this.inviteLink();
+    const panel = document.getElementById('invite-panel');
+    if (!link || !panel) return;
+
+    const codeEl = document.getElementById('invite-code');
+    if (codeEl) codeEl.innerText = this.roomCode;
+    const linkEl = document.getElementById('invite-link');
+    if (linkEl) linkEl.innerText = link;
+
+    // Drawn here, on the phone; nothing is sent to any service.
+    const qrEl = document.getElementById('invite-qr');
+    if (qrEl) {
+      let svg = '';
+      try {
+        if (typeof qrcode === 'function') {
+          const qr = qrcode(0, 'M');
+          qr.addData(link);
+          qr.make();
+          svg = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+        }
+      } catch (e) { svg = ''; }
+      qrEl.innerHTML = svg || '<div class="qr-missing">QR code unavailable — send the link instead</div>';
+    }
+
+    // Phones that can open a share sheet get "Send link" plus a plain copy;
+    // anything else gets one button that copies.
+    const shareBtn = document.getElementById('btn-invite-share');
+    const copyBtn = document.getElementById('btn-invite-copy');
+    const canShare = !!navigator.share;
+    if (shareBtn) { shareBtn.innerText = canShare ? 'Send link' : 'Copy link'; shareBtn.dataset.label = shareBtn.innerText; }
+    if (copyBtn) { copyBtn.innerText = 'Copy link'; copyBtn.dataset.label = 'Copy link'; copyBtn.style.display = canShare ? '' : 'none'; }
+
+    panel.style.display = 'block';
+    panel.scrollTop = 0;
+  }
+
+  closeInvite() {
+    const panel = document.getElementById('invite-panel');
+    if (panel) panel.style.display = 'none';
+  }
+
+  async shareInvite() {
+    const link = this.inviteLink();
+    if (!link) return;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'HOTSPOT hunt', text: `Join my HOTSPOT hunt — room ${this.roomCode}`, url: link });
+        return;
+      } catch (e) {
+        // Cancelled by the player: nothing more to do. Refused by the browser:
+        // fall back to copying.
+        if (e && e.name === 'AbortError') return;
+      }
+    }
+    await this.copyInvite('btn-invite-share');
+  }
+
+  async copyInvite(btnId = 'btn-invite-copy') {
+    const link = this.inviteLink();
+    if (!link) return;
+    let ok = false;
+    try { await navigator.clipboard.writeText(link); ok = true; } catch (e) {}
+    if (!ok) {
+      // Older browsers: select the link text and ask the browser to copy it.
+      try {
+        const el = document.getElementById('invite-link');
+        const range = document.createRange(); range.selectNodeContents(el);
+        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+        ok = document.execCommand('copy');
+        sel.removeAllRanges();
+      } catch (e) {}
+    }
+    const btn = document.getElementById(btnId);
+    if (!btn) return;
+    const label = btn.dataset.label || btn.innerText;
+    btn.innerText = ok ? 'Copied' : 'Could not copy — long-press the link below';
+    clearTimeout(this.copyTimer);
+    this.copyTimer = setTimeout(() => { btn.innerText = label; }, ok ? 1800 : 4000);
+  }
+
+  // A link or QR code carrying a room code: ?join=CODE joins as a seeker,
+  // ?watch=CODE as a spectator. Consumed once at launch, then removed from the
+  // address bar so a reload does not join again. Returns true if it took over.
+  consumeDeepLink() {
+    let params;
+    try { params = new URLSearchParams(location.search); } catch (e) { return false; }
+    const join = (params.get('join') || '').trim().toUpperCase();
+    const watch = (params.get('watch') || '').trim().toUpperCase();
+    const code = join || watch;
+    if (!code) return false;
+    try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    if (!/^[ABCDEFGHJKMNPQRSTVWX3456789]{6}$/.test(code)) return false;
+
+    // The scanned room wins over whatever session was left from before.
+    this.session = null;
+    this.clearSession();
+
+    const role = (watch && !join) ? 'spectator' : 'seeker';
+    if (role === 'spectator' || this.loadSavedName()) {
+      this.joinRoom(code, null, role);
+    } else {
+      // No name on this phone yet: the Join screen with the code already in,
+      // so all that is left to type is a name.
+      const codeEl = document.getElementById('join-code-input');
+      if (codeEl) codeEl.value = code;
+      this.showScreen('join-screen');
+      const nick = document.getElementById('join-nickname-input');
+      if (nick) { try { nick.focus(); } catch (e) {} }
+    }
+    return true;
+  }
+
   // Tap the version badge to open this. When two phones cannot see each other
   // the useful facts live in state that is otherwise invisible on a phone with
   // no console attached.
@@ -1735,7 +1850,7 @@ class HotspotApp {
        </div>`;
 
     el.innerHTML =
-      row('app version', 'v3.3.0') +
+      row('app version', 'v3.4.0') +
       (() => {
         // Straight from the stylesheet. If this disagrees with the app version
         // above, the phone is running cached CSS - provable, not a guess.
@@ -1744,7 +1859,7 @@ class HotspotApp {
           css = (getComputedStyle(document.documentElement)
             .getPropertyValue('--css-version') || '').replace(/["']/g, '').trim() || 'missing';
         } catch (e) {}
-        return row('stylesheet', css, css !== '3.3.0');
+        return row('stylesheet', css, css !== '3.4.0');
       })() +
       row('room', this.roomCode || '(none)', !this.roomCode) +
       row('am I host', this.isRoomHost ? 'yes' : 'no') +
@@ -1836,7 +1951,7 @@ class HotspotApp {
 
     if (seekerContainer) {
       seekerContainer.innerHTML = seekersList.map(p => badge(p, 'seeker', 'Seeker')).join('')
-        || '<div class="roster-empty">No seekers yet — share the room code</div>';
+        || '<div class="roster-empty">No seekers yet — tap Invite to share a QR code or link</div>';
     }
 
     // Spectators were in the room but on nobody's list, including their own.
@@ -2164,13 +2279,77 @@ class HotspotApp {
     });
   }
 
-  // live=false greys all three out; live=true enables whichever are unspent.
+  // --- POWER-UPS ---
+  // Each power-up can be used again once its cooldown has run. They used to be
+  // one use per round, which meant the buttons were dead for most of the hunt.
+  freshPowerups() {
+    return {
+      readyAt: { decoy: 0, smoke: 0, bearing: 0 },   // when each may be used again
+      decoyActive: false,
+      smokeActive: false,
+      bearingActive: false
+    };
+  }
+
+  powerupReady(type) {
+    const at = (this.powerups.readyAt && this.powerups.readyAt[type]) || 0;
+    return Date.now() >= at;
+  }
+
+  startCooldown(type) {
+    const sec = (this.powerupCooldownSec && this.powerupCooldownSec[type]) || 30;
+    this.powerups.readyAt[type] = Date.now() + sec * 1000;
+    this.updatePowerupButtons();
+    this.saveSession();
+  }
+
+  // live=false greys all three out (lobby, hiding time, result); live=true
+  // enables whichever are not cooling down.
   setPowerupButtons(live) {
-    const flags = { 'btn-powerup-decoy': 'decoyUsed', 'btn-powerup-smoke': 'smokeUsed', 'btn-bearing-ping': 'bearingPingUsed' };
-    Object.keys(flags).forEach((id) => {
-      const b = document.getElementById(id);
-      if (b) b.disabled = !live || !!this.powerups[flags[id]];
+    this.powerupsLive = !!live;
+    this.updatePowerupButtons();
+  }
+
+  // Labels, enabled state and the fill bar on each button. Ticks once a second
+  // while anything is cooling, and stops itself when nothing is.
+  updatePowerupButtons() {
+    const now = Date.now();
+    const map = { decoy: 'btn-powerup-decoy', smoke: 'btn-powerup-smoke', bearing: 'btn-bearing-ping' };
+    let pending = false;
+
+    Object.keys(map).forEach((type) => {
+      const b = document.getElementById(map[type]);
+      if (!b) return;
+      const readyAt = (this.powerups.readyAt && this.powerups.readyAt[type]) || 0;
+      const left = readyAt - now;
+      const cooling = left > 0;
+      if (cooling) pending = true;
+
+      const label = b.dataset.label || b.innerText.trim();
+      const short = b.dataset.short || label;
+      const total = ((this.powerupCooldownSec && this.powerupCooldownSec[type]) || 30) * 1000;
+
+      b.disabled = !this.powerupsLive || cooling;
+      b.classList.toggle('cooling', cooling);
+      const text = b.querySelector('.btn-text');
+      if (text) text.innerText = cooling ? `${short} · ${Math.ceil(left / 1000)}s` : label;
+      const fill = b.querySelector('.cd-bar i');
+      if (fill) fill.style.width = cooling ? `${Math.round(Math.max(0, Math.min(1, 1 - left / total)) * 100)}%` : '0%';
+
+      // A short buzz the moment one comes back, so the player need not watch.
+      if (!cooling && b.dataset.cooling === '1') {
+        b.dataset.cooling = '';
+        if (this.powerupsLive && 'vibrate' in navigator) { try { navigator.vibrate(35); } catch (e) {} }
+      }
+      if (cooling) b.dataset.cooling = '1';
     });
+
+    if (pending && !this.powerupTimer) {
+      this.powerupTimer = setInterval(() => this.updatePowerupButtons(), 1000);
+    } else if (!pending && this.powerupTimer) {
+      clearInterval(this.powerupTimer);
+      this.powerupTimer = null;
+    }
   }
 
   startMatchTimer() {
@@ -2722,16 +2901,14 @@ class HotspotApp {
   }
 
   usePowerup(type) {
-    // Each is single-use and only does anything while the hunt is live. Tapped
-    // during hiding time they used to be spent for nothing.
+    // Only while the hunt is live (tapped during hiding time they used to be
+    // spent for nothing), and only once the last use has cooled down.
     if (this.gameState !== 'active') return;
+    if (!this.powerupReady(type)) return;
+    if (type === 'decoy' && !this.myPosition) return;
+    this.startCooldown(type);
 
-    if (type === 'decoy' && !this.powerups.decoyUsed) {
-      if (!this.myPosition) return;
-      this.powerups.decoyUsed = true;
-      const btn = document.getElementById('btn-powerup-decoy');
-      if (btn) btn.disabled = true;
-
+    if (type === 'decoy') {
       window.hotspotAudio.playPowerupSound('decoy');
       window.hotspotAudio.speak('Decoy deployed! Fake hot signal active for 30 seconds!');
 
@@ -2749,22 +2926,18 @@ class HotspotApp {
         durationMs: 30000
       });
 
-    } else if (type === 'smoke' && !this.powerups.smokeUsed) {
-      this.powerups.smokeUsed = true;
-      const btn = document.getElementById('btn-powerup-smoke');
-      if (btn) btn.disabled = true;
-
+    } else if (type === 'smoke') {
       window.hotspotAudio.playPowerupSound('smoke');
       window.hotspotAudio.speak('Smoke screen thrown! Seekers blinded for 15 seconds!');
 
       // Blur the SEEKERS' radar, not the hider's own screen.
       this.broadcastCloud({ type: 'SMOKE', durationMs: 15000 });
 
-    } else if (type === 'bearing' && !this.powerups.bearingPingUsed) {
-      this.powerups.bearingPingUsed = true;
+    } else if (type === 'bearing') {
       this.powerups.bearingActive = true;
-      const btn = document.getElementById('btn-bearing-ping');
-      if (btn) btn.disabled = true;
+      // Each ping gets its own number, so the end-timer of an earlier ping
+      // cannot switch off a later one.
+      const ping = (this.bearingPingSeq = (this.bearingPingSeq || 0) + 1);
 
       // iOS requires a user gesture to grant compass access; this tap is it.
       window.hotspotGeo.requestCompassPermission();
@@ -2773,6 +2946,7 @@ class HotspotApp {
       window.hotspotAudio.speak('Bearing ping active!');
 
       const endPing = () => {
+        if (ping !== this.bearingPingSeq) return;
         this.powerups.bearingActive = false;
         const arrow = document.getElementById('bearing-arrow');
         if (arrow) arrow.style.display = 'none';
@@ -2781,11 +2955,11 @@ class HotspotApp {
       };
 
       // The compass takes a moment to wake up, especially the first time on
-      // iOS. Don't burn the player's single 3-second ping staring at a
-      // north-referenced arrow — start the clock once a real heading arrives,
-      // or after a 2s grace if the device has no usable compass at all.
+      // iOS. Don't burn the 3-second ping staring at a north-referenced
+      // arrow — start the clock once a real heading arrives, or after a 2s
+      // grace if the device has no usable compass at all.
       const startCountdown = (waitedMs) => {
-        if (!this.powerups.bearingActive) return;
+        if (ping !== this.bearingPingSeq || !this.powerups.bearingActive) return;
         if (window.hotspotGeo.hasUsableHeading() || waitedMs >= 2000) {
           setTimeout(endPing, 3000);
         } else {
@@ -2973,6 +3147,9 @@ setTimeout(() => {
   try { app.updateSeasonStatsDisplay(); } catch (e) {}
   try { if (app.loadSavedName()) app.fillNameInputs(); } catch (e) {}
   try { app.initLifecycle(); } catch (e) {}
-  // After a reload, put the player straight back in the room they were in.
-  try { app.tryResume(); } catch (e) {}
+  // A scanned QR code or a sent link goes straight into its room. Otherwise,
+  // after a reload, put the player back in the room they were in.
+  let deepLinked = false;
+  try { deepLinked = app.consumeDeepLink(); } catch (e) {}
+  if (!deepLinked) { try { app.tryResume(); } catch (e) {} }
 }, 0);

@@ -22,7 +22,7 @@
    ========================================================================== */
 
 :root {
-  --css-version: "3.3.0";
+  --css-version: "3.4.0";
   color-scheme: dark;
 
   /* Elevation ladder — lighter is closer */
@@ -335,6 +335,24 @@ h2.brand-title { letter-spacing: -.02em; line-height: 1.05; }
 .btn-powerup:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 .powerup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+
+/* Cooldown bar along the foot of a power-up button. It fills as the power-up
+   comes back; the button is greyed and its label counts down until it has. */
+.btn-powerup, #btn-bearing-ping { position: relative; overflow: hidden; }
+.cd-bar {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 4px;
+  background: var(--recess);
+  opacity: 0; transition: opacity .2s;
+  pointer-events: none;
+}
+.cd-bar i {
+  display: block; height: 100%; width: 0;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  box-shadow: 0 0 6px rgba(125, 211, 252, .8);
+  transition: width .9s linear;
+}
+button.cooling .cd-bar { opacity: 1; }
+button.cooling { opacity: .6; }
 
 /* ------------------------------------------------------------------ inputs */
 .input-group { margin-bottom: 11px; }
@@ -691,6 +709,66 @@ h2.brand-title { letter-spacing: -.02em; line-height: 1.05; }
   color: var(--ink);
   margin-top: 6px;
 }
+
+/* ------------------------------------------------------------------ invite */
+.lobby-actions { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 9px; }
+.lobby-actions .btn { margin-bottom: 0; }
+
+.overlay {
+  position: fixed; inset: 0; z-index: 9000;
+  background: var(--e0);
+  overflow-y: auto;
+}
+.overlay-inner {
+  max-width: 480px; margin: 0 auto;
+  min-height: 100dvh; padding: 16px;
+  display: flex; flex-direction: column; align-items: center;
+}
+.overlay-head {
+  width: 100%; display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 14px;
+}
+.overlay-title {
+  font-family: var(--font-mono);
+  font-size: 13px; font-weight: 700; letter-spacing: .14em;
+  color: var(--accent);
+}
+
+/* A QR code scans best as dark modules on a plain light tile, so this is the
+   one white surface in the app — raised like a card, so it reads as an object
+   sitting on the panel rather than a hole in it. */
+.qr-tile {
+  width: min(72vw, 300px); aspect-ratio: 1;
+  padding: 14px;
+  border-radius: var(--r);
+  background: #FFFFFF;
+  box-shadow: var(--raise);
+  display: grid; place-items: center;
+  flex-shrink: 0;
+}
+.qr-tile svg { width: 100%; height: 100%; display: block; }
+.qr-missing {
+  font-family: var(--font-text);
+  font-size: 15px; font-weight: 700; line-height: 1.3;
+  color: #0B0D13; text-align: center;
+}
+
+.invite-hint {
+  font-family: var(--font-text);
+  font-size: 14px; font-weight: 600;
+  color: var(--ink-2);
+  margin-top: 6px;
+}
+.invite-link {
+  font-family: var(--font-mono);
+  font-size: 13px; line-height: 1.4;
+  color: var(--ink-3);
+  margin-top: 10px;
+  text-align: center; word-break: break-all;
+  /* The one place text may be selected: for copying by hand. */
+  user-select: text; -webkit-user-select: text;
+}
+#invite-panel .btn { max-width: 300px; }
 
 /* -------------------------------------------------------------- diagnostics */
 #diag-panel { font-family: var(--font-mono); }
