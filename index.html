@@ -19,7 +19,7 @@
     object-src 'none';
     base-uri 'self';
     form-action 'none'">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.4.0</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.4.1</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -67,7 +67,7 @@
   </script>
 
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=3.4.0">
+  <link rel="stylesheet" href="style.css?v=3.4.1">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -140,7 +140,7 @@
         <div class="scope-rule"><span>THERMAL PURSUIT SYSTEM</span></div>
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="scope-meta">
-          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.4.0</span>
+          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.4.1</span>
           <span id="cloud-sync-status" class="tele">STANDBY</span>
         </div>
       </div>
@@ -450,7 +450,7 @@
       </div>
 
       <div class="card" style="margin-bottom: 0;">
-        <div class="card-title">Tactical Powerup — reusable after a cooldown</div>
+        <div class="card-title">Powerup · comes back after a cooldown</div>
         <button id="btn-bearing-ping" class="btn btn-secondary" style="margin-bottom: 0;" data-label="Bearing Ping (3s Live Arrow)" data-short="Bearing Ping" onclick="window.hotspotApp.usePowerup('bearing')">
           <span class="btn-text">Bearing Ping (3s Live Arrow)</span>
           <span class="cd-bar" aria-hidden="true"><i></i></span>
@@ -486,7 +486,7 @@
       </div>
 
       <div class="card" style="margin-bottom: 0;">
-        <div class="card-title">Hider Powerups — reusable after a cooldown</div>
+        <div class="card-title">Powerups · come back after a cooldown</div>
         <div class="powerup-grid">
           <button id="btn-powerup-decoy" class="btn-powerup" data-label="Decoy (30s)" data-short="Decoy" onclick="window.hotspotApp.usePowerup('decoy')">
             <span class="btn-text">Decoy (30s)</span>
@@ -651,24 +651,24 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=3.4.0"></script>
-  <script src="geo.js?v=3.4.0"></script>
-  <script src="replay.js?v=3.4.0"></script>
-  <script src="app.js?v=3.4.0"></script>
+  <script src="audio.js?v=3.4.1"></script>
+  <script src="geo.js?v=3.4.1"></script>
+  <script src="replay.js?v=3.4.1"></script>
+  <script src="app.js?v=3.4.1"></script>
 
   <!-- Smooth scrolling (Lenis) for the three panels that scroll, and the
        living background (Three.js). Both are extras: if either fails to load
        the app runs exactly as before. -->
   <script src="https://cdn.jsdelivr.net/npm/lenis@1.3.26/dist/lenis.min.js"></script>
-  <script src="scroll.js?v=3.4.0"></script>
+  <script src="scroll.js?v=3.4.1"></script>
   <!-- QR code for inviting players (drawn locally, nothing is sent anywhere) -->
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
-  <script type="module" src="ambient.js?v=3.4.0"></script>
+  <script type="module" src="ambient.js?v=3.4.1"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=3.4.0').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=3.4.1').catch(() => {});
       });
     }
 
