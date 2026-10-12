@@ -215,6 +215,14 @@ class Ambient {
       else this.stop();
     });
 
+    window.addEventListener('hotspot-theme', () => this.applyTheme());
+    if (window.matchMedia) {
+      const mq = window.matchMedia('(prefers-color-scheme: dark)');
+      if (mq.addEventListener) mq.addEventListener('change', () => this.applyTheme());
+      else if (mq.addListener) mq.addListener(() => this.applyTheme());
+    }
+
+    this.applyTheme();
     this.applyMode();
     this.start();
   }
@@ -243,11 +251,11 @@ class Ambient {
       uPixelRatio: { value: 1 },
       uAspect: { value: 1 },
       uOpacity: { value: 0.7 },
-      uColdFar: { value: COLD_FAR },
-      uCold: { value: COLD },
-      uAmber: { value: AMBER },
-      uHot: { value: HOT },
-      uWhite: { value: WHITE_HOT }
+      uColdFar: { value: COLD_FAR.clone() },
+      uCold: { value: COLD.clone() },
+      uAmber: { value: AMBER.clone() },
+      uHot: { value: HOT.clone() },
+      uWhite: { value: WHITE_HOT.clone() }
     };
     const mat = new THREE.ShaderMaterial({
       uniforms: this.uniforms,
@@ -278,6 +286,30 @@ class Ambient {
     this.haze.frustumCulled = false;
     this.haze.renderOrder = 0;
     this.scene.add(this.haze);
+  }
+
+  // Bright mode (daylight) and night mode need different particles. At night
+  // they glow (added light) as stars on deep space; in daylight added light is
+  // invisible on a light page, so they become darker, solid specks and the
+  // haze is left out.
+  applyTheme() {
+    const t = document.documentElement.dataset.theme;
+    const dark = t === 'dark' || (t !== 'light' && !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches));
+    const u = this.uniforms;
+    const set = (k, hex) => u[k].value.set(hex);
+    if (dark) {
+      set('uColdFar', '#5F7BC0'); set('uCold', '#D6E6FF'); set('uAmber', '#FFC46B'); set('uHot', '#FF7A3D'); set('uWhite', '#FFE7CF');   // a star field
+      u.uOpacity.value = 0.6;
+    } else {
+      set('uColdFar', '#8EA6C8'); set('uCold', '#2F6FD6'); set('uAmber', '#C27400'); set('uHot', '#E0530C'); set('uWhite', '#9E0F1F');
+      u.uOpacity.value = 0.5;
+    }
+    const blend = dark ? THREE.AdditiveBlending : THREE.NormalBlending;
+    [this.points.material, this.haze.material].forEach((m) => { m.blending = blend; m.needsUpdate = true; });
+    this.haze.visible = dark;
+    this.dark = dark;
+    this.needsFrame = true;
+    this.start();
   }
 
   applyMode() {

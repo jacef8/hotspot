@@ -985,7 +985,7 @@ class HotspotApp {
     try { this.leaveRoom({ quiet }); } catch (e) {}
     this.updateSeasonStatsDisplay();
     try { window.hotspotAudio.speak(headline.charAt(0) + headline.slice(1).toLowerCase() + '.'); } catch (e) {}
-    alert(`${headline}\n\n${detail}`);
+    this.notify(`${headline}\n\n${detail}`);
   }
 
   // Game settings off the wire. Each is accepted only as a sane number, and 0 is
@@ -1207,12 +1207,120 @@ class HotspotApp {
     }
   }
 
+  // --- THE APP'S OWN POP-UPS ---
+  // Browser alert()/confirm() boxes froze the phone, looked like an error
+  // page and could not be styled for daylight. These are the app's own.
+  // Messages are written "HEADLINE\n\nDetail": the first paragraph becomes
+  // the title when there is more than one.
+  showDialog({ message, ok = 'OK', cancel = null, danger = false }) {
+    return new Promise((resolve) => {
+      this.dialogQueue = this.dialogQueue || [];
+      this.dialogQueue.push({ message: String(message || ''), ok, cancel, danger, resolve });
+      if (!this.dialogOpen) this.nextDialog();
+    });
+  }
+
+  nextDialog() {
+    const item = this.dialogQueue && this.dialogQueue.shift();
+    const scrim = document.getElementById('hs-dialog');
+    if (!item || !scrim) { this.dialogOpen = false; return; }
+    this.dialogOpen = true;
+    const parts = item.message.split(/\n\s*\n/);
+    const title = parts.length > 1 ? parts[0] : '';
+    const body = parts.length > 1 ? parts.slice(1).join('\n\n') : parts[0];
+    const t = document.getElementById('hs-dialog-title');
+    const b = document.getElementById('hs-dialog-body');
+    const okBtn = document.getElementById('hs-dialog-ok');
+    const cancelBtn = document.getElementById('hs-dialog-cancel');
+    t.innerText = title; t.style.display = title ? '' : 'none';
+    b.innerText = body;
+    okBtn.innerText = item.ok;
+    okBtn.classList.toggle('btn-danger', !!item.danger);
+    cancelBtn.style.display = item.cancel ? '' : 'none';
+    if (item.cancel) cancelBtn.innerText = item.cancel;
+    scrim.hidden = false;
+    const done = (val) => {
+      okBtn.onclick = cancelBtn.onclick = null;
+      scrim.hidden = true;
+      item.resolve(val);
+      setTimeout(() => this.nextDialog(), 0);
+    };
+    okBtn.onclick = () => done(true);
+    cancelBtn.onclick = () => done(false);
+    try { okBtn.focus(); } catch (e) {}
+    // Lets tests (and anything else) see what was shown.
+    window.dispatchEvent(new CustomEvent('hotspot-dialog', { detail: { type: item.cancel ? 'confirm' : 'alert', text: item.message.replace(/\n+/g, ' | ') } }));
+  }
+
+  // Tell the player something. Does not block the code that called it.
+  notify(message) { this.showDialog({ message }); }
+
+  // Ask yes/no. Resolves true for the main button.
+  ask(message, ok = 'Yes', cancel = 'Cancel', danger = false) {
+    return this.showDialog({ message, ok, cancel, danger });
+  }
+
+  // A short message that slides in and goes away by itself.
+  toast(text, ms = 2600) {
+    const el = document.getElementById('hs-toast');
+    if (!el) return;
+    el.innerText = text;
+    el.classList.add('show');
+    clearTimeout(this.toastTimer);
+    this.toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+  }
+
+  // A problem with something the player typed, shown right under it.
+  fieldError(inputId, message) {
+    const input = document.getElementById(inputId);
+    window.dispatchEvent(new CustomEvent('hotspot-dialog', { detail: { type: 'error', text: message.replace(/\n+/g, ' | ') } }));
+    const visible = input && input.offsetParent !== null;
+    if (!visible) { this.notify(message); return; }
+    let err = input.parentElement.querySelector('.field-error');
+    if (!err) {
+      err = document.createElement('div');
+      err.className = 'field-error';
+      err.setAttribute('role', 'alert');
+      input.insertAdjacentElement('afterend', err);
+      input.addEventListener('input', () => { err.innerText = ''; input.removeAttribute('aria-invalid'); });
+    }
+    err.innerText = message.replace(/\n+/g, ' ');
+    input.setAttribute('aria-invalid', 'true');
+    try { input.focus(); } catch (e) {}
+  }
+
   toggleSound() {
     const speechEnabled = window.hotspotAudio.toggleSpeech();
     const btn = document.getElementById('sound-btn');
     if (btn) {
-      btn.innerText = speechEnabled ? 'Voice' : 'Muted';
+      btn.classList.toggle('muted', !speechEnabled);
+      btn.setAttribute('aria-label', speechEnabled ? 'Turn the voice off' : 'Turn the voice on');
     }
+  }
+
+  // --- BRIGHT / NIGHT MODE ---
+  // Daylight needs a light screen and the dark needs a dim one. The phone's
+  // own setting decides until the player taps the sun/moon button; that
+  // choice is kept on this phone.
+  effectiveTheme() {
+    const t = document.documentElement.dataset.theme;
+    if (t === 'light' || t === 'dark') return t;
+    return (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+  }
+
+  toggleTheme() {
+    const next = this.effectiveTheme() === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    try { localStorage.setItem('hotspot_theme', next); } catch (e) {}
+    this.syncThemeChrome();
+    window.dispatchEvent(new CustomEvent('hotspot-theme', { detail: next }));
+  }
+
+  // The browser's own bar colour follows the mode too.
+  syncThemeChrome() {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+    if (meta && bg) meta.setAttribute('content', bg);
   }
 
   showScreen(screenId) {
@@ -1479,11 +1587,11 @@ class HotspotApp {
   // A rematch keeps the room and the players and replays with rotated roles.
   rematch() {
     if (!this.roomCode || this.isSoloDrill) {
-      alert('Rematch is only available in a multiplayer room.');
+      this.notify('Rematch is only available in a multiplayer room.');
       return;
     }
     if (this.role !== 'hider' && this.role !== 'spectator') {
-      alert('Only the next Hider or a Spectator can start the rematch.');
+      this.notify('Only the next Hider or a Spectator can start the rematch.');
       return;
     }
     // A host whose phone died never got to close the room. Don't rematch into it.
@@ -1539,7 +1647,7 @@ class HotspotApp {
   // The Home button sits on every screen, one tap from ending things for the
   // whole group — and it used to act instantly. Ask first whenever leaving
   // would cost somebody else their game.
-  goHome() {
+  async goHome() {
     const inRound = (this.gameState === 'headstart' || this.gameState === 'active');
     const others = Object.keys(this.players).filter(id => id !== this.playerId).length;
 
@@ -1554,7 +1662,7 @@ class HotspotApp {
       } else if (this.isRoomHost && others > 0) {
         question = 'Close the room?\n\nYou are the host — everyone else will be sent home.';
       }
-      if (question && !confirm(question)) return;
+      if (question && !(await this.ask(question, 'Leave', 'Stay', true))) return;
     }
 
     this.showScreen('home-screen');
@@ -1564,8 +1672,8 @@ class HotspotApp {
     this.updateSeasonStatsDisplay();
   }
 
-  resetSeasonRecords() {
-    if (confirm('Start New Season?\n\nThis will reset your Total Hunts, Fastest Tag, and Longest Hide records back to zero.')) {
+  async resetSeasonRecords() {
+    if (await this.ask('Start a new season?\n\nThis resets your Hunts, Fastest Tag and Longest Hide back to zero.', 'Reset', 'Keep', true)) {
       try {
         localStorage.removeItem('hotspot_stats');
       } catch(e) {}
@@ -1578,7 +1686,7 @@ class HotspotApp {
     const el = document.getElementById('lobby-nickname-input');
     const newName = el ? el.value.trim() : '';
     if (!newName) {
-      alert('Please enter a nickname.');
+      this.fieldError('lobby-nickname-input', 'Type a name first.');
       return;
     }
 
@@ -1595,13 +1703,13 @@ class HotspotApp {
   joinRoom(code, nickname, role = 'seeker', resumed = false) {
     const cleanCode = code ? code.trim().toUpperCase() : '';
     if (cleanCode.length !== 6) {
-      alert('Please enter the full 6-character room code from the host.');
+      this.fieldError(role === 'spectator' ? 'spectator-code-input' : 'join-code-input', 'Please enter the full 6-character room code from the host.');
       return;
     }
     // The generator never emits O, I, L, Z, 0, 1 or 2. Accepting them silently
     // dropped the player into an empty room that could never fill.
     if (!/^[ABCDEFGHJKMNPQRSTVWX3456789]{6}$/.test(cleanCode)) {
-      alert('That is not a valid room code.\n\nCodes never contain O, I, L, Z, 0, 1 or 2 — check for a mistyped character.');
+      this.fieldError(role === 'spectator' ? 'spectator-code-input' : 'join-code-input', 'That is not a valid room code. Codes never contain O, I, L, Z, 0, 1 or 2 — check for a mistyped character.');
       return;
     }
 
@@ -1651,7 +1759,7 @@ class HotspotApp {
 
   toggleRole() {
     if (this.gameState !== 'lobby') {
-      alert('You can only switch roles in the lobby, before the round starts.');
+      this.notify('You can only switch roles in the lobby, before the round starts.');
       return;
     }
     if (this.role === 'spectator') return;
@@ -1664,7 +1772,7 @@ class HotspotApp {
     if (becomingHider) {
       const otherHider = this.getActiveHider();
       if (otherHider) {
-        alert(`${otherHider.name || 'Someone else'} is already the Hider.\n\nThey need to switch to Seeker first, then you can take it.`);
+        this.notify(`${otherHider.name || 'Someone else'} is already the Hider.\n\nThey need to switch to Seeker first, then you can take it.`);
         return;
       }
     }
@@ -1850,7 +1958,7 @@ class HotspotApp {
        </div>`;
 
     el.innerHTML =
-      row('app version', 'v3.4.2') +
+      row('app version', 'v3.5.0') +
       (() => {
         // Straight from the stylesheet. If this disagrees with the app version
         // above, the phone is running cached CSS - provable, not a guess.
@@ -1859,7 +1967,7 @@ class HotspotApp {
           css = (getComputedStyle(document.documentElement)
             .getPropertyValue('--css-version') || '').replace(/["']/g, '').trim() || 'missing';
         } catch (e) {}
-        return row('stylesheet', css, css !== '3.4.2');
+        return row('stylesheet', css, css !== '3.5.0');
       })() +
       row('room', this.roomCode || '(none)', !this.roomCode) +
       row('am I host', this.isRoomHost ? 'yes' : 'no') +
@@ -2003,7 +2111,7 @@ class HotspotApp {
     if (this.gameState !== 'lobby' || !this.roomCode || this.isSoloDrill) return;
 
     if (this.role !== 'hider' && this.role !== 'spectator') {
-      alert('Only the Hider or a Spectator can start the round.');
+      this.notify('Only the Hider or a Spectator can start the round.');
       return;
     }
 
@@ -2011,14 +2119,14 @@ class HotspotApp {
     // match, and no yard centre means the boundary silently does not exist.
     const hiderNow = this.getActiveHider();
     if (!hiderNow) {
-      alert('Nobody is the Hider yet.\n\nSomeone needs to tap "Become the Hider" in the lobby before the round can start.');
+      this.notify('Nobody is the Hider yet.\n\nSomeone needs to tap "Become the Hider" in the lobby before the round can start.');
       return;
     }
 
     // ...and one with nobody seeking is the hider crouching behind a shed alone.
     const seekers = Object.values(this.players).filter(p => p && p.role === 'seeker');
     if (seekers.length === 0) {
-      alert('No seekers have joined yet.\n\nShare the room code and wait for someone to appear under Seekers.');
+      this.notify('No seekers have joined yet.\n\nShare the room code and wait for someone to appear under Seekers.');
       return;
     }
 
@@ -2027,7 +2135,7 @@ class HotspotApp {
     const hiderIsMe = hiderNow.id === this.playerId;
     const hiderHasFix = hiderIsMe ? this.hasGpsFix : !!(hiderNow.lat && hiderNow.lng);
     if (!hiderHasFix) {
-      alert(hiderIsMe
+      this.notify(hiderIsMe
         ? 'Your phone has no GPS fix yet.\n\nTurn Location on (tap the GPS line at the top), step outside, and wait for the "No GPS" tag next to your name to clear.'
         : `${hiderNow.name || 'The Hider'} has no GPS fix yet.\n\nWait for the "No GPS" tag next to their name to clear, then start.`);
       return;
@@ -2129,11 +2237,11 @@ class HotspotApp {
         this.headStartRemaining = remaining;
 
         document.querySelectorAll('.headstart-counter').forEach(el => {
-          el.innerText = `HIDING TIME: ${remaining}s`;
+          el.innerText = `HIDING ${remaining}s`;
         });
 
         const hiderCounter = document.getElementById('hider-timer-display');
-        if (hiderCounter) hiderCounter.innerText = `${remaining}s`;
+        if (hiderCounter) hiderCounter.innerText = `HIDING ${remaining}s`;
 
         if (remaining <= 5 && remaining > 0) {
           window.hotspotAudio.playCountdownBeep(false);
@@ -2150,7 +2258,7 @@ class HotspotApp {
           document.querySelectorAll('.headstart-counter').forEach(el => {
             el.innerText = 'HUNT IS LIVE!';
           });
-          if (hiderCounter) hiderCounter.innerText = 'LIVE!';
+          if (hiderCounter) hiderCounter.innerText = 'HUNT LIVE';
 
           window.hotspotAudio.playCountdownBeep(true);
 
@@ -2182,7 +2290,7 @@ class HotspotApp {
 
       document.querySelectorAll('.headstart-counter').forEach(el => el.innerText = 'HUNT LIVE');
       const hiderCounter = document.getElementById('hider-timer-display');
-      if (hiderCounter) hiderCounter.innerText = 'LIVE!';
+      if (hiderCounter) hiderCounter.innerText = 'HUNT LIVE';
 
       const readyBtn = document.getElementById('btn-hider-ready');
       if (readyBtn) readyBtn.style.display = 'none';
@@ -2269,7 +2377,7 @@ class HotspotApp {
   matchClockText(remainingSec) {
     if (!this.matchDurationSeconds || this.matchDurationSeconds <= 0) return 'NO TIME LIMIT';
     const left = Math.max(0, Math.floor(remainingSec));
-    return `MATCH TIME: ${Math.floor(left / 60)}:${(left % 60).toString().padStart(2, '0')}`;
+    return `${Math.floor(left / 60)}:${(left % 60).toString().padStart(2, '0')} left`;
   }
 
   setMatchClock(text) {
@@ -2437,7 +2545,9 @@ class HotspotApp {
     if (firstFix) this.updateLobbyList();
 
     document.querySelectorAll('.accuracy-tag').forEach(el => {
-      el.innerText = `GPS: ±${Math.round(pos.accuracy)}ft`;
+      el.innerText = `GPS ±${Math.round(pos.accuracy)} ft`;
+      el.classList.toggle('weak', pos.accuracy > 50);
+      el.classList.remove('off');
     });
 
     const warnBox = document.getElementById('gps-warning-banner');
@@ -2506,7 +2616,7 @@ class HotspotApp {
     // Don't keep claiming a fix the phone does not have. The top bar used to
     // read "GPS: ±25ft" with location switched off entirely.
     if (!this.hasGpsFix) {
-      document.querySelectorAll('.accuracy-tag').forEach(el => { el.innerText = 'GPS: OFF'; });
+      document.querySelectorAll('.accuracy-tag').forEach(el => { el.innerText = 'GPS OFF'; el.classList.add('off'); el.classList.remove('weak'); });
     }
   }
 
@@ -2537,34 +2647,60 @@ class HotspotApp {
     if (track.points.length > 2000) track.points.splice(0, track.points.length - 2000);
   }
 
-  // Neutral radar: no band, no distance, no colour cue. Used while the hider
-  // is still hiding, so nothing about their whereabouts is on screen yet.
-  // ---- the anchor gauge -------------------------------------------------
-  // 270-degree sweep, r=130 in a 340 box. Circumference 817, full track 613.
-  // Fill grows as the seeker closes, so the instrument reads at a glance from
-  // arm's length in the dark without reading a single word.
-  setGauge(distFeet, color) {
-    const arc = document.getElementById('gauge-arc');
-    if (!arc) return;
+  // ---- the radar (radar.js) ---------------------------------------------
+  // The hider ring sits at the distance and takes the band's colour. null
+  // clears it: no reading, no hint.
+  setGauge(distFeet) {
+    const radar = window.hotspotRadar;
+    if (!radar) return;
+    radar.setTagRadius(this.tagRadiusFeet);
+    radar.setDistance(typeof distFeet === 'number' && isFinite(distFeet) ? distFeet : null, this.currentBand);
+  }
 
-    let pct = 0;
-    if (typeof distFeet === 'number' && isFinite(distFeet)) {
-      pct = Math.max(0, Math.min(1, 1 - (distFeet / 300)));
+  // ---- the seeker readout ------------------------------------------------
+  // One place writes it. kicker: the small line above; label: the band word
+  // or notice; band: colours the strip; num/unit: the distance; warn: a
+  // short warning under it. The number glides to each new value rather than
+  // jumping, so a seeker walking in can feel it fall.
+  setSeekerReadout({ kicker = 'Hider is', label = '', band = null, num = null, unit = '', warn = '' } = {}) {
+    const box = document.getElementById('seeker-readout');
+    const k = box && box.querySelector('.readout-kicker');
+    const bandLabel = document.getElementById('seeker-band-label');
+    const dist = document.getElementById('seeker-dist-readout');
+    if (!dist) return;
+    let main = dist.querySelector('.dist-main'), sub = dist.querySelector('.dist-sub'), w = dist.querySelector('.dist-warn');
+    if (!main || !sub || !w) {
+      dist.innerHTML = '<span class="dist-main"></span><span class="dist-sub"></span><span class="dist-warn"></span>';
+      main = dist.querySelector('.dist-main'); sub = dist.querySelector('.dist-sub'); w = dist.querySelector('.dist-warn');
     }
-    arc.setAttribute('stroke-dasharray', (613 * pct).toFixed(1) + ' 817');
-    // A zero-length stroke with round caps still paints its cap, which left a
-    // lone glowing dot at the foot of an empty gauge.
-    arc.style.opacity = pct > 0.004 ? '1' : '0';
+    if (k) k.innerText = kicker;
+    if (bandLabel) bandLabel.innerText = label;
+    if (box) {
+      if (band) box.dataset.band = band; else delete box.dataset.band;
+      box.classList.toggle('notice', num === null);
+    }
+    sub.innerText = unit;
+    w.innerText = warn;
+    this.glideNumber(main, num, unit);
+  }
 
-    // Drive the gradient stops so the arc itself heats up.
-    const g1 = document.getElementById('hg1');
-    const g2 = document.getElementById('hg2');
-    if (color && g1 && g2) {
-      const hi = { '#4C5BA8': '#9EC5FF', '#5B6BC0': '#9EC5FF' }[color] || color;
-      document.getElementById('hg0').setAttribute('stop-color', color);
-      g1.setAttribute('stop-color', color);
-      g2.setAttribute('stop-color', hi === color ? '#FFFFFF' : hi);
-    }
+  glideNumber(el, value, unit) {
+    if (this.glideRaf) { cancelAnimationFrame(this.glideRaf); this.glideRaf = null; }
+    if (value === null || value === undefined) { el.innerText = ''; el.dataset.v = ''; el.dataset.unit = ''; return; }
+    const from = parseFloat(el.dataset.v);
+    const sameUnit = el.dataset.unit === unit;
+    const calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.dataset.v = String(value);
+    el.dataset.unit = unit;
+    if (!sameUnit || !isFinite(from) || from === value || calm) { el.innerText = String(value); return; }
+    const t0 = performance.now(), dur = 300;
+    const step = (t) => {
+      const p = Math.min(1, (t - t0) / dur);
+      const e = 1 - Math.pow(1 - p, 3);
+      el.innerText = String(Math.round(from + (value - from) * e));
+      this.glideRaf = p < 1 ? requestAnimationFrame(step) : null;
+    };
+    this.glideRaf = requestAnimationFrame(step);
   }
 
   // --- living background (ambient.js) ---
@@ -2597,20 +2733,17 @@ class HotspotApp {
     const el = document.getElementById(id);
     if (!el) return;
     const v = Math.max(0, Math.min(1, pct || 0));
-    el.setAttribute('stroke-dasharray', (163 * v).toFixed(1) + ' 164');
+    el.style.width = (v * 100).toFixed(1) + '%';
   }
 
   blankSeekerRadar() {
     this.currentBand = null;
     this.currentDistance = null;
 
-    const bandLabel = document.getElementById('seeker-band-label');
-    if (bandLabel) bandLabel.innerText = 'STAND BY';
+    this.setSeekerReadout({ kicker: 'Hiding time', label: 'STAND BY', unit: 'The hunt starts when hiding time ends' });
 
-    const distEl = document.getElementById('seeker-dist-readout');
-    if (distEl) distEl.innerHTML = '';
-
-    this.setGauge(null, '#7DD3FC');
+    this.setGauge(null);
+    if (window.hotspotRadar) { window.hotspotRadar.setBearing(null); window.hotspotRadar.setSmoke(false); }
     this.ambientHeat(null);
 
     // Let the first real band of the round announce itself.
@@ -2635,13 +2768,12 @@ class HotspotApp {
 
   // Radar with nothing to show, and the reason why.
   showRadarNotice(label, detail) {
-    const bandLabel = document.getElementById('seeker-band-label');
-    const distEl = document.getElementById('seeker-dist-readout');
-    if (bandLabel && !this.powerups.smokeActive) bandLabel.innerText = label;
-    if (distEl) distEl.innerHTML = `<span class="dist-sub">${detail}</span>`;
-    this.setGauge(null, '#7DD3FC');
-    this.ambientHeat(null);
     this.currentBand = null;
+    if (!this.powerups.smokeActive) {
+      this.setSeekerReadout({ kicker: 'Signal', label, unit: detail });
+    }
+    this.setGauge(null);
+    this.ambientHeat(null);
   }
 
   stopPulseLoop() {
@@ -2739,26 +2871,24 @@ class HotspotApp {
       const bandInfo = window.hotspotGeo.getDistanceBand(distFeet, marginFeet, this.tagRadiusFeet);
       this.currentBand = bandInfo.band;
 
-      const pulseRing = document.getElementById('seeker-pulse-ring');
-      const bandLabel = document.getElementById('seeker-band-label');
-
-      if (bandLabel && !this.powerups.smokeActive) bandLabel.innerText = bandInfo.label;
-
       // Show the actual number and its uncertainty so "close" is interpretable.
-      const distEl = document.getElementById('seeker-dist-readout');
-      if (distEl && !this.powerups.smokeActive) {
+      if (!this.powerups.smokeActive) {
         // Rounded first, so exactly 300ft reads "300 feet" rather than tipping
         // into "100 yards" on a hair of floating-point.
         const far = Math.round(distFeet) > 300;
         const value = far ? Math.round(distFeet / 3) : Math.round(distFeet);
         const unit = far ? 'yards' : 'feet';
-        distEl.innerHTML =
-          `<span class="dist-main">${value}</span>` +
-          `<span class="dist-sub">${unit}${this.isSoloDrill ? ' &middot; drill' : ' &middot; \u00b1' + marginFeet}</span>` +
-          (bandInfo.capped ? '<span class="dist-warn">WEAK GPS FIX</span>' : '');
+        this.setSeekerReadout({
+          kicker: 'Hider is',
+          label: bandInfo.label,
+          band: bandInfo.band,
+          num: value,
+          unit: this.isSoloDrill ? `${unit} away \u00b7 drill` : `${unit} away \u00b7 \u00b1${marginFeet} ft`,
+          warn: bandInfo.capped ? 'Weak GPS fix' : ''
+        });
       }
 
-      this.setGauge(distFeet, bandInfo.color);
+      this.setGauge(distFeet);
       this.ambientHeat(distFeet);
 
       const now = Date.now();
@@ -2777,25 +2907,27 @@ class HotspotApp {
         );
         const arrow = document.getElementById('bearing-arrow');
         const note = document.getElementById('bearing-note');
-        if (arrow) {
-          // Subtract the phone's compass heading so the arrow points where the
-          // player is actually facing. Only a true-north heading that is still
-          // arriving is trusted — otherwise say plainly that the arrow is
-          // north-referenced rather than pointing confidently in the wrong
-          // direction.
-          const geo = window.hotspotGeo;
-          const usable = geo.hasUsableHeading();
-          const shown = usable ? (bearing - geo.deviceHeading + 360) % 360 : bearing;
+        // Subtract the phone's compass heading so the point sits where the
+        // player is actually facing. Only a true-north heading that is still
+        // arriving is trusted — otherwise say plainly that it is measured from
+        // north rather than pointing confidently in the wrong direction.
+        const geo = window.hotspotGeo;
+        const usable = geo.hasUsableHeading();
+        const shown = usable ? (bearing - geo.deviceHeading + 360) % 360 : bearing;
+        if (window.hotspotRadar) {
+          // The radar shows it: the ring collapses to a point in that direction.
+          window.hotspotRadar.setBearing(shown);
+          if (arrow) arrow.style.display = 'none';
+        } else if (arrow) {
           arrow.style.display = 'block';
           arrow.style.transform = `rotate(${shown}deg)`;
-
-          if (note) {
-            note.style.display = 'block';
-            note.innerText = usable
-              ? 'Arrow points at the hider. Hold the phone flat.'
-              : 'No compass. Arrow is measured from north.';
-            note.style.color = usable ? 'var(--accent)' : 'var(--warn)';
-          }
+        }
+        if (note) {
+          note.style.display = 'block';
+          note.innerText = usable
+            ? 'Their direction is the point on the radar. Hold the phone flat.'
+            : 'No compass. Top of the radar is north.';
+          note.style.color = usable ? 'var(--accent)' : 'var(--warn)';
         }
       }
 
@@ -2873,10 +3005,12 @@ class HotspotApp {
     );
     const roomLeft = Math.max(0, Math.round(this.boundaryRadius - distFromCenter));
 
-    let bg, fg, text;
+    // The state picks a background and text colour pair from the stylesheet,
+    // so each one reads in both bright and night mode.
+    let state, text;
     if (distFromCenter > this.boundaryRadius) {
-      bg = '#C8102E'; fg = '#FFFFFF';
-      text = `OUT OF BOUNDS — ${Math.round(distFromCenter - this.boundaryRadius)}ft over the line. Head back!`;
+      state = 'out';
+      text = `OUT OF BOUNDS — ${Math.round(distFromCenter - this.boundaryRadius)} ft over the line. Head back!`;
       if (!this.outOfBoundsSpoken) {
         this.outOfBoundsSpoken = true;
         if ('vibrate' in navigator) { try { navigator.vibrate([200, 100, 200]); } catch(e) {} }
@@ -2884,18 +3018,19 @@ class HotspotApp {
       }
     } else if (distFromCenter > 0.8 * this.boundaryRadius) {
       this.outOfBoundsSpoken = false;
-      bg = '#FFB020'; fg = '#1A1100';
-      text = `NEAR THE EDGE — ${roomLeft}ft of room left`;
+      state = 'edge';
+      text = `NEAR THE EDGE — ${roomLeft} ft of room left`;
     } else {
       this.outOfBoundsSpoken = false;
-      bg = 'rgba(52, 211, 153, 0.22)'; fg = '#FFFFFF';
-      text = `In bounds — ${roomLeft}ft of room left`;
+      state = 'ok';
+      text = `In bounds — ${roomLeft} ft of room left`;
     }
 
     banners.forEach(b => {
       b.style.display = 'block';
-      b.style.background = bg;
-      b.style.color = fg;
+      b.style.background = '';
+      b.style.color = '';
+      b.dataset.bound = state;
       b.innerText = text;
     });
   }
@@ -2948,6 +3083,7 @@ class HotspotApp {
       const endPing = () => {
         if (ping !== this.bearingPingSeq) return;
         this.powerups.bearingActive = false;
+        if (window.hotspotRadar) window.hotspotRadar.setBearing(null);
         const arrow = document.getElementById('bearing-arrow');
         if (arrow) arrow.style.display = 'none';
         const note = document.getElementById('bearing-note');
@@ -2973,11 +3109,11 @@ class HotspotApp {
   triggerSmokeVisual(active) {
     this.powerups.smokeActive = active;
     const pulseRing = document.getElementById('seeker-pulse-ring');
-    const bandLabel = document.getElementById('seeker-band-label');
+    if (window.hotspotRadar) window.hotspotRadar.setSmoke(!!active);
 
     if (active) {
       if (pulseRing) pulseRing.classList.add('smoke-blind');
-      if (bandLabel) bandLabel.innerText = 'SMOKE SCREEN';
+      this.setSeekerReadout({ kicker: 'Signal', label: 'SMOKE SCREEN', unit: 'The hider threw smoke. It clears in 15 seconds.' });
     } else {
       if (pulseRing) pulseRing.classList.remove('smoke-blind');
     }
@@ -3147,6 +3283,13 @@ setTimeout(() => {
   try { app.updateSeasonStatsDisplay(); } catch (e) {}
   try { if (app.loadSavedName()) app.fillNameInputs(); } catch (e) {}
   try { app.initLifecycle(); } catch (e) {}
+  // The browser bar colour follows bright/night, including when the phone
+  // itself switches.
+  try {
+    app.syncThemeChrome();
+    const mq = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)');
+    if (mq && mq.addEventListener) mq.addEventListener('change', () => app.syncThemeChrome());
+  } catch (e) {}
   // A scanned QR code or a sent link goes straight into its room. Otherwise,
   // after a reload, put the player back in the room they were in.
   let deepLinked = false;

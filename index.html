@@ -19,7 +19,7 @@
     object-src 'none';
     base-uri 'self';
     form-action 'none'">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.4.2</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.5.0</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -32,11 +32,23 @@
   <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
   <link rel="manifest" href="manifest.json">
 
-  <!-- Type: Outfit carries the display voice, Inter Tight the reading text,
-       JetBrains Mono only where a number is being measured. -->
+  <!-- Type: Archivo for the big numbers and headings; Atkinson Hyperlegible,
+       built to stay readable in poor light and at a glance, for everything
+       else; its mono for room codes and clocks. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@700;800&family=Inter+Tight:wght@400;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,700..900&family=Atkinson+Hyperlegible+Next:wght@400;700;800&family=Atkinson+Hyperlegible+Mono:wght@500;700&display=swap" rel="stylesheet">
+
+  <!-- Bright or night mode, applied before the first paint so the screen
+       never flashes the wrong one. No choice saved = follow the phone. -->
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('hotspot_theme');
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    })();
+  </script>
 
   <!-- Leaflet Map CSS + JS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -67,7 +79,7 @@
   </script>
 
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=3.4.2">
+  <link rel="stylesheet" href="style.css?v=3.5.0">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -115,6 +127,20 @@
     </div>
   </div>
 
+  <!-- The app's own pop-up (no browser alert/confirm boxes) and a small
+       message strip for quick confirmations. -->
+  <div id="hs-dialog" class="dialog-scrim" hidden>
+    <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="hs-dialog-title" aria-describedby="hs-dialog-body">
+      <div id="hs-dialog-title" class="dialog-title"></div>
+      <div id="hs-dialog-body" class="dialog-body"></div>
+      <div class="dialog-actions">
+        <button id="hs-dialog-cancel" class="btn btn-secondary">Cancel</button>
+        <button id="hs-dialog-ok" class="btn btn-primary">OK</button>
+      </div>
+    </div>
+  </div>
+  <div id="hs-toast" class="toast" role="status" aria-live="polite"></div>
+
   <div id="app-container">
 
     <!-- Environment / GPS Diagnostic Banner -->
@@ -125,12 +151,21 @@
     <!-- Cloud Sync Failure Banner -->
     <div id="sync-warning-banner" class="warning-banner" style="display: none;"></div>
 
-    <!-- Top Navigation / Sound Bar -->
+    <!-- Top bar: GPS fix, then bright/night, voice and home. Icons are Lucide. -->
     <div class="top-bar">
       <span class="accuracy-tag" onclick="window.hotspotApp.requestGpsPermissionDirectly()">GPS: Searching...</span>
-      <div style="display: flex; gap: 6px;">
-        <button class="icon-btn" onclick="window.hotspotApp.toggleSound()" id="sound-btn">Voice</button>
-        <button class="icon-btn" onclick="window.hotspotApp.goHome()">Home</button>
+      <div class="top-actions">
+        <button class="icon-btn theme-btn" onclick="window.hotspotApp.toggleTheme()" aria-label="Switch bright or night mode">
+          <svg class="ic ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg>
+          <svg class="ic ic-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg>
+        </button>
+        <button class="icon-btn" onclick="window.hotspotApp.toggleSound()" id="sound-btn" aria-label="Turn the voice off or on">
+          <svg class="ic ic-on" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg>
+          <svg class="ic ic-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4.702a.7.7 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.7.7 0 0 0 11 19.298z"/><path d="m16.5 14.5 5-5"/><path d="m16.5 9.5 5 5"/></svg>
+        </button>
+        <button class="icon-btn" onclick="window.hotspotApp.goHome()" aria-label="Home">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-6a2 2 0 0 1 2.582 0l7 6A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        </button>
       </div>
     </div>
 
@@ -140,81 +175,65 @@
         <div class="scope-rule"><span>THERMAL PURSUIT SYSTEM</span></div>
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="scope-meta">
-          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.4.2</span>
+          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.5.0</span>
           <span id="cloud-sync-status" class="tele">STANDBY</span>
         </div>
       </div>
 
-      <div class="card">
+      <div class="card home-start">
         <div class="card-title">Start a hunt</div>
-        <button class="btn btn-primary" onclick="window.hotspotApp.showScreen('host-setup-screen')">
-          Host a Hunt
+        <button class="btn btn-primary btn-host" onclick="window.hotspotApp.showScreen('host-setup-screen')">
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/></svg><span>Host a Hunt</span>
         </button>
-        <div class="powerup-grid" style="margin-top: 9px;">
-          <button class="btn btn-secondary" style="margin: 0;" onclick="window.hotspotApp.showScreen('join-screen')">Join</button>
-          <button class="btn btn-secondary" style="margin: 0;" onclick="window.hotspotApp.showScreen('join-spectator-screen')">Spectate</button>
+        <div class="powerup-grid home-pair">
+          <button class="btn btn-secondary" onclick="window.hotspotApp.showScreen('join-screen')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg><span>Join</span></button>
+          <button class="btn btn-secondary" onclick="window.hotspotApp.showScreen('join-spectator-screen')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg><span>Spectate</span></button>
         </div>
       </div>
 
-      <div class="card">
-        <div class="card-title">Practice</div>
-        <p class="solo-hint">Plants a virtual hider 300ft out so you can feel the gauge, haptics and announcer without anyone else.</p>
+      <div class="card home-practice">
+        <div class="card-title">Practice alone</div>
+        <p class="solo-hint">A pretend hider stands 300 ft away so you can learn the radar, the buzzes and the voice.</p>
         <button class="btn btn-solo" onclick="window.hotspotApp.startSoloDrill()">
-          Run Solo Drill
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><span>Run Solo Drill</span>
         </button>
-        <div id="voice-row" style="display: flex; align-items: center; gap: 8px; margin-top: 9px;">
-          <select id="voice-select" class="select-input" aria-label="Announcer voice" style="flex: 1; min-width: 0; margin: 0;">
+        <div id="voice-row" class="voice-row">
+          <select id="voice-select" class="select-input" aria-label="Announcer voice">
             <option value="auto">Announcer voice</option>
           </select>
-          <button class="btn btn-secondary" style="width: auto; margin: 0; min-height: 46px; padding: 8px 16px;" onclick="window.hotspotAudio.testVoice()">
-            Test
+          <button class="btn btn-secondary btn-test" onclick="window.hotspotAudio.testVoice()" aria-label="Test the announcer voice">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="6 3 20 12 6 21 6 3"/></svg><span>Test</span>
           </button>
         </div>
       </div>
 
-      <div class="card" style="margin-bottom: 0;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <div class="card-title" style="margin-bottom: 0;">Season Records</div>
-          <button class="btn btn-secondary" style="width: auto; min-height: 46px; padding: 8px 14px; font-size: 14px; margin: 0; border-color: rgba(245,158,11,.45); color: var(--warn);" onclick="window.hotspotApp.resetSeasonRecords()">
-            Reset Season
-          </button>
+      <div class="card home-records">
+        <div class="records-head">
+          <div class="card-title">Season records</div>
+          <button class="btn btn-quiet" onclick="window.hotspotApp.resetSeasonRecords()">Reset season</button>
         </div>
         <div class="stats-grid">
           <div class="stat-box">
-            <svg class="dial" viewBox="0 0 66 66" aria-hidden="true">
-              <circle cx="33" cy="33" r="26" fill="none" stroke="rgba(0,0,0,.7)" stroke-width="7"/>
-              <circle id="dial-1" cx="33" cy="33" r="26" fill="none" stroke="#7DD3FC" stroke-width="6"
-                      stroke-linecap="round" stroke-dasharray="0 164" transform="rotate(-90 33 33)"
-                      style="filter: drop-shadow(0 0 5px rgba(125,211,252,.85)); transition: stroke-dasharray .5s ease;"/>
-            </svg>
             <div class="stat-val" id="stat-total-hunts">0</div>
             <div class="stat-lbl">Hunts</div>
+            <div class="stat-bar" aria-hidden="true"><i id="dial-1"></i></div>
           </div>
           <div class="stat-box">
-            <svg class="dial" viewBox="0 0 66 66" aria-hidden="true">
-              <circle cx="33" cy="33" r="26" fill="none" stroke="rgba(0,0,0,.7)" stroke-width="7"/>
-              <circle id="dial-2" cx="33" cy="33" r="26" fill="none" stroke="#FFD166" stroke-width="6"
-                      stroke-linecap="round" stroke-dasharray="0 164" transform="rotate(-90 33 33)"
-                      style="filter: drop-shadow(0 0 5px rgba(255,209,102,.85)); transition: stroke-dasharray .5s ease;"/>
-            </svg>
             <div class="stat-val" id="stat-fastest-tag">--</div>
-            <div class="stat-lbl">Fastest</div>
+            <div class="stat-lbl">Best tag</div>
+            <div class="stat-bar" aria-hidden="true"><i id="dial-2"></i></div>
           </div>
           <div class="stat-box">
-            <svg class="dial" viewBox="0 0 66 66" aria-hidden="true">
-              <circle cx="33" cy="33" r="26" fill="none" stroke="rgba(0,0,0,.7)" stroke-width="7"/>
-              <circle id="dial-3" cx="33" cy="33" r="26" fill="none" stroke="#FF6B3D" stroke-width="6"
-                      stroke-linecap="round" stroke-dasharray="0 164" transform="rotate(-90 33 33)"
-                      style="filter: drop-shadow(0 0 5px rgba(255,107,61,.85)); transition: stroke-dasharray .5s ease;"/>
-            </svg>
             <div class="stat-val" id="stat-longest-hide">0s</div>
-            <div class="stat-lbl">Longest</div>
+            <div class="stat-lbl">Best hide</div>
+            <div class="stat-bar" aria-hidden="true"><i id="dial-3"></i></div>
           </div>
         </div>
-        <button id="pwa-install-btn" class="btn btn-secondary" style="margin-top: 10px; margin-bottom: 0; border-color: var(--accent); color: var(--accent);" onclick="window.showPwaInstallGuide()">
-          Install App to Home Screen
-        </button>
       </div>
+
+      <button id="pwa-install-btn" class="btn btn-quiet btn-install" onclick="window.showPwaInstallGuide()">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></svg><span>Install on your home screen</span>
+      </button>
     </div>
 
     <!-- ==================== SCREEN 2: HOST SETUP ==================== -->
@@ -384,60 +403,36 @@
 
     <!-- ==================== SCREEN 6: SEEKER LIVE HUNT ==================== -->
     <div id="seeker-screen" class="screen">
-      <div class="role-header-banner">
-        <div class="role-badge seeker-role-badge">YOU ARE THE SEEKER</div>
-      </div>
-      <div class="rail">
-        <div id="headstart-banner-seeker" class="rail-cell headstart-counter lit">HIDING TIME</div>
-        <div id="match-timer-seeker" class="rail-cell">MATCH TIME</div>
+      <div class="hunt-head">
+        <div class="role-badge seeker-role-badge">Seeker</div>
+        <div class="rail">
+          <div id="headstart-banner-seeker" class="rail-cell headstart-counter lit">HIDING TIME</div>
+          <div id="match-timer-seeker" class="rail-cell">--:-- left</div>
+        </div>
       </div>
 
       <!-- Yard limit readout — seekers get the same boundary feedback as the hider -->
       <div id="seeker-boundary-alert" style="display: none;"></div>
 
-      <div class="seeker-radar-container">
-        <!-- Pulse Ring -->
-        <div id="seeker-pulse-ring" class="pulse-ring-outer">
-          <!-- The anchor. Arc fills as the seeker closes; the numeral is the
-               distance. 270-degree sweep, r=130 in a 340 box: circumference
-               817, full track 613. -->
-          <svg class="gauge-svg" viewBox="0 0 340 340" role="img"
-               aria-label="Distance to hider">
-            <defs>
-              <linearGradient id="heatgrad" x1="0" y1="1" x2="1" y2="0">
-                <stop id="hg0" offset="0%"   stop-color="#7DD3FC"/>
-                <stop id="hg1" offset="60%"  stop-color="#7DD3FC"/>
-                <stop id="hg2" offset="100%" stop-color="#E8F7FF"/>
-              </linearGradient>
-              <filter id="heatglow" x="-60%" y="-60%" width="220%" height="220%">
-                <feGaussianBlur stdDeviation="4" result="b"/>
-                <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-              </filter>
-            </defs>
-            <circle class="gauge-tickring" cx="170" cy="170" r="163" fill="none"
-                    stroke="rgba(255,255,255,.16)" stroke-width="1" stroke-dasharray="1.5 13"/>
-            <circle cx="170" cy="170" r="130" fill="none" stroke="rgba(0,0,0,.72)"
-                    stroke-width="26" stroke-linecap="round"
-                    stroke-dasharray="613 817" transform="rotate(135 170 170)"/>
-            <circle id="gauge-arc" cx="170" cy="170" r="130" fill="none"
-                    stroke="url(#heatgrad)" stroke-width="22" stroke-linecap="round"
-                    stroke-dasharray="0 817" transform="rotate(135 170 170)"
-                    filter="url(#heatglow)"
-                    style="transition: stroke-dasharray .45s cubic-bezier(.2,.8,.2,1);"/>
-          </svg>
-
-          <svg id="bearing-arrow" class="bearing-arrow" viewBox="0 0 24 24" fill="none"
-               stroke="#7DD3FC" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-            <polygon points="12 2 19 21 12 17 5 21 12 2"></polygon>
-          </svg>
-
-          <div class="gauge-center">
-            <div id="seeker-band-label" class="seeker-band-label">STAND BY</div>
-            <div id="seeker-dist-readout"></div>
-          </div>
-          <div id="bearing-note"></div>
-        </div>
+      <!-- Radar (radar.js, three.js). You are the centre; the glowing ring is
+           how far away the hider is — somewhere on that ring. A bearing ping
+           collapses the ring to a point in their direction. -->
+      <div id="seeker-pulse-ring" class="radar-wrap">
+        <canvas id="radar-canvas" aria-hidden="true"></canvas>
+        <div class="radar-fallback" aria-hidden="true"></div>
+        <svg id="bearing-arrow" class="bearing-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 19 21 12 17 5 21 12 2"/></svg>
+        <div class="radar-key" aria-hidden="true"><span>You · center</span><span>Ring · how far the hider is</span></div>
       </div>
+
+      <!-- The readout: what the seeker came for, on a solid panel -->
+      <section id="seeker-readout" class="readout notice" aria-live="polite" aria-label="Distance to the hider">
+        <div class="readout-band">
+          <div class="readout-kicker">Hider is</div>
+          <div id="seeker-band-label" class="seeker-band-label">STAND BY</div>
+        </div>
+        <div id="seeker-dist-readout"><span class="dist-main"></span><span class="dist-sub"></span><span class="dist-warn"></span></div>
+        <div id="bearing-note"></div>
+      </section>
 
       <!-- Solo Drill Indoor Test Controls -->
       <div id="solo-controls-card" class="card" style="display: none; margin-bottom: 8px;">
@@ -449,41 +444,37 @@
         </div>
       </div>
 
-      <div class="card" style="margin-bottom: 0;">
-        <div class="card-title">Powerup · back after a cooldown</div>
-        <button id="btn-bearing-ping" class="btn btn-secondary" style="margin-bottom: 0;" data-label="Bearing Ping (3s Live Arrow)" data-short="Bearing Ping" onclick="window.hotspotApp.usePowerup('bearing')">
-          <span class="btn-text">Bearing Ping (3s Live Arrow)</span>
-          <span class="cd-bar" aria-hidden="true"><i></i></span>
-        </button>
-      </div>
+      <!-- One action, in thumb reach -->
+      <button id="btn-bearing-ping" class="btn btn-primary btn-ping" style="margin-bottom: 0;" data-label="Ping their direction" data-short="Ping" onclick="window.hotspotApp.usePowerup('bearing')">
+        <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg>
+        <span class="btn-text">Ping their direction</span>
+        <span class="cd-bar" aria-hidden="true"><i></i></span>
+      </button>
     </div>
 
     <!-- ==================== SCREEN 7: HIDER LIVE HUNT ==================== -->
     <div id="hider-screen" class="screen">
-      <div class="role-header-banner">
-        <div class="role-badge hider-role-badge">YOU ARE THE HIDER</div>
-      </div>
-      <div style="text-align: center;">
-        <div class="brand-subtitle">HIDING TIME REMAINING</div>
-        <div id="hider-timer-display" class="headstart-counter" style="font-size: 32px; font-weight: 900; color: var(--warn);">60s</div>
-        <div id="match-timer-hider" style="font-size: 16px; font-weight: 800; color: var(--accent); margin-top: 4px;">
-          MATCH TIME: 5:00
+      <div class="hunt-head">
+        <div class="role-badge hider-role-badge">Hider</div>
+        <div class="rail">
+          <div id="hider-timer-display" class="rail-cell lit">HIDING TIME</div>
+          <div id="match-timer-hider" class="rail-cell">--:-- left</div>
         </div>
       </div>
 
       <!-- Yard Boundary Warning Banner -->
       <div id="hider-boundary-alert" style="display: none;"></div>
 
-      <!-- Hider Ready Early Button -->
-      <button id="btn-hider-ready" class="btn btn-secondary" style="margin: 6px 0; border-color: var(--accent);" onclick="window.hotspotApp.hiderReadyEarly()">
-        Ready Early (I'm Hidden)
-      </button>
-
+      <!-- The one number the hider watches, filling the screen -->
       <div class="card hider-radar-box">
-        <div class="card-title">Nearest Seeker Distance</div>
+        <div class="readout-kicker">Nearest seeker</div>
         <div id="hider-nearest-dist" class="hider-dist-num">--ft</div>
-        <div style="font-size: 14px; font-weight: 600; color: var(--ink-2); margin-top: 6px;">Silent — only you can see this</div>
+        <div class="hider-note">Silent — only you can see this</div>
       </div>
+
+      <button id="btn-hider-ready" class="btn btn-primary" onclick="window.hotspotApp.hiderReadyEarly()">
+        I'm hidden — start the hunt now
+      </button>
 
       <div class="card" style="margin-bottom: 0;">
         <div class="card-title">Powerups · back after a cooldown</div>
@@ -503,14 +494,14 @@
     <!-- ==================== SCREEN 8: SPECTATOR GOD VIEW ==================== -->
     <div id="spectator-screen" class="screen">
       <div class="brand-header" style="margin-bottom: 6px;">
-        <h2 class="brand-title" style="font-size: 20px;">Spectator Map</h2>
+        <h2 class="brand-title" style="font-size: 20px;">Live map</h2>
       </div>
 
       <!-- Round status. A "Start Round" button used to sit here, on a screen
            that only exists once a round is already running. -->
       <div class="rail">
         <div class="rail-cell headstart-counter lit">HIDING TIME</div>
-        <div id="match-timer-spectator" class="rail-cell">MATCH TIME</div>
+        <div id="match-timer-spectator" class="rail-cell">--:-- left</div>
       </div>
 
       <div id="spectator-map"></div>
@@ -543,11 +534,11 @@
       </button>
 
       <div class="card" style="margin-bottom: 8px;">
-        <div class="card-title">Replay Timeline Scrubber</div>
+        <div class="card-title">Watch the hunt again</div>
         <input type="range" id="replay-slider" min="0" max="100" value="0" style="width: 100%; accent-color: var(--heat-2); margin-bottom: 8px;" oninput="window.hotspotReplay.stepReplay(this.value)">
         <div style="display: flex; gap: 6px;">
           <button class="btn btn-primary" style="flex: 1; padding: 10px; margin-bottom: 0;" onclick="window.hotspotReplay.playReplay((pct) => document.getElementById('replay-slider').value = pct)">
-            Play Tracks
+            Play replay
           </button>
           <button class="btn btn-secondary" style="flex: 1; padding: 10px; margin-bottom: 0;" onclick="window.hotspotReplay.pauseReplay()">
             Pause
@@ -556,7 +547,7 @@
       </div>
 
       <button id="btn-rematch" class="btn btn-primary" style="display: none;" onclick="window.hotspotApp.rematch()">
-        Rematch — Same Room, Rotated Roles
+        Rematch — swap roles
       </button>
       <!-- For everyone who cannot start the rematch: who they are waiting on -->
       <div id="rematch-wait" class="lobby-wait" style="display: none;"></div>
@@ -616,16 +607,11 @@
           deferredPrompt = null;
         });
       } else {
-        alert(
-          "HOW TO INSTALL HOTSPOT APP TO YOUR HOME SCREEN:\n\n" +
-          "• iPhone / iOS (Safari):\n" +
-          "  1. Tap the Share button (box with arrow ) at the bottom.\n" +
-          "  2. Scroll down and tap 'Add to Home Screen' ().\n\n" +
-          "• Android (Chrome):\n" +
-          "  1. Tap the 3-dots menu (⋮) in top right.\n" +
-          "  2. Tap 'Add to Home screen' or 'Install app'.\n\n" +
-          "WHY INSTALL?\n" +
-          "Removes browser URL bars, runs full-screen, and prevents accidental page swipes while running!"
+        window.hotspotApp.notify(
+          "Install HOTSPOT on your home screen\n\n" +
+          "iPhone (Safari): tap the Share button at the bottom, then Add to Home Screen.\n\n" +
+          "Android (Chrome): tap the three dots at the top right, then Install app.\n\n" +
+          "It then opens full screen, without the browser bar."
         );
       }
     };
@@ -651,24 +637,25 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=3.4.2"></script>
-  <script src="geo.js?v=3.4.2"></script>
-  <script src="replay.js?v=3.4.2"></script>
-  <script src="app.js?v=3.4.2"></script>
+  <script src="audio.js?v=3.5.0"></script>
+  <script src="geo.js?v=3.5.0"></script>
+  <script src="replay.js?v=3.5.0"></script>
+  <script src="app.js?v=3.5.0"></script>
 
   <!-- Smooth scrolling (Lenis) for the three panels that scroll, and the
        living background (Three.js). Both are extras: if either fails to load
        the app runs exactly as before. -->
   <script src="https://cdn.jsdelivr.net/npm/lenis@1.3.26/dist/lenis.min.js"></script>
-  <script src="scroll.js?v=3.4.2"></script>
+  <script src="scroll.js?v=3.5.0"></script>
   <!-- QR code for inviting players (drawn locally, nothing is sent anywhere) -->
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
-  <script type="module" src="ambient.js?v=3.4.2"></script>
+  <script type="module" src="ambient.js?v=3.5.0"></script>
+  <script type="module" src="radar.js?v=3.5.0"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=3.4.2').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=3.5.0').catch(() => {});
       });
     }
 

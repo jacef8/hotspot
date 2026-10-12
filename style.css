@@ -1,202 +1,271 @@
 /* ==========================================================================
-   HOTSPOT — instrument panel
+   HOTSPOT — Field style
    --------------------------------------------------------------------------
-   Structure, not paint. What changed from the previous build:
+   Who: a family playing yard tag. Where: outdoors, in daylight and after
+   dark. On: phones. The one thing: how far away the hider is (seekers) or
+   the nearest seeker (hider). That readout and the radar take the screen.
 
-   1. HIERARCHY. Every screen was a uniform stack of equal-weight cards, which
-      is the actual problem no palette fixes. The seeker screen now has ONE
-      anchor: a 270-degree gauge whose arc fills as you close on the hider,
-      with the distance as an enormous numeral inside it. Everything else is
-      demoted to a rail.
-   2. SKELETON. Stacked cards become: status rail -> dominant anchor -> widget
-      rail -> circular dock.
-   3. DEPTH. An explicit elevation ladder. Interactive widgets sit lighter than
-      their housings; tracks and wells are cut below the canvas. Cards are
-      frosted glass over a luminous field, and no card is just text.
-   4. COMPONENT FORM. Season stats were text in boxes; they are mini dials.
-      The radar was a CSS border; it is an SVG instrument.
-
-   COLOUR POV: the interface is cold, only the target is hot. Chrome is
-   ice-blue on near-black; the single warm ramp in the product is the gauge
-   arc as it heats toward the catch. No purple.
+   - Bright mode for daylight (light ground, near-black text) and a dim,
+     warm night mode. Follows the phone by default; one tap on the sun/moon
+     button switches it.
+   - Panels are solid. Nothing see-through, no glow on text, no haze over
+     type. The moving layers (particle field, 3D radar) sit behind or beside
+     solid panels.
+   - Field sizes: body 17px, key readouts 40px+, tap targets 56px.
+   - The interface is cold; only the target is hot. Heat colours mean
+     distance and nothing else.
    ========================================================================== */
 
+/* ---------------------------------------------------------------- tokens */
+/* Bright mode (default, and what daylight needs) */
 :root {
-  --css-version: "3.4.2";
-  color-scheme: dark;
+  --css-version: "3.5.0";
+  color-scheme: light;
 
-  /* Elevation ladder — lighter is closer */
-  --e0: #080A0F;                    /* canvas */
-  --e1: rgba(20, 24, 33, .80);      /* passive housing, translucent */
-  --e1-hi: rgba(28, 33, 45, .86);
-  --e2: rgba(33, 39, 54, .92);      /* interactive widget */
-  --e2-hi: rgba(44, 52, 71, .95);
-  --recess: #05070B;                /* engraved, below canvas */
+  --bg: #E7EBF0;          /* ground */
+  --surface: #FFFFFF;     /* panels: solid */
+  --surface-2: #F1F4F7;   /* inputs, wells, rails */
+  --surface-3: #E2E7ED;   /* pressed / lit cell */
+  --line: #C3CCD7;
+  --line-2: #A9B4C2;
 
-  --ink: #FFFFFF;
-  /* Secondary inks sit well above the 64% floor: this is read outdoors, at
-     arm's length, often at dusk. */
-  --ink-2: rgba(255, 255, 255, .90);
-  --ink-3: rgba(255, 255, 255, .74);
+  --ink: #0D1116;         /* body, ~19:1 on white */
+  --ink-2: #2E3641;       /* secondary, ~12:1 */
+  --ink-3: #4A5462;       /* labels, ~7.8:1 */
 
-  /* Chrome: cold */
-  --accent: #7DD3FC;
-  --accent-2: #E8F7FF;
-  /* Heat: reserved for the target */
-  --heat-1: #FFD166;
-  --heat-2: #FF6B3D;
-  --heat-3: #FFFFFF;
-  --warn: #FFB020;
-  --bad: #FF4257;
-  --good: #34D399;
+  --accent: #0A5BC4;      /* cold blue, 6.5:1 on white */
+  --accent-ink: #FFFFFF;  /* text on accent */
+  --accent-soft: #DCE7F7;
 
-  --r: 20px;
-  --r-s: 14px;
+  --ok: #137A3F;
+  --warn: #8A5300;        /* warning text on light */
+  --warn-fill: #F5A524;   /* warning background, dark text on it */
+  --warn-fill-ink: #1C1100;
+  --bad: #B3261E;
+  --bad-fill: #C62828;
+  --bad-fill-ink: #FFFFFF;
+  --ok-fill: #DCF1E3;
+  --ok-fill-ink: #0D3B20;
 
-  --raise:
-    inset 0 1px 0 rgba(255, 255, 255, .10),
-    inset 0 -1px 0 rgba(0, 0, 0, .5),
-    0 1px 2px rgba(0, 0, 0, .6),
-    0 6px 14px -8px rgba(0, 0, 0, .9);   /* short and sharp: a wide soft cloud makes the type on top look fuzzy */
+  /* Heat ramp: distance only */
+  --heat-cold: #2F6FD6;
+  --heat-warm: #C27400;
+  --heat-hot: #E0530C;
+  --hider-ink: #B03A06; --hider-fill: #B03A06; --hider-fill-ink: #FFFFFF;
+  --heat-hotter: #D22E2E;
+  --heat-redhot: #9E0F1F;
 
-  --raise-2:
-    inset 0 1px 0 rgba(255, 255, 255, .13),
-    inset 0 -1px 0 rgba(0, 0, 0, .5),
-    0 5px 12px -7px rgba(0, 0, 0, .9);
+  --r: 18px;              /* cards */
+  --r-s: 12px;            /* buttons, inputs */
+  --raise: 0 1px 2px rgba(13, 17, 22, .10), 0 4px 10px -6px rgba(13, 17, 22, .28);
+  --press: inset 0 2px 4px rgba(13, 17, 22, .18);
 
-  --well-sh:
-    inset 0 3px 8px rgba(0, 0, 0, .9),
-    inset 0 -1px 0 rgba(255, 255, 255, .05);
+  --tap: 56px;
+  --hud: color-mix(in srgb, var(--accent) 70%, transparent);   /* cockpit corner brackets */ /* Field: gloves, cold hands, moving */
 
-  /* Legacy aliases. The token layer was renamed but markup still referenced
-     the old names; an undefined var() on `color` resolves to an invalid value,
-     which is how text ended up dark on a dark background. */
-  --text-main: var(--ink);
-  --text-light: var(--ink);
-  --text-muted: var(--ink-3);
-  --accent-cyan: var(--accent);
-  --accent-amber: var(--warn);
-  --primary-blaze: var(--heat-2);
-  --danger-red: var(--bad);
-  --card-bg: var(--e1);
-  --slate-cold: var(--ink-3);
+  --font-display: 'Archivo', system-ui, sans-serif;
+  --font-text: 'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', system-ui, sans-serif;
+  --font-mono: 'Atkinson Hyperlegible Mono', ui-monospace, Menlo, Consolas, monospace;
 
-  --font-display: 'Outfit', system-ui, sans-serif;
-  --font-text: 'Inter Tight', system-ui, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
+  /* Older names still used in markup and scripts */
+  --e0: var(--bg); --e1: var(--surface); --e1-hi: var(--surface);
+  --e2: var(--surface); --e2-hi: var(--surface); --recess: var(--surface-2);
+  --heat-1: var(--heat-warm); --heat-2: var(--heat-hot); --heat-3: var(--heat-redhot);
+  --good: var(--ok); --accent-2: var(--accent);
+  --text-main: var(--ink); --text-light: var(--ink); --text-muted: var(--ink-3);
+  --accent-cyan: var(--accent); --accent-amber: var(--warn); --primary-blaze: var(--heat-hot);
+  --danger-red: var(--bad); --card-bg: var(--surface); --slate-cold: var(--ink-3);
 }
 
+/* Night mode: deep space. Navy-black ground, solid dark panels, cool white
+   text, a star field behind. Applied when the phone is in dark mode (unless the
+   player picked bright), or when the player picked night. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #04060D;
+    --surface: #0B1120;
+    --surface-2: #070B16;
+    --surface-3: #16203A;
+    --line: #22314F;
+    --line-2: #34476B;
+    --ink: #EEF4FF;
+    --ink-2: #C6D3EA;
+    --ink-3: #97A8C6;
+    --accent: #6CD3FF;
+    --accent-ink: #031421;
+    --accent-soft: #10283D;
+    --ok: #5CCB86;
+    --warn: #F2B544;
+    --warn-fill: #E9A83A;
+    --warn-fill-ink: #1C1100;
+    --bad: #FF7A70;
+    --bad-fill: #B8322A;
+    --bad-fill-ink: #FFF4F2;
+    --ok-fill: #1C3326;
+    --ok-fill-ink: #CFF2DA;
+    --heat-cold: #6FA6FF;
+    --heat-warm: #E9A23B;
+    --heat-hot: #FF7A3D;
+    --hider-ink: #FF8A4C; --hider-fill: #FF8A4C; --hider-fill-ink: #1A0700;
+    --heat-hotter: #FF5A52;
+    --heat-redhot: #FFC9A8;
+    --raise: inset 0 1px 0 rgba(170, 210, 255, .06), 0 4px 10px -6px rgba(0, 0, 0, .8);
+    --press: inset 0 2px 5px rgba(0, 0, 0, .6);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #04060D;
+  --surface: #0B1120;
+  --surface-2: #070B16;
+  --surface-3: #16203A;
+  --line: #22314F;
+  --line-2: #34476B;
+  --ink: #EEF4FF;
+  --ink-2: #C6D3EA;
+  --ink-3: #97A8C6;
+  --accent: #6CD3FF;
+  --accent-ink: #031421;
+  --accent-soft: #10283D;
+  --ok: #5CCB86;
+  --warn: #F2B544;
+  --warn-fill: #E9A83A;
+  --warn-fill-ink: #1C1100;
+  --bad: #FF7A70;
+  --bad-fill: #B8322A;
+  --bad-fill-ink: #FFF4F2;
+  --ok-fill: #1C3326;
+  --ok-fill-ink: #CFF2DA;
+  --heat-cold: #6FA6FF;
+  --heat-warm: #E9A23B;
+  --heat-hot: #FF7A3D;
+  --hider-ink: #FF8A4C; --hider-fill: #FF8A4C; --hider-fill-ink: #1A0700;
+  --heat-hotter: #FF5A52;
+  --heat-redhot: #FFB38A;
+  --raise: inset 0 1px 0 rgba(255, 240, 220, .05), 0 4px 10px -6px rgba(0, 0, 0, .8);
+  --press: inset 0 2px 5px rgba(0, 0, 0, .6);
+}
+
+/* ------------------------------------------------------------------ base */
 * { box-sizing: border-box; margin: 0; padding: 0; touch-action: manipulation; }
 
 html, body {
   width: 100%; height: 100%; height: 100dvh;
   overflow: hidden;
-  background: var(--e0);
+  background: var(--bg);
   color: var(--ink);
   font-family: var(--font-text);
+  font-size: 17px; line-height: 1.35;
   user-select: none; -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* ------------------------------------------------------- luminous environment */
+/* Thin scrollbars in the app's own colours */
+* { scrollbar-width: thin; scrollbar-color: var(--line-2) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--line-2); border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+svg.ic { width: 22px; height: 22px; flex: 0 0 auto; display: block; }
+
 #app-container {
   width: 100%; height: 100dvh;
   max-width: 480px; margin: 0 auto;
   display: flex; flex-direction: column;
   position: relative; overflow: hidden;
-  background: var(--e0);
+  background: var(--bg);
   isolation: isolate;
 }
 
-#app-container::before {
-  content: "";
-  position: absolute; z-index: 0; pointer-events: none;
-  width: 150%; aspect-ratio: 1; left: 50%; top: -32%;
-  transform: translateX(-50%);
-  border-radius: 50%;
-  filter: blur(90px);
-  background: radial-gradient(circle,
-    rgba(125, 211, 252, .20) 0%, rgba(125, 211, 252, .07) 40%, transparent 70%);
-  animation: breathe 20s ease-in-out infinite alternate;
-}
-
-#app-container::after {
-  content: "";
-  position: absolute; inset: 0; z-index: 30; pointer-events: none;
-  opacity: .04;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
-}
-
-@keyframes breathe { to { transform: translateX(-50%) scale(1.12); } }
-
-/* The living background (ambient.js) draws into this canvas when WebGL is
-   available. The CSS glow above is the fallback and is hidden once it does. */
+/* The particle field (ambient.js) sits behind everything. */
 #ambient-canvas {
   position: absolute; inset: 0; z-index: 0;
   width: 100%; height: 100%;
   display: block; pointer-events: none;
 }
-#app-container.has-ambient::before { display: none; }
 
-/* ------------------------------------------------------------------ chrome */
+/* ---------------------------------------------------------------- chrome */
 .warning-banner {
-  background: linear-gradient(180deg, #6E1420, #4A0C15);
-  color: #FFD9DE;
-  padding: 7px 12px;
-  /* A sentence the player has to read and act on: text face, 14px. */
+  background: var(--bad-fill);
+  color: var(--bad-fill-ink);
+  padding: 9px 14px;
   font-family: var(--font-text);
-  font-size: 14px; font-weight: 700; letter-spacing: 0;
+  font-size: 15px; font-weight: 700;
   text-align: center; line-height: 1.3;
   display: none; flex-shrink: 0;
   position: relative; z-index: 40;
-  box-shadow: var(--raise-2);
+  cursor: pointer;
 }
 
 .top-bar {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 16px 6px;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 10px 14px 6px;
   flex-shrink: 0; position: relative; z-index: 20;
 }
+.top-actions { display: flex; gap: 8px; }
 
 .accuracy-tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 40px; padding: 0 14px;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--line);
   font-family: var(--font-mono);
-  font-size: 13px; font-weight: 700; letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--accent);
-  cursor: pointer;
+  font-size: 14px; font-weight: 700; letter-spacing: .02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-2);
+  cursor: pointer; white-space: nowrap;
 }
+.accuracy-tag::before {
+  content: ""; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--ok);
+}
+.accuracy-tag.weak::before { background: var(--warn-fill); }
+.accuracy-tag.off::before { background: var(--bad); }
 
-/* Icon buttons are circles in a dock */
+/* Round icon buttons in the top dock */
 .icon-btn {
-  width: 50px; height: 50px;
+  width: var(--tap); height: var(--tap);
   display: grid; place-items: center;
   border-radius: 50%;
-  border: 1px solid rgba(255, 255, 255, .07);
-  background: linear-gradient(160deg, var(--e2-hi), var(--e2));
-  box-shadow: var(--raise-2);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--raise);
   color: var(--ink);
-  font-family: var(--font-mono);
-  font-size: 13px; font-weight: 700; letter-spacing: 0;
   cursor: pointer;
   position: relative; z-index: 20;
+  transition: transform .15s ease, background-color .15s ease;
 }
-.icon-btn:active { transform: translateY(1px); }
+.icon-btn:active { transform: scale(.96); box-shadow: var(--press); }
+.icon-btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.icon-btn .ic { width: 24px; height: 24px; }
+/* Theme button shows the mode it will switch TO */
+.theme-btn .ic-moon { display: block; }
+.theme-btn .ic-sun { display: none; }
+:root[data-theme="dark"] .theme-btn .ic-moon { display: none; }
+:root[data-theme="dark"] .theme-btn .ic-sun { display: block; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-btn .ic-moon { display: none; }
+  :root:not([data-theme="light"]) .theme-btn .ic-sun { display: block; }
+}
+#sound-btn .ic-off { display: none; }
+#sound-btn.muted .ic-on { display: none; }
+#sound-btn.muted .ic-off { display: block; }
 
-/* ----------------------------------------------------------------- screens */
+/* ---------------------------------------------------------------- screens */
 .screen {
   display: none; flex-direction: column; flex: 1;
   min-height: 0;
-  padding: 6px 16px 14px;
+  padding: 6px 14px 14px;
   position: relative; z-index: 10;
-  animation: rise .5s cubic-bezier(.2, .8, .2, 1) both;
 }
-.screen.active { display: flex; }
+.screen.active { display: flex; animation: slide-in .22s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes slide-in { from { opacity: 0; transform: translateX(18px); } }
 
-@keyframes rise { from { opacity: 0; transform: translateY(16px); } }
-
-.flash-screen { animation: flashHit 1.4s ease-out; }
+.flash-screen { animation: flashHit 1.2s ease-out; }
 @keyframes flashHit {
-  0% { background-color: rgba(255, 107, 61, .55); }
-  40% { background-color: rgba(255, 255, 255, .30); }
+  0% { background-color: color-mix(in srgb, var(--heat-hot) 45%, transparent); }
   100% { background-color: transparent; }
 }
 
@@ -205,56 +274,49 @@ html, body {
 
 .scope-rule {
   display: flex; align-items: center; gap: 10px;
-  font-family: var(--font-mono);
-  font-size: 12px; letter-spacing: .14em;
+  font-family: var(--font-text);
+  font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
   color: var(--ink-3);
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
-.scope-rule::before, .scope-rule::after {
-  content: ""; flex: 1; height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .16), transparent);
-}
+.scope-rule::before, .scope-rule::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 
 .brand-title {
   font-family: var(--font-display);
-  font-weight: 800;
-  font-size: clamp(38px, 12vw, 54px);
-  letter-spacing: -.045em;
-  line-height: .9;
-  color: var(--ink);   /* no glow: sharp beats hazy */
+  font-weight: 900;
+  font-size: clamp(40px, 13vw, 56px);
+  letter-spacing: -.035em;
+  line-height: .95;
+  color: var(--ink);
 }
-
-h2.brand-title { letter-spacing: -.02em; line-height: 1.05; }
+h2.brand-title { font-weight: 800; letter-spacing: -.015em; line-height: 1.05; }
 
 .brand-subtitle {
-  font-family: var(--font-mono);
-  font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
-  color: var(--ink-2);
-  margin-top: 7px;
+  font-family: var(--font-text);
+  font-size: 13px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-3);
+  margin-top: 6px;
 }
 
 .scope-meta { display: flex; justify-content: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
 
-/* Status chips are pills sunk into a well — the only sanctioned pill */
 .tele {
   font-family: var(--font-mono);
-  font-size: 12px; font-weight: 700; letter-spacing: .12em;
+  font-size: 13px; font-weight: 700; letter-spacing: .06em;
   text-transform: uppercase;
   color: var(--ink-2);
   padding: 6px 12px;
   border-radius: 999px;
-  background: var(--recess);
-  box-shadow: var(--well-sh);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
   cursor: pointer;
   max-width: 60vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-/* ------------------------------------------------------------------- cards */
+/* ------------------------------------------------------------------ cards */
 .card, .hider-radar-box, #solo-controls-card {
-  background: linear-gradient(158deg, var(--e1-hi), var(--e1) 70%);
-  backdrop-filter: blur(16px) saturate(150%);
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
-  border: 1px solid rgba(255, 255, 255, .07);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: var(--r);
   box-shadow: var(--raise);
   padding: 14px;
@@ -264,445 +326,626 @@ h2.brand-title { letter-spacing: -.02em; line-height: 1.05; }
 }
 
 .card-title {
-  font-family: var(--font-mono);
-  font-size: 12px; font-weight: 700;
-  letter-spacing: .13em; text-transform: uppercase;
-  color: var(--ink-2);
+  font-family: var(--font-text);
+  font-size: 13px; font-weight: 700;
+  letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-3);
   margin-bottom: 10px;
 }
 
-.solo-hint { font-size: 14px; color: var(--ink-2); line-height: 1.35; margin-bottom: 10px; }
+.solo-hint { font-size: 16px; color: var(--ink-2); line-height: 1.35; margin-bottom: 10px; }
 
-/* ---------------------------------------------------------------- controls */
+/* --------------------------------------------------------------- controls */
 .btn {
   width: 100%;
-  padding: 14px 16px;
+  min-height: var(--tap);
+  padding: 12px 16px;
   border-radius: var(--r-s);
-  border: 1px solid rgba(255, 255, 255, .07);
+  border: 1px solid var(--line);
   font-family: var(--font-display);
-  font-size: 16px; font-weight: 700; letter-spacing: -.01em;
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  margin-bottom: 9px;
+  font-size: 17px; font-weight: 800; letter-spacing: 0;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  margin-bottom: 10px;
   cursor: pointer; flex-shrink: 0;
-  background: linear-gradient(160deg, var(--e2-hi), var(--e2));
+  background: var(--surface);
   color: var(--ink);
-  box-shadow: var(--raise-2);
-  transition: transform .12s ease, filter .16s ease;
+  box-shadow: var(--raise);
+  transition: transform .15s ease, background-color .15s ease, box-shadow .15s ease;
   position: relative; z-index: 20;
-  /* Every control is tapped one-handed, outdoors, often while moving. The
-     short-screen rules trim padding, so the floor is set here instead. */
-  min-height: 44px;
 }
 .btn:last-child { margin-bottom: 0; }
-.btn:active { transform: translateY(1px); filter: brightness(1.08); }
-.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
-/* Not available right now (a power-up during hiding time, or already spent). */
-.btn:disabled { opacity: .5; cursor: default; }
-.btn:disabled:active { transform: none; filter: none; }
+.btn:hover { background: var(--surface-2); }
+.btn:active { transform: scale(.985); box-shadow: var(--press); }
+.btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn:disabled:active { transform: none; box-shadow: var(--raise); }
 
-/* The dominant action is filled and lit; nothing else competes. */
+/* One clear primary action per screen */
 .btn-primary {
-  background: linear-gradient(150deg, var(--accent-2), var(--accent) 55%, #38A9DE);
-  color: #04212E;
-  font-weight: 800;
-  border-color: rgba(255, 255, 255, .38);
-  box-shadow:
-    0 3px 8px -2px rgba(125, 211, 252, .5),   /* a tight lit edge, not a haze */
-    inset 0 1px 0 rgba(255, 255, 255, .65),
-    inset 0 -1px 0 rgba(0, 0, 0, .28);
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: transparent;
 }
+.btn-primary:hover { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
 
-.btn-secondary { /* inherits the raised widget look */ }
+.btn-secondary { /* the default solid button */ }
 
-.btn-solo {
-  background: linear-gradient(160deg, var(--e2-hi), var(--e2));
-  color: var(--accent);
-}
+.btn-solo { color: var(--accent); }
 
 .btn-powerup {
-  padding: 12px 10px;
+  min-height: var(--tap);
+  padding: 10px;
   border-radius: var(--r-s);
-  border: 1px solid rgba(255, 255, 255, .07);
-  background: linear-gradient(160deg, var(--e2-hi), var(--e2));
-  box-shadow: var(--raise-2);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  box-shadow: var(--raise);
   color: var(--ink);
   font-family: var(--font-display);
-  font-size: 15px; font-weight: 700; letter-spacing: 0;
+  font-size: 17px; font-weight: 800;
   cursor: pointer;
-  min-height: 48px;
+  transition: transform .15s ease;
 }
-.btn-powerup:disabled { opacity: .5; cursor: default; }
-.btn-powerup:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.btn-powerup:active { transform: scale(.985); box-shadow: var(--press); }
+.btn-powerup:disabled { opacity: .45; cursor: default; }
+.btn-powerup:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
-.powerup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+.powerup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
-/* Cooldown bar along the foot of a power-up button. It fills as the power-up
-   comes back; the button is greyed and its label counts down until it has. */
+/* Cooldown bar along the foot of a power-up button */
 .btn-powerup, #btn-bearing-ping { position: relative; overflow: hidden; }
 .cd-bar {
-  position: absolute; left: 0; right: 0; bottom: 0; height: 4px;
-  background: var(--recess);
+  position: absolute; left: 0; right: 0; bottom: 0; height: 5px;
+  background: var(--surface-3);
   opacity: 0; transition: opacity .2s;
   pointer-events: none;
 }
 .cd-bar i {
   display: block; height: 100%; width: 0;
-  background: linear-gradient(90deg, var(--accent), var(--accent-2));
-  box-shadow: 0 0 6px rgba(125, 211, 252, .8);
+  background: var(--accent);
   transition: width .9s linear;
 }
 button.cooling .cd-bar { opacity: 1; }
-button.cooling { opacity: .6; }
+button.cooling { opacity: .7; }
 
-/* ------------------------------------------------------------------ inputs */
-.input-group { margin-bottom: 11px; }
+/* ----------------------------------------------------------------- inputs */
+.input-group { margin-bottom: 12px; }
 
 .input-label {
   display: block;
-  font-family: var(--font-mono);
-  font-size: 12px; font-weight: 700;
-  letter-spacing: .13em; text-transform: uppercase;
-  color: var(--ink-2);
+  font-family: var(--font-text);
+  font-size: 13px; font-weight: 700;
+  letter-spacing: .08em; text-transform: uppercase;
+  color: var(--ink-3);
   margin-bottom: 6px;
 }
 
 .text-input, .select-input {
   width: 100%;
-  padding: 13px 14px;
+  min-height: var(--tap);
+  padding: 12px 14px;
   border-radius: var(--r-s);
-  border: 1px solid rgba(255, 255, 255, .06);
-  background: var(--recess);
-  box-shadow: var(--well-sh);
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
   color: var(--ink);
-  font-family: var(--font-mono);
-  font-size: 16px;
+  font-family: var(--font-text);
+  font-size: 17px; font-weight: 700;
   outline: none;
   position: relative; z-index: 20;
 }
-.text-input::placeholder { color: var(--ink-3); }
+.text-input::placeholder { color: var(--ink-3); font-weight: 400; }
 .text-input:focus, .select-input:focus {
   border-color: var(--accent);
-  box-shadow: var(--well-sh), 0 0 0 3px rgba(125, 211, 252, .16);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
-/* ------------------------------------------------------------------ roster */
+/* ----------------------------------------------------------------- roster */
 .player-list { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: hidden; }
 
-/* The three panels that scroll. scroll.js hands each to Lenis; these are the
-   few rules Lenis expects on an element it drives. */
 .scroll-well { min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .scroll-well.lenis-smooth, #diag-panel.lenis-smooth { scroll-behavior: auto; }
 .lenis.lenis-stopped { overflow: clip; }
 
 .player-badge {
   display: flex; align-items: center; gap: 10px;
-  padding: 11px 13px;
+  min-height: 52px; padding: 10px 14px;
   border-radius: var(--r-s);
-  border: 1px solid rgba(255, 255, 255, .07);
-  background: linear-gradient(160deg, var(--e2-hi), var(--e2));
-  box-shadow: var(--raise-2);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
 }
 .player-badge::before {
   content: ""; flex: 0 0 auto;
-  width: 9px; height: 9px; border-radius: 50%;
+  width: 11px; height: 11px; border-radius: 50%;
   background: var(--ink-3);
 }
-.player-badge.hider::before {
-  background: var(--heat-2);
-  box-shadow: 0 0 6px rgba(255, 107, 61, .95);
-}
-.player-badge.seeker::before {
-  background: var(--accent);
-  box-shadow: 0 0 6px rgba(125, 211, 252, .9);
-}
+.player-badge.hider::before { background: var(--heat-hot); }
+.player-badge.seeker::before { background: var(--accent); }
 
 .badge-name {
   flex: 1 1 auto; min-width: 0;
   font-family: var(--font-display);
-  font-size: 17px; font-weight: 700; letter-spacing: -.01em;
+  font-size: 18px; font-weight: 800;
   color: var(--ink);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .badge-you, .badge-role {
-  font-family: var(--font-mono);
-  font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  font-family: var(--font-text);
+  font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
   color: var(--ink-3);
 }
 .badge-you { margin-left: 8px; }
-.player-badge.hider .badge-role { color: #FF8F6B; }
+.player-badge.hider .badge-role { color: var(--hider-ink); }
 .player-badge.seeker .badge-role { color: var(--accent); }
 .badge-role { flex: 0 0 auto; white-space: nowrap; }
-
-/* A player whose phone has no location fix. Status, so it takes the warning
-   colour; it is a marker inside the row, not a control. */
 .badge-nogps {
   color: var(--warn);
-  margin-right: 8px;
-  padding-right: 8px;
-  border-right: 1px solid rgba(255, 255, 255, .16);
+  margin-right: 8px; padding-right: 8px;
+  border-right: 1px solid var(--line-2);
 }
 
-/* One quiet line under a roster: who is watching, or a reminder. */
 .roster-note {
-  /* Sentences, so the text face rather than tracked-out mono capitals. */
   font-family: var(--font-text);
-  font-size: 14px; font-weight: 600; letter-spacing: 0; line-height: 1.3;
+  font-size: 15px; font-weight: 700; line-height: 1.3;
   color: var(--ink-2);
   text-align: center;
   flex-shrink: 0;
 }
 .roster-note.warn { color: var(--warn); margin-bottom: 8px; }
 
-/* What a player who cannot press Start (or Rematch) is waiting for. Cut into
-   the surface like the other read-only wells, so it does not read as a button. */
 .lobby-wait {
   flex-shrink: 0;
   text-align: center;
-  padding: 13px 12px;
+  min-height: var(--tap);
+  display: flex; align-items: center; justify-content: center;
+  padding: 12px;
   border-radius: var(--r-s);
-  background: var(--recess);
-  box-shadow: var(--well-sh);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
   font-family: var(--font-text);
-  font-size: 15px; font-weight: 700; letter-spacing: 0; line-height: 1.3;
-  color: var(--warn);
-  margin-bottom: 9px;
+  font-size: 16px; font-weight: 700; line-height: 1.3;
+  color: var(--ink-2);
+  margin-bottom: 10px;
 }
 .lobby-wait:last-child { margin-bottom: 0; }
 
 .roster-empty {
   font-family: var(--font-text);
-  font-size: 14px; font-weight: 600; letter-spacing: 0;
+  font-size: 15px; font-weight: 700;
   color: var(--ink-2);
   text-align: center; padding: 12px 8px;
   border-radius: var(--r-s);
-  background: var(--recess);
-  box-shadow: var(--well-sh);
+  background: var(--surface-2);
+  border: 1px dashed var(--line-2);
 }
 
 .room-code {
   font-family: var(--font-mono);
-  font-size: clamp(38px, 12vw, 52px);
+  font-size: clamp(40px, 12.5vw, 54px);
   font-weight: 700;
-  letter-spacing: .16em; text-indent: .16em;
+  letter-spacing: .14em; text-indent: .14em;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
   line-height: 1.05;
+  cursor: pointer;
 }
 
-/* ============================== THE ANCHOR ================================
-   One gauge, dominant. The arc fills as the seeker closes; the numeral is the
-   distance. This replaces a bordered div with an actual instrument.
+/* ============================== HUNT SCREENS ===============================
+   Seeker: rail -> boundary -> radar (fills) -> readout -> bearing ping.
    ========================================================================= */
-.seeker-radar-container {
-  flex: 1; min-height: 0;
-  display: flex; flex-direction: column;
-  align-items: center; justify-content: center;
-  position: relative;
-  margin: 4px 0 8px;
-}
+.hunt-head { display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-bottom: 8px; }
+.hunt-head .rail { flex: 1; margin-bottom: 0; }
 
-.pulse-ring-outer {
-  position: relative;
-  width: min(78vw, 330px);
-  aspect-ratio: 1;
-  display: grid; place-items: center;
-  flex-shrink: 0;
-}
-
-.gauge-svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-
-.gauge-tickring { transform-origin: 170px 170px; animation: spin 44s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.gauge-center {
-  position: relative; z-index: 2;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  text-align: center;
-  padding: 0 18%;
-}
-
-#seeker-dist-readout { display: flex; flex-direction: column; align-items: center; line-height: .9; }
-
-#seeker-dist-readout .dist-main {
-  font-family: var(--font-display);
-  font-weight: 800;
-  font-size: clamp(56px, 19vw, 104px);
-  letter-spacing: -.055em;
-  line-height: .86;
-  font-variant-numeric: tabular-nums;
-  color: var(--ink);   /* crisp white numeral, no halo */
-}
-#seeker-dist-readout .dist-sub {
-  font-family: var(--font-mono);
-  font-size: 14px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
-  line-height: 1.25;
-  color: var(--ink-2);
-  margin-top: 9px;
-}
-#seeker-dist-readout .dist-warn {
-  font-family: var(--font-mono);
-  font-size: 12px; font-weight: 700; letter-spacing: .12em;
-  color: var(--warn);
-  margin-top: 6px;
-}
-
-.seeker-band-label {
-  /* COLD / WARM / HOT is half of what the seeker is reading. It was an 11px
-     caption; it is now the second-largest thing on the screen. */
-  font-family: var(--font-display);
-  font-size: clamp(22px, 7vw, 30px); font-weight: 800;
-  letter-spacing: .06em; text-transform: uppercase; line-height: 1.05;
-  color: var(--ink);
-  margin-bottom: 8px;
-}
-
-.bearing-arrow {
-  position: absolute; z-index: 3;
-  width: 34px; height: 34px;
-  top: 6%; left: 50%;
-  margin-left: -17px;
-  display: none;
-  transition: transform .2s ease-out;
-  filter: drop-shadow(0 0 5px rgba(125, 211, 252, .9));
-}
-
-#bearing-note {
-  position: absolute; bottom: -8px; left: 0; right: 0;
-  text-align: center; line-height: 1.25;
+.role-badge {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center;
+  min-height: 44px; padding: 0 14px;
+  border-radius: 999px;
   font-family: var(--font-text);
-  font-size: 14px; font-weight: 700; letter-spacing: 0;
-  display: none;
+  font-size: 13px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--accent-ink);
+  background: var(--accent);
 }
+.hider-role-badge { background: var(--hider-fill); color: var(--hider-fill-ink); }
+.role-header-banner { flex-shrink: 0; display: flex; justify-content: center; margin-bottom: 8px; }
 
-/* -------------------------------------------------------------- status rail
-   Timers and limits are engraved into the surface, not floated on cards. */
+/* Status rail: a segmented strip sunk into a well */
 .rail {
   display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
-  gap: 2px;
-  padding: 3px;
+  gap: 3px; padding: 3px;
   border-radius: 999px;
-  background: var(--recess);
-  box-shadow: var(--well-sh);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
   flex-shrink: 0;
   margin-bottom: 8px;
 }
-
 .rail-cell {
-  padding: 9px 6px;
+  min-height: 38px;
+  display: flex; align-items: center; justify-content: center;
+  padding: 0 8px;
   border-radius: 999px;
-  text-align: center;
   font-family: var(--font-mono);
-  font-size: 13px; font-weight: 700; letter-spacing: .04em;
+  font-size: 14px; font-weight: 700; letter-spacing: .02em;
+  font-variant-numeric: tabular-nums;
   color: var(--ink-2);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.rail-cell.lit {
-  background: linear-gradient(160deg, var(--e2-hi), var(--e2));
-  box-shadow: var(--raise-2);
-  color: var(--ink);
-}
+.rail-cell.lit { background: var(--surface); color: var(--ink); box-shadow: var(--raise); }
 
 .headstart-counter, #match-timer-seeker, #match-timer-hider, #match-timer-spectator, #hider-timer-display {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
-  letter-spacing: .04em;
 }
 
-#seeker-boundary-alert, #hider-boundary-alert {
+/* Boundary banner: colour and text set together by state */
+#seeker-boundary-alert, #hider-boundary-alert, .bound-banner {
   font-family: var(--font-text);
-  font-size: 15px; font-weight: 700; letter-spacing: 0; line-height: 1.25;
+  font-size: 16px; font-weight: 700; line-height: 1.25;
   text-align: center;
-  padding: 9px 12px;
+  padding: 10px 12px;
   border-radius: var(--r-s);
   margin-bottom: 8px;
   flex-shrink: 0;
-  box-shadow: var(--raise-2);
+  border: 1px solid transparent;
 }
+[data-bound="ok"] { background: var(--ok-fill); color: var(--ok-fill-ink); border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
+[data-bound="edge"] { background: var(--warn-fill); color: var(--warn-fill-ink); }
+[data-bound="out"] { background: var(--bad-fill); color: var(--bad-fill-ink); }
 
-/* --------------------------------------------------------------- role badge */
-.role-header-banner { flex-shrink: 0; display: flex; justify-content: center; margin-bottom: 8px; }
-
-.role-badge {
-  font-family: var(--font-mono);
-  font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
-  padding: 7px 16px;
+/* The radar: a solid panel the 3D scene draws inside */
+.radar-wrap {
+  flex: 1; min-height: 150px;
+  position: relative;
+  border-radius: var(--r);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  box-shadow: var(--raise);
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+#radar-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* Without WebGL: plain range rings so the panel is not empty */
+.radar-fallback {
+  position: absolute; inset: 0; display: none;
+  background:
+    radial-gradient(circle at 50% 58%, transparent 0 18%, var(--line) 18% calc(18% + 1px), transparent 0 36%, var(--line) 36% calc(36% + 1px), transparent 0 54%, var(--line) 54% calc(54% + 1px), transparent 0);
+}
+.radar-wrap.no-webgl .radar-fallback { display: block; }
+.radar-wrap.smoke-blind #radar-canvas { filter: blur(6px) saturate(.3); opacity: .55; }
+.radar-key {
+  position: absolute; left: 10px; bottom: 10px; z-index: 2;
+  display: flex; gap: 6px; flex-wrap: wrap;
+  pointer-events: none;
+}
+.radar-key span {
+  font-family: var(--font-text);
+  font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px solid var(--line);
   border-radius: 999px;
-  background: var(--recess);
-  box-shadow: var(--well-sh);
+  padding: 3px 8px;
 }
-.seeker-role-badge { color: var(--accent); }
-.hider-role-badge { color: var(--heat-2); }
 
-/* ------------------------------------------------------------ hider readout */
-.hider-radar-box { text-align: center; }
+.bearing-arrow {
+  position: absolute; z-index: 3;
+  width: 40px; height: 40px;
+  top: 10px; left: 50%; margin-left: -20px;
+  display: none;
+  transition: transform .2s ease-out;
+  color: var(--accent);
+}
 
-.hider-dist-num {
+/* The readout: the number that matters, on a solid panel */
+.readout {
+  flex-shrink: 0;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: 6px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--raise);
+  padding: 12px 16px 14px;
+  margin-bottom: 10px;
+  position: relative;
+  overflow: hidden;
+}
+/* a band-coloured strip down the left edge: colour plus the word, never colour alone */
+.readout::before {
+  content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 6px;
+  background: var(--band, var(--line-2));
+  transition: background-color .3s ease;
+}
+.readout[data-band="COLD"] { --band: var(--heat-cold); }
+.readout[data-band="WARM"] { --band: var(--heat-warm); }
+.readout[data-band="HOT"] { --band: var(--heat-hot); }
+.readout[data-band="HOTTER"] { --band: var(--heat-hotter); }
+.readout[data-band="REDHOT"] { --band: var(--heat-redhot); }
+
+.readout-band { min-width: 0; }
+.readout-kicker {
+  font-family: var(--font-text);
+  font-size: 12px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--ink-3);
+  margin-bottom: 2px;
+}
+.seeker-band-label {
   font-family: var(--font-display);
-  font-weight: 800;
-  font-size: clamp(46px, 15vw, 76px);
-  letter-spacing: -.05em;
+  font-size: clamp(30px, 9vw, 40px); font-weight: 900;
+  letter-spacing: .01em; text-transform: uppercase; line-height: 1;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.readout[data-band] .seeker-band-label { color: var(--band, var(--ink)); }
+:root:not([data-theme="dark"]) .readout[data-band="WARM"] .seeker-band-label { color: #9A5C00; }
+
+#seeker-dist-readout { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
+#seeker-dist-readout .dist-main {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(58px, 19vw, 84px);
+  letter-spacing: -.035em;
+  line-height: .9;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
-  line-height: .9;
 }
-/* The "±23ft" beside it. Letter-spacing is inherited as a fixed length, so the
-   big numeral's tight tracking was crushing these small letters into each
-   other; it has to be reset here. */
+#seeker-dist-readout .dist-main:empty { display: none; }
+#seeker-dist-readout .dist-sub {
+  font-family: var(--font-text);
+  font-size: 16px; font-weight: 700; line-height: 1.25;
+  color: var(--ink-2);
+  margin-top: 4px;
+}
+#seeker-dist-readout .dist-warn {
+  font-family: var(--font-text);
+  font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--warn);
+  margin-top: 2px;
+}
+#seeker-dist-readout .dist-warn:empty { display: none; }
+/* A notice (NO SIGNAL, waiting for hider) spans the panel under the band */
+.readout.notice { grid-template-columns: 1fr; }
+.readout.notice #seeker-dist-readout { text-align: left; align-items: flex-start; }
+
+#bearing-note {
+  grid-column: 1 / -1;
+  font-family: var(--font-text);
+  font-size: 15px; font-weight: 700; line-height: 1.25;
+  display: none;
+}
+
+.btn-ping .ic { width: 24px; height: 24px; }
+
+/* ----------------------------------------------------------- hider readout */
+.hider-radar-box { text-align: center; }
+.hider-dist-num {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(56px, 18vw, 84px);
+  letter-spacing: -.035em;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  line-height: .95;
+}
 .dist-margin {
-  font-size: .34em; font-weight: 700;
+  font-family: var(--font-text);
+  font-size: .3em; font-weight: 700;
   letter-spacing: 0;
   color: var(--ink-2);
   margin-left: .3em;
 }
 
-/* -------------------------------------------------- season records as dials */
-.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
-
-.stat-box {
-  position: relative;
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  padding: 11px 4px 9px;
-  border-radius: var(--r-s);
-  border: 1px solid rgba(255, 255, 255, .07);
-  background: linear-gradient(160deg, var(--e2-hi), var(--e2));
-  box-shadow: var(--raise-2);
+/* ------------------------------------------------------------ home screen */
+.screen { overflow-y: auto; overflow-x: hidden; }
+.screen > .card, .screen > .btn, .screen > .readout { flex-shrink: 0; }
+.home-start .btn-host { min-height: 64px; font-size: 20px; }
+.home-start .btn-host .ic { width: 24px; height: 24px; }
+.home-pair { margin-top: 10px; }
+.home-pair .btn { margin: 0; }
+.voice-row { display: flex; align-items: center; gap: 8px; }
+.voice-row .select-input { flex: 1; min-width: 0; margin: 0; }
+.btn-test { width: auto; margin: 0; padding: 12px 16px; }
+.btn-test .ic { width: 18px; height: 18px; }
+.btn-quiet {
+  width: auto; margin: 0; padding: 10px 14px;
+  background: transparent; box-shadow: none;
+  border-color: var(--line-2);
+  color: var(--ink-2);
+  font-size: 15px;
 }
+.btn-quiet:active { background: var(--surface-2); }
+.records-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.records-head .card-title { margin: 0; }
+.btn-install { width: 100%; margin-top: 2px; color: var(--accent); border-style: dashed; }
 
-.dial { width: 46px; height: 46px; display: block; }
-
+/* Season records: big gliding numbers with a thin fill bar under each */
+.stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stat-box {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 10px 10px 12px;
+  border-radius: var(--r-s);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  min-width: 0;
+}
 .stat-val {
   font-family: var(--font-mono);
-  font-size: 14px; font-weight: 700;
+  font-size: 28px; font-weight: 700; line-height: 1.05;
   font-variant-numeric: tabular-nums;
   color: var(--ink);
-  position: absolute; top: 25px; left: 0; right: 0; text-align: center;
+}
+.stat-lbl {
+  font-family: var(--font-text);
+  font-size: 13px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--ink-2); white-space: nowrap;
+}
+.stat-bar { width: 100%; height: 5px; margin-top: 6px; border-radius: 5px; background: var(--surface-3); overflow: hidden; }
+.stat-bar i { display: block; height: 100%; width: 0; border-radius: 5px; background: var(--accent); transition: width .5s ease; }
+.stat-box:nth-child(2) .stat-bar i { background: var(--heat-warm); }
+.stat-box:nth-child(3) .stat-bar i { background: var(--heat-hot); }
+
+/* ------------------------------------------------------------ diagnostics */
+#diag-panel { font-family: var(--font-mono); background: var(--bg) !important; color: var(--ink); }
+#diag-body { font-size: 15px; line-height: 1.5; color: var(--ink); }
+#diag-panel p { font-size: 14px; color: var(--ink-2); margin-top: 12px; line-height: 1.4; }
+
+/* ---------------------------------------------------------- short screens */
+@media (max-height: 720px) {
+  .screen { padding: 4px 12px 10px; }
+  .brand-title { font-size: clamp(32px, 10vw, 42px); }
+  .scope-head, .brand-header { margin-bottom: 6px; }
+  .card { padding: 11px; margin-bottom: 8px; }
+  .card-title { margin-bottom: 6px; }
+  .scope-meta { margin-top: 6px; }
+  .btn { padding: 8px 14px; margin-bottom: 8px; }
+  .input-group { margin-bottom: 8px; }
+  .solo-hint { display: none; }
+  .stat-box { padding: 7px 9px 9px; }
+  .stat-val { font-size: 24px; }
+  .btn-install { display: none !important; }
+  .home-start .btn-host { min-height: 58px; }
+  .readout { padding: 10px 14px 12px; }
+  #seeker-dist-readout .dist-main { font-size: clamp(50px, 16vw, 68px); }
+}
+@media (max-height: 700px) { .scope-rule { display: none; } }
+@media (max-height: 660px) {
+  .top-bar { padding: 6px 12px 4px; }
+  .icon-btn { width: 50px; height: 50px; }
+  .card { padding: 10px; margin-bottom: 7px; }
+  .radar-key { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .screen.active, .flash-screen { animation: none !important; }
+  .btn, .icon-btn, .cd-bar i { transition: none !important; }
+}
+
+/* ======================== INTERSTELLAR LAYER ===============================
+   A ship's console: cockpit corner brackets on every panel, wide expanded
+   headings and readouts, a scanner rim on the radar (radar.js) and a star
+   field behind (ambient.js). Shape and spacing carry the look; the type is
+   still a plain, very readable face.
+   ========================================================================= */
+.card, .readout, .radar-wrap, .hider-radar-box, #solo-controls-card, .dialog { position: relative; }
+.card::after, .readout::after, .radar-wrap::after, .dialog::after {
+  content: ""; position: absolute; inset: 0; z-index: 3;
+  border-radius: inherit;
+  border: 2px solid var(--hud);
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(#000 0 0) top left / 20px 20px no-repeat,
+    linear-gradient(#000 0 0) top right / 20px 20px no-repeat,
+    linear-gradient(#000 0 0) bottom left / 20px 20px no-repeat,
+    linear-gradient(#000 0 0) bottom right / 20px 20px no-repeat;
+          mask:
+    linear-gradient(#000 0 0) top left / 20px 20px no-repeat,
+    linear-gradient(#000 0 0) top right / 20px 20px no-repeat,
+    linear-gradient(#000 0 0) bottom left / 20px 20px no-repeat,
+    linear-gradient(#000 0 0) bottom right / 20px 20px no-repeat;
+}
+
+/* Wide, expanded display type */
+.brand-title, .seeker-band-label, .hider-dist-num, #seeker-dist-readout .dist-main,
+.btn, .btn-powerup, .badge-name, .dialog-title { font-stretch: 118%; }
+.brand-title { font-stretch: 125%; letter-spacing: .02em; }
+.card-title, .readout-kicker, .input-label, .brand-subtitle, .role-badge, .scope-rule { letter-spacing: .16em; }
+
+/* --------------------------------------------------------------- hider */
+.hider-radar-box {
+  flex: 1; min-height: 140px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center;
+}
+.hider-radar-box .readout-kicker { margin-bottom: 6px; }
+.hider-dist-num { font-size: clamp(64px, 22vw, 104px); }
+.hider-note { font-size: 16px; font-weight: 700; color: var(--ink-2); margin-top: 8px; }
+
+/* -------------------------------------------------------------- dialog */
+.dialog-scrim {
+  position: fixed; inset: 0; z-index: 10000;
+  background: rgba(2, 4, 10, .62);
+  display: flex; align-items: flex-end; justify-content: center;
+  padding: 16px;
+}
+.dialog-scrim[hidden] { display: none; }
+.dialog {
+  width: 100%; max-width: 440px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: var(--raise);
+  padding: 20px 18px 16px;
+  animation: dialog-in .22s cubic-bezier(.2, .8, .2, 1) both;
+  margin-bottom: max(8px, env(safe-area-inset-bottom));
+}
+@keyframes dialog-in { from { opacity: 0; transform: translateY(24px); } }
+.dialog-title {
+  font-family: var(--font-display);
+  font-size: 22px; font-weight: 900; line-height: 1.15;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.dialog-body { font-size: 17px; line-height: 1.4; color: var(--ink-2); white-space: pre-line; }
+.dialog-actions { display: flex; gap: 10px; margin-top: 18px; }
+.dialog-actions .btn { margin: 0; flex: 1; }
+.btn-danger { background: var(--bad-fill); color: var(--bad-fill-ink); border-color: transparent; }
+
+/* --------------------------------------------------------------- toast */
+.toast {
+  position: fixed; left: 50%; top: 14px; z-index: 10001;
+  transform: translate(-50%, -140%);
+  max-width: min(440px, calc(100vw - 32px));
+  background: var(--ink); color: var(--bg);
+  font-size: 16px; font-weight: 700;
+  padding: 12px 18px; border-radius: var(--r-s);
+  box-shadow: var(--raise);
+  transition: transform .25s cubic-bezier(.2, .8, .2, 1);
   pointer-events: none;
 }
+.toast.show { transform: translate(-50%, 0); }
 
-.stat-lbl {
-  font-family: var(--font-mono);
-  font-size: 12px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase;
-  color: var(--ink-2);
+/* A problem with something typed, right under it */
+.field-error {
+  font-size: 15px; font-weight: 700; line-height: 1.3;
+  color: var(--bad);
+  margin-top: 6px;
+}
+.field-error:empty { display: none; }
+[aria-invalid="true"] { border-color: var(--bad) !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dialog, .toast { animation: none !important; transition: none !important; }
 }
 
-/* ------------------------------------------------------------------- maps */
+/* Hider panel: quiet scanner rings behind the number */
+.hider-radar-box { overflow: hidden; }
+.hider-radar-box::before {
+  content: ""; position: absolute; left: 50%; top: 50%;
+  width: 150%; aspect-ratio: 1; transform: translate(-50%, -50%);
+  background:
+    repeating-radial-gradient(circle, transparent 0 46px, color-mix(in srgb, var(--accent) 22%, transparent) 46px 47.5px),
+    conic-gradient(from 0deg, transparent 0 80%, color-mix(in srgb, var(--accent) 16%, transparent) 100%);
+  border-radius: 50%;
+  animation: hider-sweep 6s linear infinite;
+  pointer-events: none; z-index: 0;
+}
+.hider-radar-box > * { position: relative; z-index: 1; }
+@keyframes hider-sweep { to { transform: translate(-50%, -50%) rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .hider-radar-box::before { animation: none; } }
+
+/* ---------------------------------------------------------- maps (restored) */
 #spectator-map, #replay-map {
   width: 100%; flex: 1; min-height: 150px;
   border-radius: var(--r);
-  border: 1px solid rgba(255, 255, 255, .07);
+  border: 1px solid var(--line);
   box-shadow: var(--raise);
   margin-bottom: 10px;
   overflow: hidden;
+  position: relative; z-index: 1;
 }
-
 .map-recenter-btn { margin-bottom: 9px; }
+#replay-slider { width: 100%; min-height: 32px; margin-bottom: 10px; accent-color: var(--accent); }
+.seeker-role-badge { background: var(--accent); color: var(--accent-ink); }
 
-#replay-slider {
-  width: 100%; margin-bottom: 10px; accent-color: var(--accent);
-}
-
-/* The one sentence on the result screen that says what happened. It was
-   styled as a 9.5px caption. */
+/* The one sentence on the result screen that says what happened */
 .result-line {
   font-family: var(--font-text);
   font-size: 17px; font-weight: 700; line-height: 1.25;
@@ -710,121 +953,59 @@ button.cooling { opacity: .6; }
   margin-top: 6px;
 }
 
-/* ------------------------------------------------------------------ invite */
+/* ------------------------------------------------------- invite (restored) */
 .lobby-actions { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 9px; }
 .lobby-actions .btn { margin-bottom: 0; }
-
 .overlay {
   position: fixed; inset: 0; z-index: 9000;
-  background: var(--e0);
+  background: var(--bg);
   overflow-y: auto;
 }
 .overlay-inner {
   max-width: 480px; margin: 0 auto;
-  min-height: 100dvh; padding: 16px;
+  min-height: 100dvh; padding: 14px 16px;
   display: flex; flex-direction: column; align-items: center;
 }
 .overlay-head {
   width: 100%; display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 .overlay-title {
-  font-family: var(--font-mono);
-  font-size: 13px; font-weight: 700; letter-spacing: .14em;
-  color: var(--accent);
+  font-family: var(--font-display); font-stretch: 118%;
+  font-size: 15px; font-weight: 800; letter-spacing: .16em;
+  color: var(--ink);
 }
-
-/* A QR code scans best as dark modules on a plain light tile, so this is the
-   one white surface in the app — raised like a card, so it reads as an object
-   sitting on the panel rather than a hole in it. */
+/* A QR code scans best as dark squares on a plain white tile, in both modes. */
 .qr-tile {
-  width: min(72vw, 300px); aspect-ratio: 1;
+  width: min(66vw, 280px); aspect-ratio: 1;
   padding: 14px;
   border-radius: var(--r);
   background: #FFFFFF;
+  border: 1px solid var(--line);
   box-shadow: var(--raise);
   display: grid; place-items: center;
   flex-shrink: 0;
 }
 .qr-tile svg { width: 100%; height: 100%; display: block; }
-.qr-missing {
-  font-family: var(--font-text);
-  font-size: 15px; font-weight: 700; line-height: 1.3;
-  color: #0B0D13; text-align: center;
-}
-
-.invite-hint {
-  font-family: var(--font-text);
-  font-size: 14px; font-weight: 600;
-  color: var(--ink-2);
-  margin-top: 6px;
-}
+.qr-missing { font-family: var(--font-text); font-size: 15px; font-weight: 700; line-height: 1.3; color: #0B0D13; text-align: center; }
+.invite-hint { font-family: var(--font-text); font-size: 15px; font-weight: 700; color: var(--ink-2); margin-top: 4px; }
 .invite-link {
   font-family: var(--font-mono);
   font-size: 13px; line-height: 1.4;
   color: var(--ink-3);
-  margin-top: 10px;
+  margin-top: 8px;
   text-align: center; word-break: break-all;
-  /* The one place text may be selected: for copying by hand. */
   user-select: text; -webkit-user-select: text;
 }
-#invite-panel .btn { max-width: 300px; }
-
-/* -------------------------------------------------------------- diagnostics */
-#diag-panel { font-family: var(--font-mono); }
-#diag-body { font-size: 14px; line-height: 1.5; color: var(--ink); }
-#diag-panel p { font-size: 13px; color: var(--ink-2); margin-top: 12px; line-height: 1.4; }
-
-/* ------------------------------------------------------------ short screens */
-@media (max-height: 720px) {
-  .screen { padding: 5px 13px 10px; }
-  .brand-title { font-size: clamp(28px, 9vw, 38px); }
-  .scope-head, .brand-header { margin-bottom: 6px; }
-  .card { padding: 11px; margin-bottom: 8px; border-radius: 16px; }
-  .card-title { margin-bottom: 6px; }
-  .scope-meta { margin-top: 7px; }
-  #pwa-install-btn { margin-top: 7px !important; }
-  /* Short screens give up padding and margins. They do not give up type size. */
-  .btn { padding: 10px 14px; margin-bottom: 7px; }
-  .text-input, .select-input { padding: 10px 12px; }
-  .input-group { margin-bottom: 8px; }
-  .solo-hint { display: none; }
-  #voice-row { margin-top: 5px !important; }
-  #voice-row .btn { min-height: 44px !important; padding: 6px 14px !important; }
-  .stat-box { padding: 7px 4px 6px; gap: 4px; }
-  .dial { width: 40px; height: 40px; }
-  .stat-val { top: 18px; }
-  .pulse-ring-outer { width: min(62vw, 250px); }
-  #seeker-dist-readout .dist-main { font-size: clamp(42px, 15vw, 72px); }
-}
-
-/* The smallest phones, with the GPS banner taking two lines off the top: drop
-   the ornamental rule above the wordmark so the last button stays on screen. */
+#invite-panel .btn { max-width: 320px; }
+#invite-panel .room-code { font-size: 34px; }
 @media (max-height: 700px) {
-  .scope-rule { display: none; }
+  .qr-tile { width: min(56vw, 220px); padding: 10px; }
+  #invite-panel .btn { margin-bottom: 7px; }
+  #invite-panel .room-code { font-size: 28px; }
+  .overlay-head { margin-bottom: 8px; }
 }
 
-/* The smallest phones (640 tall). Still only spacing: a slimmer top bar and
-   tighter cards, so the home screen keeps its last button with the GPS banner up. */
-@media (max-height: 660px) {
-  .top-bar { padding: 6px 13px 4px; }
-  .icon-btn { width: 46px; height: 46px; }
-  .card { padding: 10px; margin-bottom: 7px; }
-}
-
-@media (max-height: 600px) {
-  .brand-title { font-size: 24px; }
-  .card { padding: 9px; margin-bottom: 6px; }
-  .btn { padding: 9px 12px; margin-bottom: 5px; }
-  .pulse-ring-outer { width: min(52vw, 200px); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .screen, #app-container::before, .gauge-tickring { animation: none !important; }
-}
-
-/* Solid fallback where the device cannot composite a backdrop-filter, so the
-   panels stay legible instead of collapsing into flat grey. */
-@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .card, .hider-radar-box, #solo-controls-card { background: #151A23; }
-}
+/* ------------------------------------------------- short-screen fitting */
+@media (max-height: 900px) { #home-screen .solo-hint { display: none; } }
+@media (max-height: 660px) { .radar-wrap { min-height: 110px; } }
