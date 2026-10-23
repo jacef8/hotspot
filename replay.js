@@ -106,7 +106,7 @@ class HotspotReplay {
     // Leaflet is loaded from a CDN. If it did not arrive, skip the map rather
     // than throwing — this runs inside the post-tag gameover handler.
     if (typeof L === 'undefined') {
-      container.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:15px;font-weight:600;color:rgba(255,255,255,.9);text-align:center;padding:12px;">Map unavailable — no connection to map server.</div>';
+      container.innerHTML = '<div class="map-empty">Map unavailable. No connection to the map server.</div>';
       return;
     }
 

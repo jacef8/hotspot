@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 
   <!-- Defence in depth behind the output escaping: even if a nickname or other
        network-supplied string were ever rendered unescaped again, an injected
@@ -19,7 +19,7 @@
     object-src 'none';
     base-uri 'self';
     form-action 'none'">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.5.1</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.5.2</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -79,7 +79,7 @@
   </script>
 
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=3.5.1">
+  <link rel="stylesheet" href="style.css?v=3.5.2">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -175,7 +175,7 @@
         <div class="scope-rule"><span>THERMAL PURSUIT SYSTEM</span></div>
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="scope-meta">
-          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.5.1</span>
+          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.5.2</span>
           <span id="cloud-sync-status" class="tele">STANDBY</span>
         </div>
       </div>
@@ -548,7 +548,7 @@
       </div>
 
       <button id="btn-rematch" class="btn btn-primary" style="display: none;" onclick="window.hotspotApp.rematch()">
-        Rematch — swap roles
+        Rematch
       </button>
       <!-- For everyone who cannot start the rematch: who they are waiting on -->
       <div id="rematch-wait" class="lobby-wait" style="display: none;"></div>
@@ -638,25 +638,25 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=3.5.1"></script>
-  <script src="geo.js?v=3.5.1"></script>
-  <script src="replay.js?v=3.5.1"></script>
-  <script src="app.js?v=3.5.1"></script>
+  <script src="audio.js?v=3.5.2"></script>
+  <script src="geo.js?v=3.5.2"></script>
+  <script src="replay.js?v=3.5.2"></script>
+  <script src="app.js?v=3.5.2"></script>
 
   <!-- Smooth scrolling (Lenis) for the three panels that scroll, and the
        living background (Three.js). Both are extras: if either fails to load
        the app runs exactly as before. -->
   <script src="https://cdn.jsdelivr.net/npm/lenis@1.3.26/dist/lenis.min.js"></script>
-  <script src="scroll.js?v=3.5.1"></script>
+  <script src="scroll.js?v=3.5.2"></script>
   <!-- QR code for inviting players (drawn locally, nothing is sent anywhere) -->
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
-  <script type="module" src="ambient.js?v=3.5.1"></script>
-  <script type="module" src="radar.js?v=3.5.1"></script>
+  <script type="module" src="ambient.js?v=3.5.2"></script>
+  <script type="module" src="radar.js?v=3.5.2"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=3.5.1').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=3.5.2').catch(() => {});
       });
     }
 

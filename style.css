@@ -19,7 +19,7 @@
 /* ---------------------------------------------------------------- tokens */
 /* Bright mode (default, and what daylight needs) */
 :root {
-  --css-version: "3.5.1";
+  --css-version: "3.5.2";
   color-scheme: light;
 
   --bg: #E7EBF0;          /* ground */
@@ -49,7 +49,7 @@
 
   /* Heat ramp: distance only */
   --heat-cold: #2F6FD6;
-  --heat-warm: #C27400;
+  --heat-warm: #C27400; --band-warm-ink: #9A5C00;
   --heat-hot: #E0530C;
   --hider-ink: #B03A06; --hider-fill: #B03A06; --hider-fill-ink: #FFFFFF;
   --heat-hotter: #D22E2E;
@@ -105,7 +105,7 @@
     --ok-fill: #1C3326;
     --ok-fill-ink: #CFF2DA;
     --heat-cold: #6FA6FF;
-    --heat-warm: #E9A23B;
+    --heat-warm: #E9A23B; --band-warm-ink: #E9A23B;
     --heat-hot: #FF7A3D;
     --hider-ink: #FF8A4C; --hider-fill: #FF8A4C; --hider-fill-ink: #1A0700;
     --heat-hotter: #FF5A52;
@@ -138,11 +138,11 @@
   --ok-fill: #1C3326;
   --ok-fill-ink: #CFF2DA;
   --heat-cold: #6FA6FF;
-  --heat-warm: #E9A23B;
+  --heat-warm: #E9A23B; --band-warm-ink: #E9A23B;
   --heat-hot: #FF7A3D;
   --hider-ink: #FF8A4C; --hider-fill: #FF8A4C; --hider-fill-ink: #1A0700;
   --heat-hotter: #FF5A52;
-  --heat-redhot: #FFB38A;
+  --heat-redhot: #FFC9A8;
   --raise: inset 0 1px 0 rgba(255, 240, 220, .05), 0 4px 10px -6px rgba(0, 0, 0, .8);
   --press: inset 0 2px 5px rgba(0, 0, 0, .6);
 }
@@ -357,7 +357,7 @@ h2.brand-title { font-weight: 800; letter-spacing: -.015em; line-height: 1.05; }
 .btn:hover { background: var(--surface-2); }
 .btn:active { transform: scale(.985); box-shadow: var(--press); }
 .btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-.btn:disabled { opacity: .45; cursor: default; }
+.btn:disabled { opacity: 1; background: var(--surface-3); color: var(--ink-3); border-color: var(--line); box-shadow: none; cursor: default; }
 .btn:disabled:active { transform: none; box-shadow: var(--raise); }
 
 /* One clear primary action per screen */
@@ -386,7 +386,7 @@ h2.brand-title { font-weight: 800; letter-spacing: -.015em; line-height: 1.05; }
   transition: transform .15s ease;
 }
 .btn-powerup:active { transform: scale(.985); box-shadow: var(--press); }
-.btn-powerup:disabled { opacity: .45; cursor: default; }
+.btn-powerup:disabled { opacity: 1; background: var(--surface-3); color: var(--ink-3); box-shadow: none; cursor: default; }
 .btn-powerup:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
 .powerup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -395,7 +395,7 @@ h2.brand-title { font-weight: 800; letter-spacing: -.015em; line-height: 1.05; }
 .btn-powerup, #btn-bearing-ping { position: relative; overflow: hidden; }
 .cd-bar {
   position: absolute; left: 0; right: 0; bottom: 0; height: 5px;
-  background: var(--surface-3);
+  background: var(--line);
   opacity: 0; transition: opacity .2s;
   pointer-events: none;
 }
@@ -405,7 +405,6 @@ h2.brand-title { font-weight: 800; letter-spacing: -.015em; line-height: 1.05; }
   transition: width .9s linear;
 }
 button.cooling .cd-bar { opacity: 1; }
-button.cooling { opacity: .7; }
 
 /* ----------------------------------------------------------------- inputs */
 .input-group { margin-bottom: 12px; }
@@ -668,13 +667,13 @@ button.cooling { opacity: .7; }
 }
 .seeker-band-label {
   font-family: var(--font-display);
-  font-size: clamp(30px, 9vw, 40px); font-weight: 900;
+  font-size: clamp(22px, 6.2vw, 40px); font-weight: 900;
   letter-spacing: .01em; text-transform: uppercase; line-height: 1;
   color: var(--ink);
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 .readout[data-band] .seeker-band-label { color: var(--band, var(--ink)); }
-:root:not([data-theme="dark"]) .readout[data-band="WARM"] .seeker-band-label { color: #9A5C00; }
+.readout[data-band="WARM"] .seeker-band-label { color: var(--band-warm-ink, var(--band)); }
 
 #seeker-dist-readout { text-align: right; display: flex; flex-direction: column; align-items: flex-end; }
 #seeker-dist-readout .dist-main {
@@ -1016,3 +1015,15 @@ button.cooling { opacity: .7; }
 .lobby-net { font-size: 15px; font-weight: 700; color: var(--ink-2); text-align: center; margin: 2px 0 6px; }
 .lobby-net[data-state="bad"] { color: var(--bad); }
 .lobby-net:empty { display: none; }
+
+/* The top bar clears the phone's own status bar when installed */
+.top-bar { padding-top: max(10px, env(safe-area-inset-top)); }
+
+/* Map could not load: readable in both modes */
+.map-empty { display: flex; align-items: center; justify-content: center; height: 100%; min-height: 150px; padding: 12px; text-align: center; font-size: 16px; font-weight: 700; color: var(--ink-2); background: var(--surface-2); border-radius: var(--r); }
+
+/* The number column never squeezes the band word: it gets under half the
+   panel and its small lines wrap. The notice state stays one column. */
+.readout:not(.notice) { grid-template-columns: minmax(0, 1fr) minmax(0, 46%); }
+.readout:not(.notice) #seeker-dist-readout .dist-sub,
+.readout:not(.notice) #seeker-dist-readout .dist-warn { white-space: normal; text-align: right; }

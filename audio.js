@@ -198,6 +198,7 @@ class HotspotAudio {
   speak(text, rate = 1.0, pitch = 1.0) {
     if (!this.speechEnabled || !this.synth) return;
     if (this.isHiderSilent()) return; // SILENT FOR HIDER!
+    this.lastSpeakKind = this._bandLine ? 'band' : 'other';
 
     try {
       this.initAudioContext();
@@ -362,6 +363,11 @@ class HotspotAudio {
 
   announceBandChange(band) {
     if (this.isProximityMuted()) return;
+    // Every speak() cancels what is playing. A band call-out must not cut off
+    // "the hunt is live" or "tagged"; it waits a tick and tries again.
+    if (this.synth && this.synth.speaking && this.lastSpeakKind !== 'band') return;
+    this._bandLine = true;
+    setTimeout(() => { this._bandLine = false; }, 0);
 
     const now = Date.now();
     if (this.lastSpokenBand === band && now - this.lastSpokenTime < 8000) {

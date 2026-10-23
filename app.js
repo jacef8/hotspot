@@ -1292,13 +1292,22 @@ class HotspotApp {
     scrim.hidden = false;
     const done = (val) => {
       okBtn.onclick = cancelBtn.onclick = null;
+      this.dialogDone = null;
       scrim.hidden = true;
       item.resolve(val);
       setTimeout(() => this.nextDialog(), 0);
     };
+    this.dialogDone = done;
     okBtn.onclick = () => done(true);
     cancelBtn.onclick = () => done(false);
-    try { okBtn.focus(); } catch (e) {}
+    // The sheet opens right under the finger that tapped a bottom button, so
+    // a double tap used to land on Leave. Ignore taps for a third of a second,
+    // then put focus on the safe button when the main one is destructive.
+    okBtn.disabled = true; cancelBtn.disabled = true;
+    setTimeout(() => {
+      okBtn.disabled = false; cancelBtn.disabled = false;
+      try { ((item.cancel && item.danger) ? cancelBtn : okBtn).focus(); } catch (e) {}
+    }, 350);
     // Lets tests (and anything else) see what was shown.
     window.dispatchEvent(new CustomEvent('hotspot-dialog', { detail: { type: item.cancel ? 'confirm' : 'alert', text: item.message.replace(/\n+/g, ' | ') } }));
   }
@@ -1340,13 +1349,18 @@ class HotspotApp {
     try { input.focus(); } catch (e) {}
   }
 
-  toggleSound() {
+  toggleSound(silent = false) {
     const speechEnabled = window.hotspotAudio.toggleSpeech();
+    // One button, all sound: beeps, countdown and power-up sounds used to keep
+    // playing with the voice off.
+    window.hotspotAudio.toggleAudioFx(speechEnabled);
     const btn = document.getElementById('sound-btn');
     if (btn) {
       btn.classList.toggle('muted', !speechEnabled);
-      btn.setAttribute('aria-label', speechEnabled ? 'Turn the voice off' : 'Turn the voice on');
+      btn.setAttribute('aria-label', speechEnabled ? 'Turn sound off' : 'Turn sound on');
     }
+    try { localStorage.setItem('hotspot_muted', speechEnabled ? '0' : '1'); } catch (e) {}
+    if (!silent) this.toast(speechEnabled ? 'Sound on' : 'Sound off');
   }
 
   // --- BRIGHT / NIGHT MODE ---
@@ -1365,6 +1379,9 @@ class HotspotApp {
     try { localStorage.setItem('hotspot_theme', next); } catch (e) {}
     this.syncThemeChrome();
     window.dispatchEvent(new CustomEvent('hotspot-theme', { detail: next }));
+    const btn = document.querySelector('.theme-btn');
+    if (btn) btn.setAttribute('aria-label', next === 'dark' ? 'Switch to bright mode' : 'Switch to night mode');
+    this.toast(next === 'dark' ? 'Night mode' : 'Bright mode');
   }
 
   // The browser's own bar colour follows the mode too.
@@ -1394,10 +1411,7 @@ class HotspotApp {
     this.backArmed = false;
     const scrim = document.getElementById('hs-dialog');
     if (scrim && !scrim.hidden) {
-      const cancel = document.getElementById('hs-dialog-cancel');
-      const ok = document.getElementById('hs-dialog-ok');
-      const btn = (cancel && cancel.style.display !== 'none') ? cancel : ok;
-      if (btn) btn.click();
+      if (this.dialogDone) this.dialogDone(false);
       this.armBackButton();
       return;
     }
@@ -1546,6 +1560,7 @@ class HotspotApp {
     if (codeEl) codeEl.innerText = this.roomCode;
     this.fillNameInputs();
     this.showScreen('lobby-screen');
+    this.lobbyEnteredAt = Date.now();
     this.updateLobbyList();
   }
 
@@ -2081,7 +2096,7 @@ class HotspotApp {
        </div>`;
 
     el.innerHTML =
-      row('app version', 'v3.5.1') +
+      row('app version', 'v3.5.2') +
       (() => {
         // Straight from the stylesheet. If this disagrees with the app version
         // above, the phone is running cached CSS - provable, not a guess.
@@ -2090,7 +2105,7 @@ class HotspotApp {
           css = (getComputedStyle(document.documentElement)
             .getPropertyValue('--css-version') || '').replace(/["']/g, '').trim() || 'missing';
         } catch (e) {}
-        return row('stylesheet', css, css !== '3.5.1');
+        return row('stylesheet', css, css !== '3.5.2');
       })() +
       row('room', this.roomCode || '(none)', !this.roomCode) +
       row('am I host', this.isRoomHost ? 'yes' : 'no') +
@@ -2232,6 +2247,9 @@ class HotspotApp {
     // tapping it put that one phone into a private round of its own, where it
     // then missed the tag and never saw the result.
     if (this.gameState !== 'lobby' || !this.roomCode || this.isSoloDrill) return;
+    // The lobby appears under the finger that just tapped Create Room, with
+    // Start in the same spot. A second tap that quickly is not a decision.
+    if (Date.now() - (this.lobbyEnteredAt || 0) < 700) return;
 
     if (this.role !== 'hider' && this.role !== 'spectator') {
       this.notify('Only the Hider or a Spectator can start the round.');
@@ -2365,13 +2383,14 @@ class HotspotApp {
 
         const hiderCounter = document.getElementById('hider-timer-display');
         if (hiderCounter) hiderCounter.innerText = `HIDING ${remaining}s`;
+        if (this.role === 'hider') this.setHiderPanel('Seekers start in', `${remaining}s`, 'Find your spot. Your phone stays silent.');
 
         if (remaining <= 5 && remaining > 0) {
           window.hotspotAudio.playCountdownBeep(false);
         }
 
         if (remaining === 30 || remaining === 15) {
-          window.hotspotAudio.speak(`${remaining} seconds remaining!`);
+          window.hotspotAudio.speak(`${remaining} seconds until the hunt starts!`);
         }
 
         if (remaining <= 0) {
@@ -2414,6 +2433,7 @@ class HotspotApp {
       document.querySelectorAll('.headstart-counter').forEach(el => el.innerText = 'HUNT LIVE');
       const hiderCounter = document.getElementById('hider-timer-display');
       if (hiderCounter) hiderCounter.innerText = 'HUNT LIVE';
+      if (this.role === 'hider') this.setHiderPanel('Nearest seeker', '--ft', 'Silent — only you can see this');
 
       const readyBtn = document.getElementById('btn-hider-ready');
       if (readyBtn) readyBtn.style.display = 'none';
@@ -2484,7 +2504,12 @@ class HotspotApp {
       const inRoom = !!this.roomCode && !this.isSoloDrill;
       const canRematch = inRoom && (this.role === 'hider' || this.role === 'spectator');
       const rematchBtn = document.getElementById('btn-rematch');
-      if (rematchBtn) rematchBtn.style.display = canRematch ? 'block' : 'none';
+      if (rematchBtn) {
+        rematchBtn.style.display = canRematch ? 'block' : 'none';
+        // Nobody swaps after the hider survives; say what actually happens next.
+        rematchBtn.innerText = !tag ? 'Rematch — same hider hides again'
+          : (tag.seekerId === this.playerId ? 'Rematch — you hide next' : `Rematch — ${tag.seekerName} hides next`);
+      }
 
       const wait = document.getElementById('rematch-wait');
       if (wait) {
@@ -2563,7 +2588,7 @@ class HotspotApp {
       b.disabled = !this.powerupsLive || cooling;
       b.classList.toggle('cooling', cooling);
       const text = b.querySelector('.btn-text');
-      if (text) text.innerText = cooling ? `${short} · ${Math.ceil(left / 1000)}s` : label;
+      if (text) text.innerText = cooling ? `Back in ${Math.ceil(left / 1000)}s` : label;
       const fill = b.querySelector('.cd-bar i');
       if (fill) fill.style.width = cooling ? `${Math.round(Math.max(0, Math.min(1, 1 - left / total)) * 100)}%` : '0%';
 
@@ -2607,7 +2632,7 @@ class HotspotApp {
       if (remainingSec === 60) {
         window.hotspotAudio.speak("1 minute remaining in the hunt!");
       } else if (remainingSec === 30 || remainingSec === 15) {
-        window.hotspotAudio.speak(`${remainingSec} seconds remaining!`);
+        window.hotspotAudio.speak(`${remainingSec} seconds left in the hunt!`);
       } else if (remainingSec <= 5 && remainingSec > 0) {
         window.hotspotAudio.playCountdownBeep(false);
       }
@@ -3167,22 +3192,28 @@ class HotspotApp {
 
     // The state picks a background and text colour pair from the stylesheet,
     // so each one reads in both bright and night mode.
-    let state, text;
-    if (distFromCenter > this.boundaryRadius) {
-      state = 'out';
-      text = `OUT OF BOUNDS — ${Math.round(distFromCenter - this.boundaryRadius)} ft over the line. Head back!`;
+    // Each line has 10 ft of slack in the direction you came from, so a GPS
+    // wobble on the line does not flip the banner and the voice every tick.
+    const prev = this.boundState || 'ok';
+    const H = 10;
+    const outLine = this.boundaryRadius + (prev === 'out' ? -H : H);
+    const edgeLine = 0.8 * this.boundaryRadius + ((prev === 'edge' || prev === 'out') ? -H : H);
+    const state = distFromCenter > outLine ? 'out' : (distFromCenter > edgeLine ? 'edge' : 'ok');
+    this.boundState = state;
+
+    let text;
+    if (state === 'out') {
+      text = `OUT OF BOUNDS — ${Math.max(1, Math.round(distFromCenter - this.boundaryRadius))} ft over the line. Head back!`;
       if (!this.outOfBoundsSpoken) {
         this.outOfBoundsSpoken = true;
         if ('vibrate' in navigator) { try { navigator.vibrate([200, 100, 200]); } catch(e) {} }
         window.hotspotAudio.speak('Out of bounds! Head back inside the yard!');
       }
-    } else if (distFromCenter > 0.8 * this.boundaryRadius) {
+    } else if (state === 'edge') {
       this.outOfBoundsSpoken = false;
-      state = 'edge';
       text = `NEAR THE EDGE — ${roomLeft} ft of room left`;
     } else {
       this.outOfBoundsSpoken = false;
-      state = 'ok';
       text = `In bounds — ${roomLeft} ft of room left`;
     }
 
@@ -3267,6 +3298,18 @@ class HotspotApp {
       };
       startCountdown(0);
     }
+  }
+
+  // The hider panel's three lines. During hiding time the big number is the
+  // countdown, so the biggest thing on screen is no longer a placeholder.
+  setHiderPanel(kicker, big, note) {
+    const k = document.querySelector('#hider-screen .readout-kicker');
+    const b = document.getElementById('hider-nearest-dist');
+    const n = document.querySelector('#hider-screen .hider-note');
+    if (k) k.innerText = kicker;
+    if (b) b.innerText = big;
+    if (n && !this.hiderNoteTimer) n.innerText = note;
+    this.hiderNoteDefault = note;
   }
 
   // A line under the hider's number that reverts by itself, with a short buzz
@@ -3476,6 +3519,7 @@ setTimeout(() => {
   try { app.updateSeasonStatsDisplay(); } catch (e) {}
   try { if (app.loadSavedName()) app.fillNameInputs(); } catch (e) {}
   try { app.initLifecycle(); } catch (e) {}
+  try { if (localStorage.getItem('hotspot_muted') === '1') app.toggleSound(true); } catch (e) {}
   try {
     window.addEventListener('online', () => app.refreshTransportStatus());
     window.addEventListener('offline', () => app.refreshTransportStatus());
