@@ -19,7 +19,7 @@
     object-src 'none';
     base-uri 'self';
     form-action 'none'">
-  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.5.0</title>
+  <title>HOTSPOT — Extreme Yard Tag & Proximity Hunt v3.5.1</title>
 
   <!-- PWA Full-Screen Native App Meta Tags & Icons -->
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -79,7 +79,7 @@
   </script>
 
   <!-- Custom Stylesheet -->
-  <link rel="stylesheet" href="style.css?v=3.5.0">
+  <link rel="stylesheet" href="style.css?v=3.5.1">
 
   <!-- Production Firebase Configuration -->
   <script>
@@ -175,7 +175,7 @@
         <div class="scope-rule"><span>THERMAL PURSUIT SYSTEM</span></div>
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="scope-meta">
-          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.5.0</span>
+          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.5.1</span>
           <span id="cloud-sync-status" class="tele">STANDBY</span>
         </div>
       </div>
@@ -301,6 +301,7 @@
       <div class="brand-header">
         <div class="brand-subtitle">ROOM CODE</div>
         <div id="lobby-code-display" class="room-code" onclick="window.hotspotApp.openInvite()" title="Tap to invite players">------</div>
+        <div id="lobby-net-status" class="lobby-net" aria-live="polite"></div>
       </div>
 
       <!-- Quick Nickname Editor Bar -->
@@ -637,25 +638,25 @@
   </script>
 
   <!-- Scripts -->
-  <script src="audio.js?v=3.5.0"></script>
-  <script src="geo.js?v=3.5.0"></script>
-  <script src="replay.js?v=3.5.0"></script>
-  <script src="app.js?v=3.5.0"></script>
+  <script src="audio.js?v=3.5.1"></script>
+  <script src="geo.js?v=3.5.1"></script>
+  <script src="replay.js?v=3.5.1"></script>
+  <script src="app.js?v=3.5.1"></script>
 
   <!-- Smooth scrolling (Lenis) for the three panels that scroll, and the
        living background (Three.js). Both are extras: if either fails to load
        the app runs exactly as before. -->
   <script src="https://cdn.jsdelivr.net/npm/lenis@1.3.26/dist/lenis.min.js"></script>
-  <script src="scroll.js?v=3.5.0"></script>
+  <script src="scroll.js?v=3.5.1"></script>
   <!-- QR code for inviting players (drawn locally, nothing is sent anywhere) -->
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
-  <script type="module" src="ambient.js?v=3.5.0"></script>
-  <script type="module" src="radar.js?v=3.5.0"></script>
+  <script type="module" src="ambient.js?v=3.5.1"></script>
+  <script type="module" src="radar.js?v=3.5.1"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js?v=3.5.0').catch(() => {});
+        navigator.serviceWorker.register('./sw.js?v=3.5.1').catch(() => {});
       });
     }
 

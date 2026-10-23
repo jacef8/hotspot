@@ -19,7 +19,7 @@
 /* ---------------------------------------------------------------- tokens */
 /* Bright mode (default, and what daylight needs) */
 :root {
-  --css-version: "3.5.0";
+  --css-version: "3.5.1";
   color-scheme: light;
 
   --bg: #E7EBF0;          /* ground */
@@ -854,7 +854,9 @@ button.cooling { opacity: .7; }
   text-align: center;
 }
 .hider-radar-box .readout-kicker { margin-bottom: 6px; }
-.hider-dist-num { font-size: clamp(64px, 22vw, 104px); }
+.hider-dist-num { font-size: clamp(48px, 15vw, 84px); white-space: nowrap; max-width: 100%; }
+.hider-radar-box { padding-inline: 8px; }
+.hider-radar-box .dist-margin { display: block; margin: 6px 0 0; font-size: 16px; }
 .hider-note { font-size: 16px; font-weight: 700; color: var(--ink-2); margin-top: 8px; }
 
 /* -------------------------------------------------------------- dialog */
@@ -1009,3 +1011,8 @@ button.cooling { opacity: .7; }
 /* ------------------------------------------------- short-screen fitting */
 @media (max-height: 900px) { #home-screen .solo-hint { display: none; } }
 @media (max-height: 660px) { .radar-wrap { min-height: 110px; } }
+
+/* Connection state, in the lobby where the room code is */
+.lobby-net { font-size: 15px; font-weight: 700; color: var(--ink-2); text-align: center; margin: 2px 0 6px; }
+.lobby-net[data-state="bad"] { color: var(--bad); }
+.lobby-net:empty { display: none; }

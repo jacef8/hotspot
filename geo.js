@@ -301,10 +301,16 @@ class HotspotGeo {
     if (marginFeet > 100) maxIdx = 1;      // no hotter than WARM
     else if (marginFeet > 60) maxIdx = 2;  // no hotter than HOT
 
+    // RED HOT means "close enough to tag". When the fix is too loose for the
+    // auto-tag to fire, the hottest honest reading is HOTTER, and the readout
+    // says why; it used to show RED HOT while no tag could ever happen.
+    const tagBlocked = marginFeet > this.tagMarginAllowed(tagRadiusFeet);
+    if (tagBlocked && maxIdx > 3) maxIdx = 3;
+
     const capped = idx > maxIdx;
     if (capped) idx = maxIdx;
 
-    return { ...BANDS[idx], capped };
+    return { ...BANDS[idx], capped, tagBlocked };
   }
 
   // Combined uncertainty of two independent GPS fixes.
@@ -318,10 +324,12 @@ class HotspotGeo {
   // relative to the catch radius. A tight 12ft tag on a ±40ft fix would fire on
   // noise rather than on an actual catch, so the gate scales with the radius
   // (with a floor, otherwise a tight setting could never trigger at all).
-  isTagCredible(marginFeet, tagRadiusFeet = 20) {
+  tagMarginAllowed(tagRadiusFeet = 20) {
     const tag = Math.max(8, tagRadiusFeet || 20);
-    const allowed = Math.max(30, Math.round(tag * 1.75));
-    return marginFeet <= allowed;
+    return Math.max(30, Math.round(tag * 1.75));
+  }
+  isTagCredible(marginFeet, tagRadiusFeet = 20) {
+    return marginFeet <= this.tagMarginAllowed(tagRadiusFeet);
   }
 
   // targetKey separates the real hider, a decoy, and the solo-drill hider. They
