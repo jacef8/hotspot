@@ -19,7 +19,7 @@
 /* ---------------------------------------------------------------- tokens */
 /* Bright mode (default, and what daylight needs) */
 :root {
-  --css-version: "3.5.2";
+  --css-version: "3.5.4";
   color-scheme: light;
 
   --bg: #E7EBF0;          /* ground */
