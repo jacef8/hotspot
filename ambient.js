@@ -434,6 +434,9 @@ try {
   const container = document.getElementById('app-container');
   const canvasTest = document.createElement('canvas');
   const gl = canvasTest.getContext('webgl2') || canvasTest.getContext('webgl');
+  // The probe has done its job: free its context now rather than leave it
+  // counting against the browser's live-context cap until GC gets to it.
+  if (gl) { const lose = gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext(); }
   if (container && gl) {
     const ambient = new Ambient(container);
     window.hotspotAmbient = ambient;

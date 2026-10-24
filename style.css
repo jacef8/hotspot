@@ -604,13 +604,27 @@ button.cooling .cd-bar { opacity: 1; }
   margin-bottom: 10px;
 }
 #radar-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-/* Without WebGL: plain range rings so the panel is not empty */
+/* Without WebGL, or after the phone takes it away: plain range rings and a
+   plain line saying so, never an empty panel */
 .radar-fallback {
   position: absolute; inset: 0; display: none;
+  align-items: center; justify-content: center; padding: 14px;
   background:
     radial-gradient(circle at 50% 58%, transparent 0 18%, var(--line) 18% calc(18% + 1px), transparent 0 36%, var(--line) 36% calc(36% + 1px), transparent 0 54%, var(--line) 54% calc(54% + 1px), transparent 0);
 }
-.radar-wrap.no-webgl .radar-fallback { display: block; }
+.radar-fallback-note {
+  font-family: var(--font-text);
+  font-size: 16px; font-weight: 700; line-height: 1.3;
+  text-align: center;
+  color: var(--ink-2);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  padding: 8px 12px;
+}
+.radar-wrap.no-webgl .radar-fallback { display: flex; }
+.radar-wrap.no-webgl #radar-canvas { visibility: hidden; }   /* a lost canvas paints as a blank or a broken-image box */
+.radar-wrap.no-webgl .radar-key { display: none; }   /* no disc, so no ring to key */
 .radar-wrap.smoke-blind #radar-canvas { filter: blur(6px) saturate(.3); opacity: .55; }
 .radar-key {
   position: absolute; left: 10px; bottom: 10px; z-index: 2;
@@ -697,19 +711,27 @@ button.cooling .cd-bar { opacity: 1; }
 }
 #seeker-dist-readout .dist-warn {
   font-family: var(--font-text);
-  font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; line-height: 1.25;
   color: var(--warn);
   margin-top: 2px;
+  /* Keeps its line when empty: a warning coming and going must not resize the radar above */
+  min-height: 1.25em;
 }
-#seeker-dist-readout .dist-warn:empty { display: none; }
 /* A notice (NO SIGNAL, waiting for hider) spans the panel under the band */
 .readout.notice { grid-template-columns: 1fr; }
 .readout.notice #seeker-dist-readout { text-align: left; align-items: flex-start; }
 
+/* Bearing ping hint: a strip along the bottom of the radar, over the key chips */
 #bearing-note {
-  grid-column: 1 / -1;
+  position: absolute; left: 10px; right: 10px; bottom: 10px; z-index: 2;
   font-family: var(--font-text);
   font-size: 15px; font-weight: 700; line-height: 1.25;
+  text-align: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--r-s);
+  padding: 8px 12px;
+  pointer-events: none;
   display: none;
 }
 

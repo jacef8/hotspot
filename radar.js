@@ -26,6 +26,10 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.186.1/build/three.m
 const R = 4;            // disc radius in scene units = 300 ft
 const MAX_FT = 300;
 const mapFt = (ft) => R * Math.sqrt(Math.max(0, Math.min(MAX_FT, ft)) / MAX_FT);
+// uTime wraps here rather than growing all session. 73 breathe cycles: both
+// breathe sines land back on zero and the you-pulse is off by 0.2% of a cycle,
+// so nothing on the disc skips at the wrap.
+const TIME_WRAP = 73 * 2 * Math.PI / 1.6;
 
 const VERT = `
   varying vec2 vP;
@@ -133,7 +137,8 @@ const FRAG = `
     a = max(a, max(you, pulse));
 
     // Smoke screen: scrambled static over the disc
-    float n = hash(floor(vP * 26.0) + floor(uTime * 12.0));
+    // The frame count wraps so the hash's sin() stays where every GPU gets it right
+    float n = hash(floor(vP * 26.0) + mod(floor(uTime * 12.0), 256.0));
     col = mix(col, uLine, uSmoke * n * 0.8);
     a = max(a, uSmoke * (0.18 + n * 0.25));
 
@@ -168,6 +173,7 @@ class Radar {
     this.blipOn = 0;
     this.blipTarget = 0;
     this.blipAng = 0;
+    this.blipAngTarget = 0;
     this.smoke = 0;
     this.smokeTarget = 0;
     this.running = false;
@@ -221,12 +227,43 @@ class Radar {
     this.beam.visible = false;
     this.scene.add(this.beam);
 
+    // Rim sample points for fitting the camera, built once
+    this.rimPts = [];
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      this.rimPts.push(new THREE.Vector3(Math.sin(a) * (R + 0.1), 0.05, -Math.cos(a) * (R + 0.1)));
+    }
+    this.proj = new THREE.Vector3();
+    this.fit = null;
+
     this.applyTheme();
     this.resize();
 
-    canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); this.lost = true; this.stop(); }, false);
-    canvas.addEventListener('webglcontextrestored', () => { this.lost = false; this.kick(); }, false);
-    if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => { this.resize(); this.kick(); }).observe(wrap);
+    // A phone can take the GPU away from a backgrounded tab and not always give
+    // it back. Show the plain rings and say so, rather than an empty panel.
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.lost = true;
+      this.stop();
+      this.setFallbackNote('Radar paused.\nThe number below still works.');
+      this.wrap.classList.add('no-webgl');
+    }, false);
+    canvas.addEventListener('webglcontextrestored', () => {
+      this.lost = false;
+      this.wrap.classList.remove('no-webgl');
+      this.applyTheme();          // GPU resources were rebuilt
+      this.fit = null;
+      this.resize();
+      this.kick();
+    }, false);
+    // Re-fit when the panel changes size and repaint in the same frame: setSize
+    // wipes the canvas, and the next tick can be a frame or two away.
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(() => {
+        if (this.resize() && this.visible()) this.renderer.render(this.scene, this.camera);
+        this.kick();
+      }).observe(wrap);
+    }
     document.addEventListener('visibilitychange', () => this.kick());
     if (this.screen && typeof MutationObserver !== 'undefined') {
       new MutationObserver(() => this.kick()).observe(this.screen, { attributes: true, attributeFilter: ['class'] });
@@ -262,29 +299,36 @@ class Radar {
     this.beamMat.color.copy(c);
   }
 
+  // The line shown on the plain-rings panel while the disc cannot draw
+  setFallbackNote(text) {
+    const n = this.wrap.querySelector('.radar-fallback-note');
+    if (n) n.innerText = text;
+  }
+
   // Fit the disc to the panel: as big as it can be without touching the
   // edges, and centred. A tall panel gets a steeper view so the disc fills
   // its height instead of leaving a band of empty panel above it.
+  // Returns true when it actually re-fit. setSize clears the drawing buffer
+  // even at the same size, so a layout nudge that leaves the panel alone skips.
   resize() {
     const w = this.wrap.clientWidth || 1, h = this.wrap.clientHeight || 1;
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    if (this.fit && this.fit.w === w && this.fit.h === h && this.fit.dpr === dpr) return false;
+    this.fit = { w, h, dpr };
+    this.renderer.setPixelRatio(dpr);
     this.renderer.setSize(w, h, false);
     const cam = this.camera;
     cam.aspect = w / h;
     cam.clearViewOffset();
     const elev = THREE.MathUtils.degToRad(h > w * 0.85 ? 60 : h > w * 0.6 ? 54 : 46);
-    const rim = [];
-    for (let i = 0; i < 24; i++) {
-      const a = (i / 24) * Math.PI * 2;
-      rim.push(new THREE.Vector3(Math.sin(a) * (R + 0.1), 0.05, -Math.cos(a) * (R + 0.1)));
-    }
+    const rim = this.rimPts, q = this.proj;
     const bbox = (dist) => {
       cam.position.set(0, Math.sin(elev) * dist, Math.cos(elev) * dist);
       cam.lookAt(0, 0, 0);
       cam.updateMatrixWorld();
       cam.updateProjectionMatrix();
       let x0 = 9, x1 = -9, y0 = 9, y1 = -9;
-      rim.forEach((p) => { const q = p.clone().project(cam); x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y); });
+      rim.forEach((p) => { q.copy(p).project(cam); x0 = Math.min(x0, q.x); x1 = Math.max(x1, q.x); y0 = Math.min(y0, q.y); y1 = Math.max(y1, q.y); });
       return { x0, x1, y0, y1 };
     };
     // Room left for the two key chips along the bottom edge
@@ -300,6 +344,7 @@ class Radar {
     const cy = (b.y0 + b.y1) / 2 - (h > 260 ? 0.06 : 0);
     cam.setViewOffset(w, h, 0, -cy * h / 2, w, h);
     cam.updateProjectionMatrix();
+    return true;
   }
 
   // ---- API
@@ -318,7 +363,9 @@ class Radar {
   setBearing(deg) {
     if (typeof deg === 'number' && isFinite(deg)) {
       this.blipTarget = 1;
-      this.blipAng = THREE.MathUtils.degToRad(deg);
+      this.blipAngTarget = THREE.MathUtils.degToRad(deg);
+      // Not showing yet: start at the new angle rather than swing in from a stale one
+      if (this.blipOn < 0.05) this.blipAng = this.blipAngTarget;
     } else {
       this.blipTarget = 0;
     }
@@ -376,10 +423,16 @@ class Radar {
     this.ringOn += (this.ringOnTarget - this.ringOn) * Math.min(1, dt * 5);
     this.blipOn += (this.blipTarget - this.blipOn) * Math.min(1, dt * 8);
     this.smoke += (this.smokeTarget - this.smoke) * Math.min(1, dt * 5);
+    // The bearing point glides too, the short way round. Each compass update
+    // used to step it while everything else on the disc eased.
+    const TAU = Math.PI * 2;
+    let dAng = (((this.blipAngTarget - this.blipAng + Math.PI) % TAU) + TAU) % TAU - Math.PI;
+    if (this.blipOn < 0.05) { this.blipAng = this.blipAngTarget; dAng = 0; }
+    else this.blipAng += dAng * (this.calm ? 1 : Math.min(1, dt * 8));
 
     const u = this.uniforms;
     if (!this.calm) {
-      u.uTime.value += dt;
+      u.uTime.value = (u.uTime.value + dt) % TIME_WRAP;
       u.uSweep.value = (u.uSweep.value + dt * 2.1) % (Math.PI * 2);   // one turn every 3s
     }
     u.uRing.value = this.ringR;
@@ -399,7 +452,7 @@ class Radar {
     if (this.frameTimes.length > 60) this.frameTimes.shift();
 
     // Reduced motion: once everything has settled, stop until the next change.
-    if (this.calm && Math.abs(this.ringOn - this.ringOnTarget) < 0.01 && Math.abs(this.blipOn - this.blipTarget) < 0.01 && Math.abs(this.smoke - this.smokeTarget) < 0.01) this.stop();
+    if (this.calm && Math.abs(this.ringOn - this.ringOnTarget) < 0.01 && Math.abs(this.blipOn - this.blipTarget) < 0.01 && Math.abs(this.smoke - this.smokeTarget) < 0.01 && Math.abs(dAng) < 0.002) this.stop();
   }
 }
 
@@ -408,6 +461,9 @@ try {
   const canvas = document.getElementById('radar-canvas');
   const test = document.createElement('canvas');
   const gl = test.getContext('webgl2') || test.getContext('webgl');
+  // The probe has done its job: free its context now rather than leave it
+  // counting against the browser's live-context cap until GC gets to it.
+  if (gl) { const lose = gl.getExtension('WEBGL_lose_context'); if (lose) lose.loseContext(); }
   if (wrap && canvas && gl) {
     window.hotspotRadar = new Radar(wrap, canvas);
     // app.js may already have a reading (a reload mid-round resumes straight in)

@@ -18,7 +18,7 @@
   ];
 
   const instances = [];
-  window.hotspotScroll = { instances, ok: false, error: null };
+  window.hotspotScroll = { instances, ok: false, error: null, wake() {} };
 
   if (typeof Lenis === 'undefined') {
     window.hotspotScroll.error = 'Lenis not loaded';
@@ -37,12 +37,45 @@
         smoothWheel: true,
         syncTouch: true,
         syncTouchLerp: 0.1,
-        autoRaf: true
+        autoRaf: false
       });
-      instances.push({ id: wrapperId, lenis });
+      instances.push({ id: wrapperId, lenis, wrapper });
     });
     window.hotspotScroll.ok = instances.length > 0;
   } catch (e) {
     window.hotspotScroll.error = (e && e.message) || String(e);
   }
+  if (!instances.length) return;
+
+  // One frame loop for all three, and only while one of them is on screen.
+  // autoRaf would tick each instance forever, hidden or not: 180 wake-ups a
+  // second during a hunt for panels nobody can see.
+  const onScreen = (el) => el.getClientRects().length > 0;
+  let rafId = null;
+  const tick = (t) => {
+    rafId = null;
+    let shown = false;
+    instances.forEach(({ wrapper, lenis }) => {
+      if (onScreen(wrapper)) { shown = true; lenis.raf(t); }
+    });
+    if (shown) rafId = requestAnimationFrame(tick);
+  };
+  const wake = () => { if (rafId === null) rafId = requestAnimationFrame(tick); };
+  window.hotspotScroll.wake = wake;
+
+  // A panel appears when its screen gains 'active' or the diagnostics overlay
+  // is shown; both are attribute changes, so watch for those rather than ask
+  // app.js to call in.
+  if (typeof MutationObserver !== 'undefined') {
+    const mo = new MutationObserver(wake);
+    const watched = new Set();
+    instances.forEach(({ wrapper }) => {
+      watched.add(wrapper);
+      const screen = wrapper.closest('.screen');
+      if (screen) watched.add(screen);
+    });
+    watched.forEach((el) => mo.observe(el, { attributes: true, attributeFilter: ['class', 'style'] }));
+  }
+  document.addEventListener('visibilitychange', wake);
+  wake();
 })();

@@ -429,9 +429,12 @@
            collapses the ring to a point in their direction. -->
       <div id="seeker-pulse-ring" class="radar-wrap">
         <canvas id="radar-canvas" aria-hidden="true"></canvas>
-        <div class="radar-fallback" aria-hidden="true"></div>
+        <div class="radar-fallback" aria-hidden="true"><span class="radar-fallback-note">Radar is off.<br>The number below still works.</span></div>
         <svg id="bearing-arrow" class="bearing-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 19 21 12 17 5 21 12 2"/></svg>
         <div class="radar-key" aria-hidden="true"><span>You · center</span><span>Ring · how far the hider is</span></div>
+        <!-- Bearing ping hint. It sits on the radar it describes, so showing it
+             does not push the readout down and resize the panel. -->
+        <div id="bearing-note" aria-live="polite"></div>
       </div>
 
       <!-- The readout: what the seeker came for, on a solid panel -->
@@ -441,7 +444,6 @@
           <div id="seeker-band-label" class="seeker-band-label">STAND BY</div>
         </div>
         <div id="seeker-dist-readout"><span class="dist-main"></span><span class="dist-sub"></span><span class="dist-warn"></span></div>
-        <div id="bearing-note"></div>
       </section>
 
       <!-- Practice controls: move the pretend hider from the couch -->
@@ -668,7 +670,9 @@
   <!-- QR code for inviting players (drawn locally, nothing is sent anywhere) -->
   <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
   <script type="module" src="ambient.js?v=3.5.2"></script>
-  <script type="module" src="radar.js?v=3.5.2"></script>
+  <!-- If three.js never arrives (blocked or dead CDN) the radar module never
+       runs, so it cannot show its own fallback. The tag's error event does. -->
+  <script type="module" src="radar.js?v=3.5.2" onerror="var w=document.getElementById('seeker-pulse-ring');if(w)w.classList.add('no-webgl');window.hotspotRadarError=window.hotspotRadarError||'radar.js did not load'"></script>
 
   <script>
     if ('serviceWorker' in navigator) {
