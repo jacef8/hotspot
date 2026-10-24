@@ -1210,6 +1210,9 @@ class HotspotApp {
     if (data.type === 'HEARTBEAT' || data.type === 'PLAYER_JOIN' || data.type === 'PLAYER_UPDATE') {
       const p = data.player;
       if (p && p.id) {
+        // The direct link has no database rule behind it, so a role is one of
+        // the three known words or nothing. The heartbeat itself still counts.
+        if (p.role && !['hider', 'seeker', 'spectator'].includes(p.role)) p.role = '?';
         this.players[p.id] = { ...this.players[p.id], ...p, lastSeen: Date.now() };
 
         if (p.host) this.hostSeenAt = Date.now();
@@ -1278,7 +1281,7 @@ class HotspotApp {
         const rematchBtn = document.getElementById('btn-rematch');
         if (rematchBtn) rematchBtn.style.display = 'none';
         const wait = document.getElementById('rematch-wait');
-        if (wait) { wait.style.display = 'block'; wait.innerText = `${who} closed the room — no rematch`; }
+        if (wait) { wait.style.display = 'block'; wait.dataset.state = 'over'; wait.innerText = `${who} closed the room — no rematch`; }
         return;
       }
 
@@ -1442,17 +1445,28 @@ class HotspotApp {
     }
     // Focus goes back where it was when the pop-up closes.
     const opener = document.activeElement;
+    // Opening over the tail of the last one's fade: the dim is still up, so
+    // it does not fade in a second time.
+    const wasFading = scrim.classList.contains('closing');
+    this.endDialogFade(scrim);
+    scrim.classList.toggle('no-fade-in', wasFading);
     scrim.hidden = false;
     const done = (val) => {
       okBtn.onclick = cancelBtn.onclick = null;
       scrim.onkeydown = scrim.onclick = null;
       this.dialogDone = null;
+      // Closed at once for everything that asks (the back button, the next
+      // question); only the picture fades out.
       scrim.hidden = true;
+      // A pop-up already waiting opens once this one has gone, so the two
+      // never overlap. With none waiting, a new one may open straight away.
+      const waiting = !!(this.dialogQueue && this.dialogQueue.length);
+      if (!waiting) this.dialogOpen = false;
+      this.startDialogFade(scrim, waiting ? () => this.nextDialog() : null);
       if (opener && opener !== document.body && document.contains(opener)) {
         try { opener.focus({ preventScroll: true }); } catch (e) {}
       }
       item.resolve(val);
-      setTimeout(() => this.nextDialog(), 0);
     };
     this.dialogDone = done;
     okBtn.onclick = () => done(true);
@@ -1488,6 +1502,32 @@ class HotspotApp {
     }, 350);
     // Lets tests (and anything else) see what was shown.
     window.dispatchEvent(new CustomEvent('hotspot-dialog', { detail: { type: item.cancel ? 'confirm' : 'alert', text: item.message.replace(/\n+/g, ' | ') } }));
+  }
+
+  // The pop-up used to vanish in one frame while it slid in on the way up.
+  // It is already hidden; the .closing class keeps it drawn (and untappable)
+  // while the dim and the sheet fade, then lets it go and runs `then`. No
+  // fade when the phone asks for less motion.
+  startDialogFade(scrim, then) {
+    const still = !window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (still) { if (then) setTimeout(then, 0); return; }
+    scrim.classList.remove('no-fade-in');
+    scrim.classList.add('closing');
+    const end = (e) => {
+      if (e && e.target !== scrim) return;   // the sheet's own fade bubbles up too
+      this.endDialogFade(scrim);
+      if (then) then();
+    };
+    this.dialogFadeEnd = end;
+    scrim.addEventListener('animationend', end);
+    this.dialogFadeTimer = setTimeout(end, 200);   // in case animationend never comes
+  }
+
+  endDialogFade(scrim) {
+    clearTimeout(this.dialogFadeTimer);
+    if (this.dialogFadeEnd) scrim.removeEventListener('animationend', this.dialogFadeEnd);
+    this.dialogFadeEnd = null;
+    scrim.classList.remove('closing');
   }
 
   // Tell the player something. Does not block the code that called it.
@@ -1743,7 +1783,11 @@ class HotspotApp {
   // an empty list (not even themselves) until somebody else's heartbeat arrived.
   enterLobby() {
     const codeEl = document.getElementById('lobby-code-display');
-    if (codeEl) codeEl.innerText = this.roomCode;
+    if (codeEl) {
+      codeEl.innerText = this.roomCode;
+      // Spaced out so a screen reader says each character, not a made-up word.
+      codeEl.setAttribute('aria-label', `Room code ${String(this.roomCode).split('').join(' ')}, tap to invite`);
+    }
     this.fillNameInputs();
     this.showScreen('lobby-screen');
     this.lobbyEnteredAt = Date.now();
@@ -1954,6 +1998,7 @@ class HotspotApp {
     const wait = document.getElementById('rematch-wait');
     if (wait) {
       wait.style.display = canRematch ? 'none' : 'block';
+      wait.dataset.state = next ? '' : 'over';   // "over": nothing left to wait for, so no pulsing dot
       wait.innerText = next
         ? `${name || 'The next hider'} left. ${next.name || 'The host'} hides next and can start the rematch.`
         : `${name || 'The next hider'} left. Start a new hunt from Home.`;
@@ -1993,7 +2038,7 @@ class HotspotApp {
   }
 
   async resetSeasonRecords() {
-    if (await this.ask('Start a new season?\n\nThis resets your Hunts, Fastest Tag and Longest Hide back to zero.', 'Reset', 'Keep', true)) {
+    if (await this.ask('Start a new season?\n\nThis resets your Hunts, Best tag and Best hide back to zero.', 'Reset', 'Keep', true)) {
       try {
         localStorage.removeItem('hotspot_stats');
       } catch(e) {}
@@ -2329,7 +2374,7 @@ class HotspotApp {
     const now = Date.now();
     const roster = Object.values(this.players).map(p => {
       const age = p.lastSeen ? Math.round((now - p.lastSeen) / 1000) + 's' : 'self';
-      return `${window.hsEscape(p.name || '?')} [${p.role || '?'}] ${age}`;
+      return `${window.hsEscape(p.name || '?')} [${window.hsEscape(String(p.role || '?'))}] ${age}`;
     });
     const row = (k, v, bad) =>
       `<div style="display:flex;justify-content:space-between;gap:10px;padding:2px 0;">
@@ -2825,6 +2870,7 @@ class HotspotApp {
         const activeHider = this.getActiveHider();
         const next = tag ? tag.seekerName : (activeHider && activeHider.name);
         wait.style.display = (inRoom && !canRematch) ? 'block' : 'none';
+        wait.dataset.state = '';
         wait.innerText = `Waiting for ${next || 'the next Hider'} to start a rematch`;
       }
     }
@@ -3923,10 +3969,13 @@ class HotspotApp {
       const elFastest = document.getElementById('stat-fastest-tag');
       const elLongest = document.getElementById('stat-longest-hide');
 
+      // "45s" under a minute, then minutes and seconds: "300s" meant nothing
+      // to a child, "5:00" does.
+      const fmtDur = (sec) => sec < 60 ? `${sec}s` : `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
       if (elHunts) elHunts.innerText = stats.totalHunts;
-      if (elFastest) elFastest.innerText = stats.fastestTagSec === 9999 ? '--' : `${stats.fastestTagSec}s`;
+      if (elFastest) elFastest.innerText = stats.fastestTagSec === 9999 ? '--' : fmtDur(stats.fastestTagSec);
       // "--" until this phone has hidden once, the same as Best tag.
-      if (elLongest) elLongest.innerText = stats.longestHideSec ? `${stats.longestHideSec}s` : '--';
+      if (elLongest) elLongest.innerText = stats.longestHideSec ? fmtDur(stats.longestHideSec) : '--';
 
       // Give each number a ring. Scales chosen so a normal season reads mid-arc
       // rather than pinned: 20 hunts, a 20s tag, a 5 minute hide.

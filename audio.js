@@ -105,8 +105,12 @@ class HotspotAudio {
     try { saved = localStorage.getItem('hotspot_voice') || 'auto'; } catch (e) {}
     const auto = list[0];
     const esc = window.hsEscape || ((x) => x);
+    // "Microsoft David - English (United States)" was cut to "Auto: Microsoft
+    // Dav" on a phone. The picker shows just "Auto: David"; the full name is
+    // in its tooltip and in the list below it.
+    const short = String(auto.name).replace(/^(Microsoft|Google|Apple)\s+/i, '').replace(/\s+-\s+.*$/, '').trim() || auto.name;
     sel.innerHTML =
-      `<option value="auto">Auto: ${esc(auto.name)}</option>` +
+      `<option value="auto" title="${esc(auto.name)}">Auto: ${esc(short)}</option>` +
       list.map(v => `<option value="${esc(v.voiceURI || v.name)}">${esc(v.name)} (${esc(v.lang)})</option>`).join('');
     sel.value = [...sel.options].some(o => o.value === saved) ? saved : 'auto';
     sel.onchange = () => {

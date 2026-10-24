@@ -35,19 +35,31 @@
   --ink-2: #2E3641;       /* secondary, ~12:1 */
   --ink-3: #4A5462;       /* labels, ~7.8:1 */
 
-  --accent: #0A5BC4;      /* cold blue, 6.5:1 on white */
+  --accent: #084FAB;      /* cold blue, 7.7:1 on white (and white on it) */
   --accent-ink: #FFFFFF;  /* text on accent */
   --accent-soft: #DCE7F7;
 
   --ok: #137A3F;
-  --warn: #8A5300;        /* warning text on light */
+  --warn: #704100;        /* warning text on light, 7.2:1 on the ground */
   --warn-fill: #F5A524;   /* warning background, dark text on it */
   --warn-fill-ink: #1C1100;
-  --bad: #B3261E;
-  --bad-fill: #C62828;
+  --bad: #9E1C1C;         /* 8.0:1 on white */
+  --bad-fill: #9E1C1C;    /* white on it 8.0:1: the banners, Leave */
   --bad-fill-ink: #FFFFFF;
   --ok-fill: #DCF1E3;
   --ok-fill-ink: #0D3B20;
+
+  /* Quick messages: dark on light by day. At night a near-white strip was
+     the brightest thing on the screen, so it is a raised dark panel with an
+     edge that shows on the black ground. */
+  --toast-bg: var(--ink);
+  --toast-ink: var(--bg);
+  --toast-edge: var(--ink);
+
+  /* The same in both modes */
+  --scrim: rgba(2, 4, 10, .62);   /* dims the screen behind a pop-up */
+  --qr-paper: #FFFFFF;            /* a QR code scans best dark on plain white */
+  --qr-ink: #0B0D13;
 
   /* Heat ramp: distance only */
   --heat-cold: #2F6FD6;
@@ -65,18 +77,13 @@
   --tap: 56px;
   --hud: color-mix(in srgb, var(--accent) 70%, transparent);   /* cockpit corner brackets */ /* Field: gloves, cold hands, moving */
 
+  /* Two spacings: between buttons in a row, and under each stacked panel */
+  --gap: 8px;
+  --stack: 10px;
+
   --font-display: 'Archivo', system-ui, sans-serif;
   --font-text: 'Atkinson Hyperlegible Next', 'Atkinson Hyperlegible', system-ui, sans-serif;
   --font-mono: 'Atkinson Hyperlegible Mono', ui-monospace, Menlo, Consolas, monospace;
-
-  /* Older names still used in markup and scripts */
-  --e0: var(--bg); --e1: var(--surface); --e1-hi: var(--surface);
-  --e2: var(--surface); --e2-hi: var(--surface); --recess: var(--surface-2);
-  --heat-1: var(--heat-warm); --heat-2: var(--heat-hot); --heat-3: var(--heat-redhot);
-  --good: var(--ok); --accent-2: var(--accent);
-  --text-main: var(--ink); --text-light: var(--ink); --text-muted: var(--ink-3);
-  --accent-cyan: var(--accent); --accent-amber: var(--warn); --primary-blaze: var(--heat-hot);
-  --danger-red: var(--bad); --card-bg: var(--surface); --slate-cold: var(--ink-3);
 }
 
 /* Night mode: deep space. Navy-black ground, solid dark panels, cool white
@@ -108,6 +115,9 @@
     --bad-fill-ink: #FFF4F2;
     --ok-fill: #1C3326;
     --ok-fill-ink: #CFF2DA;
+    --toast-bg: var(--surface-3);
+    --toast-ink: var(--ink);
+    --toast-edge: var(--field-edge);
     --heat-cold: #6FA6FF;
     --heat-warm: #E9A23B; --band-warm-ink: #E9A23B;
     --heat-hot: #FF7A3D;
@@ -143,6 +153,9 @@
   --bad-fill-ink: #FFF4F2;
   --ok-fill: #1C3326;
   --ok-fill-ink: #CFF2DA;
+  --toast-bg: var(--surface-3);
+  --toast-ink: var(--ink);
+  --toast-edge: var(--field-edge);
   --heat-cold: #6FA6FF;
   --heat-warm: #E9A23B; --band-warm-ink: #E9A23B;
   --heat-hot: #FF7A3D;
@@ -201,15 +214,17 @@ svg.ic { width: 22px; height: 22px; flex: 0 0 auto; display: block; }
   text-align: center; line-height: 1.3;
   display: none; flex-shrink: 0;
   position: relative; z-index: 40;
-  cursor: pointer;
 }
+/* Only the GPS banner does something when tapped; the sync banner is a notice */
+#gps-warning-banner { cursor: pointer; }
+#gps-warning-banner:focus-visible { outline: 3px solid var(--bad-fill-ink); outline-offset: -6px; }
 
 .top-bar {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  display: flex; align-items: center; justify-content: space-between; gap: var(--gap);
   padding: 10px 14px 6px;
   flex-shrink: 0; position: relative; z-index: 20;
 }
-.top-actions { display: flex; gap: 8px; flex: 0 0 auto; }
+.top-actions { display: flex; gap: 10px; flex: 0 0 auto; }
 
 /* The GPS line is a real button, as tall as the icons beside it: the GPS
    messages tell players to tap it. A long state ("GPS WEAK ±60 ft") wraps to
@@ -322,6 +337,7 @@ h2.brand-title { font-weight: 800; line-height: 1.05; }
 }
 /* Only the build tag does anything when tapped (it opens diagnostics) */
 .tele-tap { cursor: pointer; }
+.tele-tap:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
 /* ------------------------------------------------------------------ cards */
 .card, .hider-radar-box, #solo-controls-card {
@@ -330,7 +346,7 @@ h2.brand-title { font-weight: 800; line-height: 1.05; }
   border-radius: var(--r);
   box-shadow: var(--raise);
   padding: 14px;
-  margin-bottom: 10px;
+  margin-bottom: var(--stack);
   position: relative;
   min-height: 0;
 }
@@ -355,7 +371,7 @@ h2.brand-title { font-weight: 800; line-height: 1.05; }
   font-family: var(--font-display);
   font-size: 17px; font-weight: 800; letter-spacing: 0;
   display: flex; align-items: center; justify-content: center; gap: 10px;
-  margin-bottom: 10px;
+  margin-bottom: var(--stack);
   cursor: pointer; flex-shrink: 0;
   background: var(--surface);
   color: var(--ink);
@@ -364,7 +380,11 @@ h2.brand-title { font-weight: 800; line-height: 1.05; }
   position: relative; z-index: 20;
 }
 .btn:last-child { margin-bottom: 0; }
-.btn:hover { background: var(--surface-2); }
+/* Hover shades only where there is a real pointer: a phone keeps :hover on
+   the last button tapped, so it sat looking half pressed. */
+@media (hover: hover) {
+  .btn:hover { background: var(--surface-2); }
+}
 .btn:active { transform: scale(.985); box-shadow: var(--press); }
 .btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 .btn:disabled { opacity: 1; background: var(--surface-3); color: var(--ink-3); border-color: var(--line); box-shadow: none; cursor: default; }
@@ -376,7 +396,9 @@ h2.brand-title { font-weight: 800; line-height: 1.05; }
   color: var(--accent-ink);
   border-color: transparent;
 }
-.btn-primary:hover { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
+@media (hover: hover) {
+  .btn-primary:hover { background: color-mix(in srgb, var(--accent) 88%, var(--ink)); }
+}
 
 .btn-secondary { /* the default solid button */ }
 
@@ -399,7 +421,7 @@ h2.brand-title { font-weight: 800; line-height: 1.05; }
 .btn-solo { color: var(--accent); }
 
 /* Practice controls: three equal buttons, the same height even when a label wraps */
-.solo-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: stretch; }
+.solo-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--gap); align-items: stretch; }
 .solo-row .btn { height: auto; min-height: var(--tap); margin: 0; padding: 8px 6px; font-size: 17px; line-height: 1.15; text-align: center; }
 
 .btn-powerup {
@@ -421,7 +443,7 @@ h2.brand-title { font-weight: 800; line-height: 1.05; }
 .btn-powerup:disabled { opacity: 1; background: var(--surface-3); color: var(--ink-3); box-shadow: none; cursor: default; }
 .btn-powerup:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
-.powerup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.powerup-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
 
 /* Cooldown bar along the foot of a power-up button */
 .btn-powerup, #btn-bearing-ping { position: relative; overflow: hidden; }
@@ -531,20 +553,30 @@ button.cooling .cd-bar { opacity: 1; }
 }
 .roster-note.warn { color: var(--warn); margin-bottom: 8px; }
 
+/* "Waiting for Lexi to start the hunt": a status line, not a button. It
+   used to wear the button's box and got tapped; now it is plain text with
+   a slow pulsing dot that says something is still to come (app.js shows
+   it as a block, so the dot sits in the line). No dot once nothing is. */
 .lobby-wait {
   flex-shrink: 0;
   text-align: center;
-  min-height: var(--tap);
-  display: flex; align-items: center; justify-content: center;
-  padding: 12px;
-  border-radius: var(--r-s);
-  background: var(--surface-2);
-  border: 1px solid var(--line);
+  padding: 8px 12px;
+  background: transparent;
   font-family: var(--font-text);
   font-size: 16px; font-weight: 700; line-height: 1.3;
   color: var(--ink-2);
-  margin-bottom: 10px;
+  margin-bottom: var(--stack);
 }
+.lobby-wait::before {
+  content: ""; display: inline-block; vertical-align: .1em;
+  width: 10px; height: 10px; margin-right: 10px; border-radius: 50%;
+  background: currentColor;
+}
+.lobby-wait[data-state="over"]::before { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .lobby-wait::before { animation: wait-pulse 1.6s ease-in-out infinite; }
+}
+@keyframes wait-pulse { 50% { opacity: .3; transform: scale(.7); } }
 .lobby-wait:last-child { margin-bottom: 0; }
 .lobby-wait[data-state="lost"] { color: var(--warn); }
 
@@ -566,8 +598,20 @@ button.cooling .cd-bar { opacity: 1; }
   font-variant-numeric: tabular-nums;
   color: var(--ink);
   line-height: 1.05;
-  cursor: pointer;
 }
+/* The lobby's code opens the invite. A real button only as wide as the
+   code, with clear space under it so a tap aimed at the name line below
+   cannot land on it. */
+button.room-code {
+  display: block; width: fit-content; max-width: 100%;
+  margin: 0 auto 6px; padding: 0 6px;
+  background: none; border: 0; border-radius: var(--r-s);
+  font-stretch: normal;
+  cursor: pointer;
+  position: relative; z-index: 20;
+}
+button.room-code:active { background: var(--surface-2); }
+button.room-code:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
 /* ============================== HUNT SCREENS ===============================
    Seeker: rail -> boundary -> radar (fills) -> readout -> bearing ping.
@@ -652,6 +696,7 @@ button.cooling .cd-bar { opacity: 1; }
   box-shadow: var(--raise);
   overflow: hidden;
   margin-bottom: 10px;
+  touch-action: none;   /* fingers resting on the radar never zoom the page */
 }
 #radar-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 /* Without WebGL, or after the phone takes it away: plain range rings and a
@@ -819,8 +864,9 @@ button.cooling .cd-bar { opacity: 1; }
 .home-start .btn-host .ic { width: 24px; height: 24px; }
 .home-pair { margin-top: 10px; }
 .home-pair .btn { margin: 0; }
-.voice-row { display: flex; align-items: center; gap: 8px; }
-.voice-row .select-input { flex: 1; min-width: 0; margin: 0; }
+.voice-row { display: flex; align-items: center; gap: var(--gap); }
+/* A long voice name ends in "…" instead of being cut mid-word */
+.voice-row .select-input { flex: 1; min-width: 0; margin: 0; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
 .btn-test { width: auto; margin: 0; padding: 12px 16px; }
 .btn-test .ic { width: 18px; height: 18px; }
 .btn-quiet {
@@ -876,13 +922,14 @@ button.cooling .cd-bar { opacity: 1; }
 
 /* ---------------------------------------------------------- short screens */
 @media (max-height: 720px) {
+  :root { --stack: 8px; }
   .screen { padding: 4px 12px 10px; }
   .brand-title { font-size: clamp(32px, 10vw, 42px); }
   .scope-head, .brand-header { margin-bottom: 6px; }
-  .card { padding: 11px; margin-bottom: 8px; }
+  .card { padding: 11px; }
   .card-title { margin-bottom: 6px; }
   .scope-meta { margin-top: 6px; }
-  .btn { padding: 8px 14px; margin-bottom: 8px; }
+  .btn { padding: 8px 14px; }
   .input-group { margin-bottom: 8px; }
   .stat-box { padding: 7px 9px 9px; }
   .stat-val { font-size: 24px; }
@@ -911,9 +958,9 @@ button.cooling .cd-bar { opacity: 1; }
 /* The install shortcut is the first thing to go when the records need its room */
 @media (max-height: 800px) { .btn-install { display: none !important; } }
 @media (max-height: 660px) {
-  .top-bar { padding: 6px 12px 4px; }
-  .icon-btn { width: 50px; height: 50px; }
-  .accuracy-tag { min-height: 50px; }
+  /* The top bar gives up its padding, never the 56px buttons: Home ends the
+     hunt for everyone and must not be a near miss */
+  .top-bar { padding: 4px 12px 2px; }
   .card, #home-screen .card { padding: 10px; margin-bottom: 7px; }
   /* Short phones keep the ring's meaning as one small chip on the panel's
      bottom edge; "you are the center" is the one that goes. */
@@ -925,6 +972,7 @@ button.cooling .cd-bar { opacity: 1; }
 @media (prefers-reduced-motion: reduce) {
   .screen.active, .flash-screen { animation: none !important; }
   .btn, .icon-btn, .cd-bar i { transition: none !important; }
+  .btn-powerup, .cd-bar, .bearing-arrow, .readout::before, .stat-bar i { transition: none !important; }
 }
 
 /* ======================== INTERSTELLAR LAYER ===============================
@@ -979,11 +1027,24 @@ button.cooling .cd-bar { opacity: 1; }
 /* -------------------------------------------------------------- dialog */
 .dialog-scrim {
   position: fixed; inset: 0; z-index: 10000;
-  background: rgba(2, 4, 10, .62);
+  background: var(--scrim);
   display: flex; align-items: flex-end; justify-content: center;
   padding: 16px;
 }
 .dialog-scrim[hidden] { display: none; }
+/* The dim fades in under the sheet instead of snapping to black, and both
+   fade out on close: app.js keeps a closed pop-up drawn, untappable, for
+   the 150 ms that takes. A pop-up opening while the last one fades skips
+   the second fade-in. */
+@media (prefers-reduced-motion: no-preference) {
+  .dialog-scrim:not([hidden]) { animation: scrim-in .15s ease-out both; }
+  .dialog-scrim.no-fade-in:not([hidden]) { animation: none; }
+  .dialog-scrim[hidden].closing { display: flex; pointer-events: none; animation: scrim-out .15s ease-in both; }
+  .dialog-scrim.closing .dialog { animation: dialog-out .15s ease-in both; }
+}
+@keyframes scrim-in { from { opacity: 0; } }
+@keyframes scrim-out { to { opacity: 0; } }
+@keyframes dialog-out { to { opacity: 0; transform: translateY(16px); } }
 .dialog {
   width: 100%; max-width: 440px;
   background: var(--surface);
@@ -1005,7 +1066,7 @@ button.cooling .cd-bar { opacity: 1; }
   margin-bottom: 8px;
 }
 .dialog-body { font-size: 17px; line-height: 1.4; color: var(--ink-2); white-space: pre-line; }
-.dialog-actions { display: flex; gap: 10px; margin-top: 18px; }
+.dialog-actions { display: flex; gap: var(--gap); margin-top: 18px; }
 .dialog-actions .btn { margin: 0; flex: 1; }
 .btn-danger { background: var(--bad-fill); color: var(--bad-fill-ink); border-color: transparent; }
 
@@ -1018,7 +1079,8 @@ button.cooling .cd-bar { opacity: 1; }
   transform: translate(-50%, calc(-100% - 28px));
   opacity: 0;
   max-width: min(440px, calc(100vw - 32px));
-  background: var(--ink); color: var(--bg);
+  background: var(--toast-bg); color: var(--toast-ink);
+  border: 1px solid var(--toast-edge);
   font-size: 16px; font-weight: 700;
   padding: 12px 18px; border-radius: var(--r-s);
   box-shadow: var(--raise);
@@ -1070,6 +1132,7 @@ button.cooling .cd-bar { opacity: 1; }
   margin-bottom: 10px;
   overflow: hidden;
   position: relative; z-index: 1;
+  touch-action: none;   /* a pinch here zooms the map, not the whole page */
 }
 .map-recenter-btn { margin-bottom: 8px; }
 /* The replay scrubber: a 44px strip with a thumb-sized knob, so a grandparent
@@ -1102,9 +1165,11 @@ button.cooling .cd-bar { opacity: 1; }
 }
 
 /* ------------------------------------------------------- invite (restored) */
-.lobby-actions { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 9px; }
+.lobby-actions { display: grid; grid-template-columns: 1fr auto; gap: var(--gap); margin-bottom: var(--stack); }
 .lobby-actions .btn { margin-bottom: 0; }
 .lobby-actions #btn-invite { width: auto; padding-left: 14px; padding-right: 14px; }
+/* A size smaller than the shared icon: the role label beside it needs the width */
+.lobby-actions #btn-invite .ic { width: 18px; height: 18px; }
 .overlay {
   position: fixed; inset: 0; z-index: 9000;
   background: var(--bg);
@@ -1130,19 +1195,21 @@ button.cooling .cd-bar { opacity: 1; }
   width: min(66vw, 280px); aspect-ratio: 1;
   padding: 14px;
   border-radius: var(--r);
-  background: #FFFFFF;
+  background: var(--qr-paper);
   border: 1px solid var(--line);
   box-shadow: var(--raise);
   display: grid; place-items: center;
   flex-shrink: 0;
 }
 .qr-tile svg { width: 100%; height: 100%; display: block; }
-.qr-missing { font-family: var(--font-text); font-size: 15px; font-weight: 700; line-height: 1.3; color: #0B0D13; text-align: center; }
+.qr-missing { font-family: var(--font-text); font-size: 15px; font-weight: 700; line-height: 1.3; color: var(--qr-ink); text-align: center; }
 .invite-hint { font-family: var(--font-text); font-size: 15px; font-weight: 700; color: var(--ink-2); margin-top: 4px; }
+/* The full link, readable enough to read out: body size, in a weight the
+   mono font is actually loaded in */
 .invite-link {
   font-family: var(--font-mono);
-  font-size: 13px; line-height: 1.4;
-  color: var(--ink-3);
+  font-size: 14px; font-weight: 500; line-height: 1.4;
+  color: var(--ink-2);
   margin-top: 8px;
   text-align: center; word-break: break-all;
   user-select: text; -webkit-user-select: text;
@@ -1174,6 +1241,7 @@ button.cooling .cd-bar { opacity: 1; }
 
 /* The top bar clears the phone's own status bar when installed */
 .top-bar { padding-top: max(10px, env(safe-area-inset-top)); }
+@media (max-height: 660px) { .top-bar { padding-top: max(4px, env(safe-area-inset-top)); } }
 
 /* Map could not load: readable in both modes */
 .map-empty { display: flex; align-items: center; justify-content: center; height: 100%; min-height: 150px; padding: 12px; text-align: center; font-size: 16px; font-weight: 700; color: var(--ink-2); background: var(--surface-2); border-radius: var(--r); }
