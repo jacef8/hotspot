@@ -320,7 +320,9 @@ class Radar {
     const cam = this.camera;
     cam.aspect = w / h;
     cam.clearViewOffset();
-    const elev = THREE.MathUtils.degToRad(h > w * 0.85 ? 60 : h > w * 0.6 ? 54 : 46);
+    // A panel much taller than wide (big phones) looks down steeper still, so
+    // the disc stands rounder and taller instead of leaving empty bands.
+    const elev = THREE.MathUtils.degToRad(h > w * 1.15 ? 72 : h > w * 0.85 ? 60 : h > w * 0.6 ? 54 : 46);
     const rim = this.rimPts, q = this.proj;
     const bbox = (dist) => {
       cam.position.set(0, Math.sin(elev) * dist, Math.cos(elev) * dist);

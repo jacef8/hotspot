@@ -188,7 +188,7 @@
         </button>
         <div class="powerup-grid home-pair">
           <button class="btn btn-secondary" onclick="window.hotspotApp.showScreen('join-screen')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg><span>Join</span></button>
-          <button class="btn btn-secondary" onclick="window.hotspotApp.showScreen('join-spectator-screen')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg><span>Spectate</span></button>
+          <button class="btn btn-secondary" onclick="window.hotspotApp.showScreen('join-spectator-screen')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg><span>Watch</span></button>
         </div>
         <!-- Said before the phone asks, so the location prompt is no surprise -->
         <p class="home-note">This game uses your phone's location.</p>
@@ -196,7 +196,7 @@
 
       <div class="card home-practice">
         <div class="card-title">Practice alone</div>
-        <p class="solo-hint">A pretend hider stands 300 ft away so you can learn the radar, the buzzes and the voice.</p>
+        <p class="solo-hint">Learn the radar indoors. No GPS needed.</p>
         <button class="btn btn-solo" onclick="window.hotspotApp.startSoloDrill()">
           <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><span>Start practice</span>
         </button>
@@ -396,7 +396,7 @@
     <!-- ==================== SCREEN 5: JOIN SPECTATOR ==================== -->
     <div id="join-spectator-screen" class="screen">
       <div class="brand-header">
-        <h2 class="brand-title" style="font-size: 24px;">Spectate</h2>
+        <h2 class="brand-title" style="font-size: 24px;">Watch</h2>
       </div>
 
       <div class="card setup-card">
@@ -408,7 +408,7 @@
       </div>
 
       <button class="btn btn-primary" onclick="window.joinSpectatorAction()">
-        Join as Spectator
+        Join to watch
       </button>
     </div>
 
@@ -439,21 +439,28 @@
       </div>
 
       <!-- The readout: what the seeker came for, on a solid panel -->
-      <section id="seeker-readout" class="readout notice" aria-live="polite" aria-label="Distance to the hider">
+      <!-- Screen readers hear the band word when it changes and the number in
+           steps (the hidden line), never every frame of the gliding number. -->
+      <section id="seeker-readout" class="readout notice" aria-label="Distance to the hider">
         <div class="readout-band">
           <div class="readout-kicker">Hider is</div>
-          <div id="seeker-band-label" class="seeker-band-label">STAND BY</div>
+          <div id="seeker-band-label" class="seeker-band-label" aria-live="polite" aria-atomic="true">STAND BY</div>
         </div>
-        <div id="seeker-dist-readout"><span class="dist-main"></span><span class="dist-sub"></span><span class="dist-warn"></span></div>
+        <div id="seeker-dist-readout"><span class="dist-main" aria-hidden="true"></span><span class="dist-sub"></span><span class="dist-warn"></span></div>
+        <span id="seeker-dist-sr" class="sr-only" aria-live="polite" aria-atomic="true"></span>
       </section>
 
       <!-- Practice controls: move the pretend hider from the couch -->
       <div id="solo-controls-card" class="card" style="display: none; margin-bottom: 8px;">
         <div class="card-title">Practice controls</div>
-        <div style="display: flex; gap: 6px;">
-          <button class="btn btn-secondary" style="flex: 1; font-size: 14px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(-75)">Walk -75ft</button>
-          <button class="btn btn-secondary" style="flex: 1; font-size: 14px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(75)">Move +75ft</button>
-          <button class="btn btn-primary" style="flex: 1; font-size: 14px; padding: 8px; background: var(--bad);" onclick="window.hotspotApp.instantTagSoloHider()">Tag Hider</button>
+        <!-- All plain buttons: the ping below stays the one primary, and red is
+             for danger, which a practice tag is not. Each move is 75 ft; the
+             label leaves the number out so it fits on two lines, and the
+             readout and the voice give the new distance at once. -->
+        <div class="solo-row">
+          <button class="btn btn-secondary" aria-label="Pretend hider 75 feet closer" onclick="window.hotspotApp.moveSoloHider(-75)">Hider closer</button>
+          <button class="btn btn-secondary" aria-label="Pretend hider 75 feet farther" onclick="window.hotspotApp.moveSoloHider(75)">Hider farther</button>
+          <button class="btn btn-secondary" onclick="window.hotspotApp.instantTagSoloHider()">Tag now</button>
         </div>
       </div>
 
@@ -481,16 +488,17 @@
       <!-- The one number the hider watches, filling the screen -->
       <div class="card hider-radar-box">
         <div class="readout-kicker">Nearest seeker</div>
-        <div id="hider-nearest-dist" class="hider-dist-num">--ft</div>
+        <div id="hider-nearest-dist" class="hider-dist-num">-- ft</div>
         <div class="hider-note">Silent — only you can see this</div>
       </div>
 
       <button id="btn-hider-ready" class="btn btn-primary" onclick="window.hotspotApp.hiderReadyEarly()">
-        I'm hidden — start the hunt now
+        I'm hidden — start the hunt
       </button>
 
       <div class="card" style="margin-bottom: 0;">
-        <div class="card-title">Powerups · back after a cooldown</div>
+        <div class="card-title">Powerups</div>
+        <p class="powerup-note">Each one comes back after a short wait.</p>
         <div class="powerup-grid">
           <button id="btn-powerup-decoy" class="btn-powerup" data-label="Decoy (30s)" data-short="Decoy" onclick="window.hotspotApp.usePowerup('decoy')">
             <span class="btn-text">Decoy (30s)</span>
@@ -556,7 +564,7 @@
 
       <div id="replay-card" class="card" style="margin-bottom: 8px;">
         <div class="card-title">Watch the hunt again</div>
-        <input type="range" id="replay-slider" min="0" max="100" value="0" style="width: 100%; margin-bottom: 8px;" oninput="window.hotspotReplay.stepReplay(this.value)">
+        <input type="range" id="replay-slider" min="0" max="100" value="0" aria-label="Replay position" oninput="window.hotspotReplay.stepReplay(this.value)">
         <!-- One button: Play while paused, Pause while playing. Rematch below
              is the only primary action on this screen. -->
         <button id="btn-replay-toggle" class="btn btn-secondary" style="padding: 10px; margin-bottom: 0;" onclick="window.hotspotReplay.toggleReplay((pct) => document.getElementById('replay-slider').value = pct)">

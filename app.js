@@ -1037,7 +1037,7 @@ class HotspotApp {
         else if (p.role === 'hider') right = 'Hiding';
         else if (hasPos(hider)) {
           const d = window.hotspotGeo.calculateDistance(p.lat, p.lng, hider.lat, hider.lng);
-          right = d > 300 ? `${Math.round(d / 3)} <span class="badge-unit">yd</span>` : `${Math.round(d)} <span class="badge-unit">ft</span>`;
+          right = `<span class="badge-unit">${this.fmtDist(d)}</span>`;
         } else right = '—';
         return `
           <div class="player-badge ${p.role}">
@@ -1120,7 +1120,9 @@ class HotspotApp {
     } else if (this.hiderSilentMs > 18000) {
       if (!this.hiderWarnSpoken) {
         this.hiderWarnSpoken = true;
-        window.hotspotAudio.speak('Warning! Hider connection lost. Waiting for signal.');
+        // The screen's words, and no number: a countdown would be stale by the
+        // time the voice finished it.
+        window.hotspotAudio.speak('Hider offline. The hunt may cancel soon.');
       }
     } else {
       this.hiderWarnSpoken = false;
@@ -1363,8 +1365,11 @@ class HotspotApp {
 
     if (data.type === 'SMOKE') {
       if (this.role !== 'seeker') return;
-      this.triggerSmokeVisual(true);
-      setTimeout(() => this.triggerSmokeVisual(false), data.durationMs || 15000);
+      const ms = data.durationMs || 15000;
+      // Said aloud as the decoy is, so a seeker not looking still knows.
+      window.hotspotAudio.speak(`Smoke! Your radar is blind for ${Math.round(ms / 1000)} seconds.`);
+      this.triggerSmokeVisual(true, ms);
+      setTimeout(() => this.triggerSmokeVisual(false), ms);
       return;
     }
   }
@@ -1811,7 +1816,7 @@ class HotspotApp {
       return;
     }
     if (this.role !== 'hider' && this.role !== 'spectator' && !this.isRoomHost) {
-      this.notify('Only the next Hider, a Spectator or the host can start the rematch.');
+      this.notify('Only the next Hider, a watcher or the host can start the rematch.');
       return;
     }
     // A host whose phone died never got to close the room. Don't rematch into it.
@@ -1910,7 +1915,8 @@ class HotspotApp {
         question = 'Leave the hunt?\n\nYou are the Hider — leaving ends the hunt for everyone.';
       } else if (inRound && this.isRoomHost) {
         question = 'Leave the hunt?\n\nYou are the host — leaving closes the room for everyone.';
-      } else if (inRound) {
+      } else if (inRound && this.role !== 'spectator') {
+        // A watcher leaving costs nobody their game, so they just go.
         question = 'Leave the hunt?';
       } else if (this.isRoomHost && others > 0) {
         question = 'Close the room?\n\nYou are the host — everyone else will be sent home.';
@@ -2306,7 +2312,7 @@ class HotspotApp {
       row('direct links', this.peerCount(), this.peerCount() === 0) +
       row('peer error', this.lastPeerError ? window.hsEscape(this.lastPeerError) : 'none', !!this.lastPeerError) +
       '<hr style="border:0;border-top:1px solid rgba(255,255,255,.12);margin:6px 0">' +
-      row('GPS accuracy', this.hasGpsFix ? '±' + Math.round(this.myPosition.accuracy) + 'ft' : 'NO FIX', !this.hasGpsFix) +
+      row('GPS accuracy', this.hasGpsFix ? '±' + this.fmtDist(this.myPosition.accuracy, false) : 'NO FIX', !this.hasGpsFix) +
       row('players seen', roster.length) +
       `<div style="margin-top:4px;opacity:.75;word-break:break-word">${roster.join('<br>') || '(nobody)'}</div>`;
   }
@@ -2420,7 +2426,7 @@ class HotspotApp {
     if (Date.now() - (this.lobbyEnteredAt || 0) < 700) return;
 
     if (this.role !== 'hider' && this.role !== 'spectator' && !this.isRoomHost) {
-      this.notify('Only the Hider, a Spectator or the host can start the round.');
+      this.notify('Only the Hider, a watcher or the host can start the round.');
       return;
     }
 
@@ -2606,7 +2612,7 @@ class HotspotApp {
       document.querySelectorAll('.headstart-counter').forEach(el => el.innerText = 'HUNT LIVE');
       const hiderCounter = document.getElementById('hider-timer-display');
       if (hiderCounter) hiderCounter.innerText = 'HUNT LIVE';
-      if (this.role === 'hider') this.setHiderPanel('Nearest seeker', '--ft', 'Silent — only you can see this');
+      if (this.role === 'hider') this.setHiderPanel('Nearest seeker', '-- ft', 'Silent — only you can see this');
 
       const readyBtn = document.getElementById('btn-hider-ready');
       if (readyBtn) readyBtn.style.display = 'none';
@@ -2702,9 +2708,17 @@ class HotspotApp {
 
   // --- small shared pieces of round UI ---
   matchClockText(remainingSec) {
-    if (!this.matchDurationSeconds || this.matchDurationSeconds <= 0) return 'NO TIME LIMIT';
+    // Short enough for half the rail; "NO TIME LIMIT" was cut off on every phone.
+    if (!this.matchDurationSeconds || this.matchDurationSeconds <= 0) return 'NO LIMIT';
     const left = Math.max(0, Math.floor(remainingSec));
     return `${Math.floor(left / 60)}:${(left % 60).toString().padStart(2, '0')} LEFT`;
+  }
+
+  // One way to write a distance: a space before the unit, and yards past
+  // 300 ft unless yards would make no sense (GPS accuracy).
+  fmtDist(feet, yards = true) {
+    const ft = Math.round(feet);
+    return yards && ft > 300 ? `${Math.round(feet / 3)} yd` : `${ft} ft`;
   }
 
   setMatchClock(text) {
@@ -2790,7 +2804,7 @@ class HotspotApp {
   startMatchTimer() {
     if (this.matchTimer) clearInterval(this.matchTimer);
     if (!this.matchDurationSeconds || this.matchDurationSeconds <= 0) {
-      this.setMatchClock('NO TIME LIMIT');
+      this.setMatchClock('NO LIMIT');
       return;
     }
 
@@ -2837,7 +2851,7 @@ class HotspotApp {
     if (this.role === 'hider') {
       window.hotspotAudio.speak('Time is up. You survived and won the hunt!');
     } else {
-      window.hotspotAudio.speak('Time is up. The hider escaped!');
+      window.hotspotAudio.speak('Time is up. The hider survived.');
     }
 
     // Surviving the whole clock is exactly the Longest Hide record, and it was
@@ -2892,7 +2906,7 @@ class HotspotApp {
     if (firstFix) this.updateLobbyList();
 
     document.querySelectorAll('.accuracy-tag').forEach(el => {
-      el.innerText = `GPS ±${Math.round(pos.accuracy)} ft`;
+      el.innerText = `GPS ±${this.fmtDist(pos.accuracy, false)}`;
       el.classList.toggle('weak', pos.accuracy > 50);
       el.classList.remove('off');
     });
@@ -2906,7 +2920,7 @@ class HotspotApp {
         warnBox.innerText = 'Opened as a local file. GPS only works from the https web address.';
         warnBox.style.display = 'block';
       } else if (pos.accuracy > 50) {
-        warnBox.innerText = `Weak GPS (±${Math.round(pos.accuracy)}ft). Move out from under the trees.`;
+        warnBox.innerText = `Weak GPS (±${this.fmtDist(pos.accuracy, false)}). Move out from under the trees.`;
         warnBox.style.display = 'block';
       } else {
         warnBox.style.display = 'none';
@@ -3017,16 +3031,31 @@ class HotspotApp {
     if (!dist) return;
     let main = dist.querySelector('.dist-main'), sub = dist.querySelector('.dist-sub'), w = dist.querySelector('.dist-warn');
     if (!main || !sub || !w) {
-      dist.innerHTML = '<span class="dist-main"></span><span class="dist-sub"></span><span class="dist-warn"></span>';
+      dist.innerHTML = '<span class="dist-main" aria-hidden="true"></span><span class="dist-sub"></span><span class="dist-warn"></span>';
       main = dist.querySelector('.dist-main'); sub = dist.querySelector('.dist-sub'); w = dist.querySelector('.dist-warn');
     }
     if (k) k.innerText = kicker;
+    // Screen readers: the band word is a live line of its own, and the number
+    // goes to a hidden live line only when it moves a real step (or the band
+    // or notice changes), never on every frame of the glide.
+    const sr = document.getElementById('seeker-dist-sr');
+    if (sr) {
+      const unitWord = num === null ? '' : unit.split(' · ')[0];
+      const last = this.srReadout || {};
+      const moved = num !== null && (typeof last.num !== 'number' || last.unitWord !== unitWord || Math.abs(num - last.num) >= Math.max(10, last.num * 0.15));
+      if (label !== last.label || moved) {
+        sr.textContent = num === null ? unit : `${num} ${unitWord}`;
+        this.srReadout = { label, num, unitWord };
+      }
+    }
     // The word and the strip colour used to flip the instant a reading changed
     // while the number was still gliding, so for a moment the panel said COLD
     // over a hot number. A band change on a live reading waits a beat; a
     // notice, a unit change or reduced motion writes at once.
     const writeBand = () => {
-      if (bandLabel) bandLabel.innerText = label;
+      // Written only on a change: it is a live region, and the readout is set
+      // four times a second.
+      if (bandLabel && bandLabel.textContent !== label) bandLabel.innerText = label;
       if (box) { if (band) box.dataset.band = band; else delete box.dataset.band; }
     };
     clearTimeout(this.bandLabelTimer); this.bandLabelTimer = null;
@@ -3381,7 +3410,7 @@ class HotspotApp {
         // The hider's own screen warms as the pack closes in.
         this.ambientHeat(closestDistFeet);
       } else {
-        if (distEl) distEl.innerText = '--ft';
+        if (distEl) distEl.innerText = '-- ft';
         this.ambientHeat(null);
       }
 
@@ -3498,7 +3527,7 @@ class HotspotApp {
       window.hotspotGeo.requestCompassPermission();
 
       window.hotspotAudio.playPowerupSound('bearing');
-      window.hotspotAudio.speak('Bearing ping active!');
+      window.hotspotAudio.speak('Pinging their direction.');
 
       const endPing = () => {
         if (ping !== this.bearingPingSeq) return;
@@ -3550,14 +3579,23 @@ class HotspotApp {
     this.hiderNoteTimer = setTimeout(() => { el.innerText = this.hiderNoteDefault; }, ms);
   }
 
-  triggerSmokeVisual(active) {
+  triggerSmokeVisual(active, ms = 15000) {
     this.powerups.smokeActive = active;
     const pulseRing = document.getElementById('seeker-pulse-ring');
     if (window.hotspotRadar) window.hotspotRadar.setSmoke(!!active);
+    clearInterval(this.smokeTick); this.smokeTick = null;
 
     if (active) {
       if (pulseRing) pulseRing.classList.add('smoke-blind');
-      this.setSeekerReadout({ kicker: 'Signal', label: 'SMOKE SCREEN', unit: 'The hider threw smoke. It clears in 15 seconds.' });
+      // The seconds count down, so the number on screen is never wrong.
+      const endsAt = Date.now() + ms;
+      const show = () => {
+        if (!this.powerups.smokeActive) { clearInterval(this.smokeTick); this.smokeTick = null; return; }
+        const left = Math.max(1, Math.ceil((endsAt - Date.now()) / 1000));
+        this.setSeekerReadout({ kicker: 'Signal', label: 'SMOKE SCREEN', unit: `The hider threw smoke. It clears in ${left} ${left === 1 ? 'second' : 'seconds'}.` });
+      };
+      show();
+      this.smokeTick = setInterval(show, 1000);
     } else {
       if (pulseRing) pulseRing.classList.remove('smoke-blind');
       // Let the first band after the smoke clears announce itself.

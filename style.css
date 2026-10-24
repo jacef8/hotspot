@@ -207,7 +207,7 @@ svg.ic { width: 22px; height: 22px; flex: 0 0 auto; display: block; }
 
 .accuracy-tag {
   display: inline-flex; align-items: center; gap: 6px;
-  min-height: 40px; padding: 0 14px;
+  min-height: 44px; padding: 0 14px;   /* a tap here asks for GPS */
   border-radius: 999px;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -372,6 +372,10 @@ h2.brand-title { font-weight: 800; letter-spacing: -.015em; line-height: 1.05; }
 
 .btn-solo { color: var(--accent); }
 
+/* Practice controls: three equal buttons, the same height even when a label wraps */
+.solo-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: stretch; }
+.solo-row .btn { height: auto; min-height: var(--tap); margin: 0; padding: 8px 6px; font-size: 17px; line-height: 1.15; text-align: center; }
+
 .btn-powerup {
   min-height: var(--tap);
   padding: 10px;
@@ -382,9 +386,11 @@ h2.brand-title { font-weight: 800; letter-spacing: -.015em; line-height: 1.05; }
   color: var(--ink);
   font-family: var(--font-display);
   font-size: 17px; font-weight: 800;
+  font-variant-numeric: tabular-nums;   /* "Back in 9s" must not shuffle sideways each second */
   cursor: pointer;
   transition: transform .15s ease;
 }
+.btn .btn-text { font-variant-numeric: tabular-nums; }
 .btn-powerup:active { transform: scale(.985); box-shadow: var(--press); }
 .btn-powerup:disabled { opacity: 1; background: var(--surface-3); color: var(--ink-3); box-shadow: none; cursor: default; }
 .btn-powerup:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
@@ -576,11 +582,20 @@ button.cooling .cd-bar { opacity: 1; }
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
+/* The clocks are what everyone glances at, so they get big type. Archivo
+   (with steady figures) fits "HIDING 120s" in half a 360 rail; the mono does not. */
+#match-timer-seeker, #match-timer-hider, #match-timer-spectator, #hider-timer-display {
+  min-height: 44px; padding: 0 4px;
+  font-family: var(--font-display);
+  font-size: clamp(17px, 4.6vw, 20px); font-weight: 800; letter-spacing: 0;
+}
+@media (max-width: 380px) { .hunt-head .role-badge { padding: 0 10px; letter-spacing: .08em; } }
 
 /* Boundary banner: colour and text set together by state */
 #seeker-boundary-alert, #hider-boundary-alert, .bound-banner {
   font-family: var(--font-text);
   font-size: 16px; font-weight: 700; line-height: 1.25;
+  font-variant-numeric: tabular-nums;
   text-align: center;
   padding: 10px 12px;
   border-radius: var(--r-s);
@@ -706,8 +721,14 @@ button.cooling .cd-bar { opacity: 1; }
 #seeker-dist-readout .dist-sub {
   font-family: var(--font-text);
   font-size: 16px; font-weight: 700; line-height: 1.25;
+  font-variant-numeric: tabular-nums;
   color: var(--ink-2);
   margin-top: 4px;
+}
+/* Read aloud by screen readers, never drawn */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
 }
 #seeker-dist-readout .dist-warn {
   font-family: var(--font-text);
@@ -819,7 +840,6 @@ button.cooling .cd-bar { opacity: 1; }
   .scope-meta { margin-top: 6px; }
   .btn { padding: 8px 14px; margin-bottom: 8px; }
   .input-group { margin-bottom: 8px; }
-  .solo-hint { display: none; }
   .stat-box { padding: 7px 9px 9px; }
   .stat-val { font-size: 24px; }
   .btn-install { display: none !important; }
@@ -832,7 +852,11 @@ button.cooling .cd-bar { opacity: 1; }
   .top-bar { padding: 6px 12px 4px; }
   .icon-btn { width: 50px; height: 50px; }
   .card { padding: 10px; margin-bottom: 7px; }
-  .radar-key { display: none; }
+  /* Short phones keep the ring's meaning as one small chip on the panel's
+     bottom edge; "you are the center" is the one that goes. */
+  .radar-key { left: 6px; bottom: 6px; }
+  .radar-key span:first-child { display: none; }
+  .radar-key span { padding: 2px 6px; letter-spacing: .04em; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -847,7 +871,8 @@ button.cooling .cd-bar { opacity: 1; }
    still a plain, very readable face.
    ========================================================================= */
 .card, .readout, .radar-wrap, .hider-radar-box, #solo-controls-card, .dialog { position: relative; }
-.card::after, .readout::after, .radar-wrap::after, .dialog::after {
+.card::after, .readout::after, .radar-wrap::after, .dialog::after,
+#spectator-map::after, #replay-map::after {
   content: ""; position: absolute; inset: 0; z-index: 3;
   border-radius: inherit;
   border: 2px solid var(--hud);
@@ -863,6 +888,9 @@ button.cooling .cd-bar { opacity: 1; }
     linear-gradient(#000 0 0) bottom left / 20px 20px no-repeat,
     linear-gradient(#000 0 0) bottom right / 20px 20px no-repeat;
 }
+/* The map panels too, above Leaflet's tiles and buttons (they stack to 1000).
+   The QR tile is left plain: corner marks would sit in the code's quiet zone. */
+#spectator-map::after, #replay-map::after { z-index: 1000; }
 
 /* Wide, expanded display type */
 .brand-title, .seeker-band-label, .hider-dist-num, #seeker-dist-readout .dist-main,
@@ -881,6 +909,9 @@ button.cooling .cd-bar { opacity: 1; }
 .hider-radar-box { padding-inline: 8px; }
 .hider-radar-box .dist-margin { display: block; margin: 6px 0 0; font-size: 16px; }
 .hider-note { font-size: 16px; font-weight: 700; color: var(--ink-2); margin-top: 8px; }
+.powerup-note { font-size: 14px; font-weight: 700; line-height: 1.3; color: var(--ink-2); margin: -6px 0 10px; }
+/* "45 ft", spaced like every other distance in the app */
+.hider-dist-num .dist-unit { margin-left: .14em; }
 
 /* -------------------------------------------------------------- dialog */
 .dialog-scrim {
@@ -972,7 +1003,25 @@ button.cooling .cd-bar { opacity: 1; }
   position: relative; z-index: 1;
 }
 .map-recenter-btn { margin-bottom: 9px; }
-#replay-slider { width: 100%; min-height: 32px; margin-bottom: 10px; accent-color: var(--accent); }
+/* The replay scrubber: a 44px strip with a thumb-sized knob, so a grandparent
+   can grab the knob instead of tapping the track and jumping */
+#replay-slider {
+  display: block; width: 100%; min-height: 44px; margin: 0 0 10px;
+  -webkit-appearance: none; appearance: none;
+  background: transparent; accent-color: var(--accent); cursor: pointer;
+}
+#replay-slider::-webkit-slider-runnable-track { height: 8px; border-radius: 999px; background: var(--surface-3); border: 1px solid var(--line); }
+#replay-slider::-moz-range-track { height: 8px; border-radius: 999px; background: var(--surface-3); border: 1px solid var(--line); }
+#replay-slider::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  box-sizing: border-box; width: 28px; height: 28px; margin-top: -10px;
+  border-radius: 50%; background: var(--accent); border: 3px solid var(--surface); box-shadow: var(--raise);
+}
+#replay-slider::-moz-range-thumb { box-sizing: border-box; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); border: 3px solid var(--surface); box-shadow: var(--raise); }
+#replay-slider:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; border-radius: var(--r-s); }
+#replay-slider:disabled { cursor: default; }
+#replay-slider:disabled::-webkit-slider-thumb { background: var(--ink-3); }
+#replay-slider:disabled::-moz-range-thumb { background: var(--ink-3); }
 .seeker-role-badge { background: var(--accent); color: var(--accent-ink); }
 
 /* The one sentence on the result screen that says what happened */
@@ -1037,7 +1086,8 @@ button.cooling .cd-bar { opacity: 1; }
 }
 
 /* ------------------------------------------------- short-screen fitting */
-@media (max-height: 900px) { #home-screen .solo-hint { display: none; } }
+/* The practice line is one short line now, so only the shortest screens drop it */
+@media (max-height: 640px) { #home-screen .solo-hint { display: none; } }
 @media (max-height: 660px) { .radar-wrap { min-height: 110px; } }
 
 /* Connection state, in the lobby where the room code is */
