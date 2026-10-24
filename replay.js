@@ -22,18 +22,28 @@ class HotspotReplay {
     // corner of the yard without being snapped back a second later.
     this.userHasPanned = false;
     this.lastBounds = [];
-    this.programmaticUntil = 0;
+    // The extent the live map last fitted itself to, so GPS jitter that moves
+    // nobody more than a few feet does not start another fit.
+    this.fittedBounds = null;
+    this.programmatic = false;
   }
 
-  // Our own fitBounds/setView calls also fire movestart/zoomstart, so mark a
-  // short window around them to tell "the app moved the map" apart from
-  // "the user moved the map".
-  markProgrammatic() {
-    this.programmaticUntil = Date.now() + 800;
+  // Move the map ourselves without it counting as the user's doing. Our own
+  // fitBounds/setView fire the same movestart/zoomstart a finger does, so the
+  // flag goes up for the move and the map's own moveend takes it down. It used
+  // to be an 800 ms window, refreshed four times a second while following, so
+  // it never closed: a pinch read as the app's move and snapped straight back.
+  moveMap(fn) {
+    if (!this.map) return;
+    // Settling a pan still in flight fires its own moveend; get that out of
+    // the way before the flag goes up, or it would take it down at once.
+    try { this.map.stop(); } catch (e) {}
+    this.programmatic = true;
+    try { fn(this.map); } catch (e) { this.programmatic = false; }
   }
 
   isProgrammatic() {
-    return Date.now() < this.programmaticUntil;
+    return this.programmatic;
   }
 
   // A token's current value, for the colour strings Leaflet wants when a layer
@@ -58,8 +68,8 @@ class HotspotReplay {
   recenterMap() {
     this.setUserPanned(false);
     if (this.map && this.lastBounds && this.lastBounds.length > 0) {
-      this.markProgrammatic();
-      this.map.fitBounds(this.lastBounds, { padding: [50, 50], maxZoom: 19 });
+      this.fittedBounds = L.latLngBounds(this.lastBounds);
+      this.moveMap((m) => m.fitBounds(this.lastBounds, { padding: [50, 50], maxZoom: 19 }));
     }
   }
 
@@ -101,9 +111,28 @@ class HotspotReplay {
   }
 
   initMap(elementId, center = [37.774929, -122.419416], zoom = 17) {
+    // A replay still running would keep drawing last round's tracks onto
+    // whatever map comes next.
+    this.pauseReplay();
+    if (elementId === 'spectator-map') {
+      // A new round: last round's recording is done with. Left in place, Play
+      // on the next result screen could run the old tracks over the new ones.
+      this.replayTracks = [];
+      this.tagEvent = null;
+      this.replayPct = 0;
+    }
+
     if (this.map) {
-      this.map.remove();
+      const old = this.map;
       this.map = null;
+      // Finish a zoom still animating: Leaflet's own end-of-zoom timer fired
+      // after the panes were gone and threw from inside the dead map.
+      try { if (old._animatingZoom && typeof old._onZoomTransitionEnd === 'function') old._onZoomTransitionEnd(); } catch (e) {}
+      try { old.stop(); } catch (e) {}
+      // remove() leaves Leaflet's scroll handler on the container, which kept
+      // every old map reachable; take it off before letting the map go.
+      try { if (old._container && old._onScroll) L.DomEvent.off(old._container, 'scroll', old._onScroll, old); } catch (e) {}
+      try { old.remove(); } catch (e) {}
       this.markers = {};
       this.polylines = {};
       this.accuracyCircles = {};
@@ -122,20 +151,40 @@ class HotspotReplay {
       return;
     }
 
-    this.map = L.map(elementId, { zoomControl: true }).setView(center, zoom);
+    const map = this.map = L.map(elementId, { zoomControl: true }).setView(center, zoom);
     // Esri's credit stays; the "Leaflet" prefix made the strip span the map.
-    try { this.map.attributionControl.setPrefix(false); } catch (e) {}
+    try { map.attributionControl.setPrefix(false); } catch (e) {}
 
     // A freshly built map starts following again.
     this.setUserPanned(false);
     this.lastBounds = [];
+    this.fittedBounds = null;
+    this.programmatic = false;
 
+    // Events from a map we have since replaced are not this map's business.
+    const live = () => this.map === map;
     // Any drag is unambiguously the user. Zoom/move can be either, so only
-    // count it when we did not just move the map ourselves.
-    this.map.on('dragstart', () => this.setUserPanned(true));
-    this.map.on('zoomstart movestart', () => {
-      if (!this.isProgrammatic()) this.setUserPanned(true);
+    // count it when the move is not one we started ourselves.
+    map.on('dragstart', () => { if (live()) this.setUserPanned(true); });
+    map.on('zoomstart movestart', () => {
+      if (live() && !this.isProgrammatic()) this.setUserPanned(true);
     });
+    map.on('moveend', () => { if (live()) this.programmatic = false; });
+
+    // A pinch, a double tap, a mouse wheel or the +/- buttons while our own
+    // fit is still animating never reach Leaflet as a zoom, so read them off
+    // the container. The container outlives the maps built in it, so it gets
+    // these once.
+    const el = map.getContainer();
+    if (el && !el.dataset.hsZoomWatch) {
+      el.dataset.hsZoomWatch = '1';
+      const userZoom = () => { if (this.map && this.map.getContainer() === el) this.setUserPanned(true); };
+      el.addEventListener('touchstart', (e) => { if (e.touches && e.touches.length >= 2) userZoom(); }, { passive: true });
+      el.addEventListener('wheel', userZoom, { passive: true });
+      el.addEventListener('dblclick', userZoom);
+      // Capture phase: the +/- buttons stop their click from bubbling.
+      el.addEventListener('click', (e) => { if (e.target && e.target.closest && e.target.closest('.leaflet-control-zoom')) userZoom(); }, true);
+    }
 
     // Satellite imagery (Esri World Imagery — no API key required). An aerial
     // view makes the tag spot readable against real yard features: driveways,
@@ -154,7 +203,10 @@ class HotspotReplay {
     }).addTo(this.map);
 
     setTimeout(() => {
-      if (this.map) this.map.invalidateSize();
+      if (this.map !== map) return;
+      map.invalidateSize();
+      // The first fit may have run before the box had its final size.
+      this.fittedBounds = null;
     }, 200);
   }
 
@@ -177,8 +229,8 @@ class HotspotReplay {
 
       const isHider = player.role === 'hider';
       // The same tokens as the lobby and the readouts: the hider wears the
-      // hider colour, seekers the accent. The marker's inline style uses the
-      // tokens directly; the SVG layers get a class for the same reason.
+      // hider colour, seekers the accent. The marker and the SVG layers each
+      // carry a class, so a theme switch recolours them from the stylesheet.
       const kind = isHider ? 'hider' : 'seeker';
       const color = this.token(isHider ? '--hider-fill' : '--accent', isHider ? '#B03A06' : '#0A5BC4');
       // Accuracy arrives in feet; Leaflet draws radii in metres. Passing feet
@@ -187,34 +239,17 @@ class HotspotReplay {
 
       // Update or create marker
       if (!this.markers[player.id]) {
-        const iconHtml = `
-          <div style="
-            background: var(${isHider ? '--hider-fill' : '--accent'});
-            color: var(${isHider ? '--hider-fill-ink' : '--accent-ink'});
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
-            border: 3px solid var(--surface);
-            box-shadow: var(--raise);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-family: var(--font-display);
-            font-weight: 800;
-            font-size: 13px;
-          ">
-            ${isHider ? 'H' : 'S'}
-          </div>
-        `;
+        // The icon box is the dot's own size, so the dot sits centred on the
+        // GPS point instead of a few pixels off it.
         const customIcon = L.divIcon({
-          html: iconHtml,
+          html: `<div class="hs-marker hs-marker-${kind}">${isHider ? 'H' : 'S'}</div>`,
           className: 'custom-player-marker',
-          iconSize: [28, 28]
+          iconSize: [22, 22]
         });
 
         this.markers[player.id] = L.marker(latlng, { icon: customIcon })
           .addTo(this.map)
-          .bindTooltip(`${window.hsEscape(player.name)} (${window.hsEscape(String(player.role).toUpperCase())})`, { permanent: true, direction: 'top' });
+          .bindTooltip(`${window.hsEscape(player.name)} (${window.hsEscape(String(player.role).toUpperCase())})`, { permanent: true, direction: 'top', offset: [0, -12] });
 
         this.polylines[player.id] = L.polyline(player.trail || [latlng], {
           className: `hs-track ${kind}`,
@@ -273,8 +308,17 @@ class HotspotReplay {
     if (bounds.length > 0) {
       this.lastBounds = bounds;
       if (!this.userHasPanned) {
-        this.markProgrammatic();
-        this.map.fitBounds(bounds, { padding: [50, 50], maxZoom: 19 });
+        // Fit again only when the field has changed shape by more than GPS
+        // jitter (about 10 feet at either corner). Four fits a second kept
+        // the map permanently mid-animation.
+        const next = L.latLngBounds(bounds);
+        const prev = this.fittedBounds;
+        const same = prev && this.map.distance(prev.getSouthWest(), next.getSouthWest()) < 3
+          && this.map.distance(prev.getNorthEast(), next.getNorthEast()) < 3;
+        if (!same) {
+          this.fittedBounds = next;
+          this.moveMap((m) => m.fitBounds(next, { padding: [50, 50], maxZoom: 19 }));
+        }
       }
     }
   }
@@ -291,6 +335,8 @@ class HotspotReplay {
     (tracks || []).forEach(t => {
       (t.points || []).forEach(p => trackBounds.push([p.lat, p.lng]));
     });
+    // Play and the slider need a recorded moment to go to, not just a point.
+    this.setReplayControls(!!this.replayRange());
 
     if (this.tagEvent && this.tagEvent.lat && this.tagEvent.lng) {
       // Zoom WAY in directly to the location the person was caught (Zoom Level 19)
@@ -298,17 +344,12 @@ class HotspotReplay {
       this.initMap('replay-map', tagCenter, 19);
       this.lastBounds = trackBounds.length > 0 ? trackBounds : [tagCenter];
     } else {
-      // Find all points for center bounds
-      const allPoints = [];
-      tracks.forEach(t => {
-        t.points.forEach(p => allPoints.push([p.lat, p.lng]));
-      });
+      const allPoints = trackBounds;
 
       if (allPoints.length > 0) {
         this.initMap('replay-map', allPoints[0], 18);
         this.lastBounds = allPoints;
-        this.markProgrammatic();
-        if (this.map) this.map.fitBounds(allPoints, { padding: [30, 30], maxZoom: 19 });
+        this.moveMap((m) => m.fitBounds(allPoints, { padding: [30, 30], maxZoom: 19 }));
       } else if (fallbackCenter && fallbackCenter.lat && fallbackCenter.lng) {
         // Nothing was recorded; at least open on the yard instead of leaving
         // whatever map was on screen before.
@@ -319,27 +360,18 @@ class HotspotReplay {
     }
 
     if (this.map && this.tagEvent && this.tagEvent.lat) {
-      const tagMarkerHtml = `
-        <div style="
-          background: var(--bad-fill);
-          color: var(--bad-fill-ink);
-          width: 30px;
-          height: 30px;
-          border-radius: 50%;
-          border: 3px solid var(--surface);
-          box-shadow: var(--raise);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-weight: 800;
-          font-size: 15px;
-        ">
-          &#10005;
-        </div>
-      `;
+      // The same x as the rest of the app's icons, in the tag colour.
+      const tagMarkerHtml = '<div class="hs-marker hs-marker-tag"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></div>';
       L.marker([this.tagEvent.lat, this.tagEvent.lng], {
-        icon: L.divIcon({ html: tagMarkerHtml, className: 'tag-marker', iconSize: [36, 36] })
-      }).addTo(this.map).bindTooltip(`TAGGED! ${window.hsEscape(this.tagEvent.seekerName)} caught ${window.hsEscape(this.tagEvent.hiderName)}`, { permanent: true, direction: 'top' });
+        icon: L.divIcon({ html: tagMarkerHtml, className: 'tag-marker', iconSize: [30, 30] }),
+        // On top of the two dots that end up on the same spot.
+        zIndexOffset: 1000
+      }).addTo(this.map).bindTooltip(
+        `${window.hsEscape(this.tagEvent.seekerName)} caught ${window.hsEscape(this.tagEvent.hiderName)} here`,
+        // Below the x, clear of the players' name labels, which sit above
+        // their dots. Three labels on one point read as none.
+        { permanent: true, direction: 'bottom', offset: [0, 14], className: 'hs-tip-tag' }
+      );
     }
 
     setTimeout(() => {
@@ -347,8 +379,7 @@ class HotspotReplay {
         this.map.invalidateSize();
         // Only re-snap to the tag if the user has not started exploring the map.
         if (this.tagEvent && this.tagEvent.lat && this.tagEvent.lng && !this.userHasPanned) {
-          this.markProgrammatic();
-          this.map.setView([this.tagEvent.lat, this.tagEvent.lng], 19);
+          this.moveMap((m) => m.setView([this.tagEvent.lat, this.tagEvent.lng], 19));
         }
         // Open on the finished picture: everyone where they ended up, with the
         // whole of their trail behind them. Play runs it again from the start.
@@ -400,6 +431,39 @@ class HotspotReplay {
     });
 
     this.updateSpectatorView(currentPlayers, true);
+    this.syncReplayLabels(pct);
+  }
+
+  // At the end of the hunt the hider and the seeker who caught them stand on
+  // the tag spot, and their name labels printed over the tag label there.
+  // Only the tag's own label stays on that spot; the names come back as soon
+  // as the replay moves off the end.
+  syncReplayLabels(pct) {
+    if (!this.map) return;
+    const tag = this.tagEvent;
+    const atEnd = pct >= 100 && !!(tag && tag.lat && tag.lng);
+    Object.values(this.markers).forEach((marker) => {
+      if (!marker.getTooltip || !marker.getTooltip()) return;
+      // About 30 feet: GPS error on both sides of a tag.
+      const hide = atEnd && this.map.distance(marker.getLatLng(), [tag.lat, tag.lng]) < 9.2;
+      try {
+        const open = marker.isTooltipOpen();
+        if (hide && open) marker.closeTooltip();
+        else if (!hide && !open) marker.openTooltip();
+      } catch (e) {}
+    });
+  }
+
+  // Without a recorded track there is nothing to play. A phone that reloaded
+  // or joined late has none, and its slider and Play used to look live while
+  // ignoring every tap.
+  setReplayControls(hasTrack) {
+    const slider = document.getElementById('replay-slider');
+    const btn = document.getElementById('btn-replay-toggle');
+    const note = document.getElementById('replay-empty-note');
+    if (slider) slider.disabled = !hasTrack;
+    if (btn) btn.disabled = !hasTrack;
+    if (note) note.style.display = hasTrack ? 'none' : 'block';
   }
 
   playReplay(onProgressUpdate) {

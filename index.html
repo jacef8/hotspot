@@ -559,6 +559,9 @@
         <button id="btn-replay-toggle" class="btn btn-secondary" style="padding: 10px; margin-bottom: 0;" onclick="window.hotspotReplay.toggleReplay((pct) => document.getElementById('replay-slider').value = pct)">
           Play replay
         </button>
+        <!-- Shown, with the slider and button switched off, when this phone has
+             no recording of the round (it reloaded or joined late). -->
+        <p id="replay-empty-note" class="solo-hint" style="display: none; margin: 8px 0 0;">No track was recorded on this phone, so there is nothing to play back.</p>
       </div>
 
       <button id="btn-rematch" class="btn btn-primary" style="display: none;" onclick="window.hotspotApp.rematch()">

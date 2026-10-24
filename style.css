@@ -1134,3 +1134,18 @@ button.cooling .cd-bar { opacity: 1; }
 .hs-track.seeker { stroke: var(--accent); fill: var(--accent); }
 .hs-yard { stroke: var(--warn-fill); fill: var(--warn-fill); }
 .custom-player-marker, .tag-marker { background: transparent; border: 0; }
+/* The people on the map and the tag spot wear the lobby badge colours; the
+   x on the tag is the app's own icon */
+.hs-marker {
+  width: 100%; height: 100%; border-radius: 50%;
+  border: 3px solid var(--surface); box-shadow: var(--raise);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-display); font-weight: 800; font-size: 13px; line-height: 1;
+}
+.hs-marker-hider { background: var(--hider-fill); color: var(--hider-fill-ink); }
+.hs-marker-seeker { background: var(--accent); color: var(--accent-ink); }
+.hs-marker-tag { background: var(--bad-fill); color: var(--bad-fill-ink); }
+.hs-marker-tag .ic { width: 16px; height: 16px; }
+/* The tag label is the headline of the replay: solid, in the tag colour */
+.leaflet-tooltip.hs-tip-tag { background: var(--bad-fill); color: var(--bad-fill-ink); border-color: var(--bad-fill); }
+.leaflet-tooltip.hs-tip-tag.leaflet-tooltip-bottom:before { border-bottom-color: var(--bad-fill); }
