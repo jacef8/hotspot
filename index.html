@@ -189,13 +189,15 @@
           <button class="btn btn-secondary" onclick="window.hotspotApp.showScreen('join-screen')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" x2="3" y1="12" y2="12"/></svg><span>Join</span></button>
           <button class="btn btn-secondary" onclick="window.hotspotApp.showScreen('join-spectator-screen')"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"/><circle cx="12" cy="12" r="3"/></svg><span>Spectate</span></button>
         </div>
+        <!-- Said before the phone asks, so the location prompt is no surprise -->
+        <p class="home-note">This game uses your phone's location.</p>
       </div>
 
       <div class="card home-practice">
         <div class="card-title">Practice alone</div>
         <p class="solo-hint">A pretend hider stands 300 ft away so you can learn the radar, the buzzes and the voice.</p>
         <button class="btn btn-solo" onclick="window.hotspotApp.startSoloDrill()">
-          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><span>Run Solo Drill</span>
+          <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg><span>Start practice</span>
         </button>
         <div id="voice-row" class="voice-row">
           <select id="voice-select" class="select-input" aria-label="Announcer voice">
@@ -242,7 +244,7 @@
         <h2 class="brand-title" style="font-size: 24px;">Host Setup</h2>
       </div>
 
-      <div class="card" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+      <div class="card setup-card">
         <div class="input-group">
           <label class="input-label">Hiding time before seekers start</label>
           <select id="setup-headstart" class="select-input">
@@ -304,8 +306,12 @@
         <div id="lobby-net-status" class="lobby-net" aria-live="polite"></div>
       </div>
 
-      <!-- Quick Nickname Editor Bar -->
-      <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+      <!-- Your name: one line once it is saved, the editor only while changing
+           it. The open editor used to take a whole row from the roster. -->
+      <button id="lobby-name-line" class="lobby-name-line" style="display: none;" onclick="window.hotspotApp.editLobbyName()">
+        Playing as <b id="lobby-name-shown">—</b><span class="lobby-name-change">Change</span>
+      </button>
+      <div id="lobby-name-editor" style="display: flex; gap: 8px; margin-bottom: 8px;">
         <input type="text" id="lobby-nickname-input" class="text-input" style="flex: 1; padding: 10px 14px; margin-bottom: 0;" placeholder="Your name">
         <button class="btn btn-secondary" style="width: auto; padding: 10px 14px; margin-bottom: 0; border-color: var(--accent); color: var(--accent); font-weight: 800;" onclick="window.hotspotApp.updateLobbyNickname()">
           Save Name
@@ -327,20 +333,23 @@
 
       <div class="card" style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 12px;">
         <div>
-          <div class="card-title" style="color: var(--warn); font-size: 14px; font-weight: 900; letter-spacing: 1px; margin-bottom: 6px;">
+          <div class="card-title hider" style="font-size: 14px; letter-spacing: 1px; margin-bottom: 6px;">
             HIDER
           </div>
           <div id="lobby-hider-list"></div>
         </div>
 
         <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden;">
-          <div class="card-title" style="color: var(--accent); font-size: 14px; font-weight: 900; letter-spacing: 1px; margin-bottom: 6px;">
+          <div class="card-title seeker" style="font-size: 14px; letter-spacing: 1px; margin-bottom: 6px;">
             SEEKERS
           </div>
-          <!-- Outer well scrolls (Lenis); the inner list is what app.js rebuilds -->
+          <!-- Outer well scrolls (Lenis); the inner list is what app.js rebuilds.
+               On a short phone only a row or two fit, so the line under it
+               says how many more are waiting below. -->
           <div id="lobby-seeker-scroll" class="scroll-well" style="flex: 1;">
             <div id="lobby-seeker-list" class="player-list"></div>
           </div>
+          <div id="lobby-seeker-more" class="roster-more" style="display: none;" aria-live="polite"></div>
         </div>
 
         <!-- Spectators are in the room too; they were on nobody's list -->
@@ -366,7 +375,7 @@
         <h2 class="brand-title" style="font-size: 24px;">Join Hunt</h2>
       </div>
 
-      <div class="card" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+      <div class="card setup-card">
         <div class="input-group">
           <label class="input-label">Room code — 6 characters</label>
           <input type="text" id="join-code-input" class="text-input" maxlength="6" placeholder="e.g. K7RQ4M" style="text-transform: uppercase; font-size: 22px; text-align: center; letter-spacing: 4px;" onkeydown="if(event.key==='Enter') window.joinRoomAction()">
@@ -389,7 +398,7 @@
         <h2 class="brand-title" style="font-size: 24px;">Spectate</h2>
       </div>
 
-      <div class="card" style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+      <div class="card setup-card">
         <div class="input-group">
           <label class="input-label">Room code — 6 characters</label>
           <input type="text" id="spectator-code-input" class="text-input" maxlength="6" placeholder="e.g. K7RQ4M" style="text-transform: uppercase; font-size: 22px; text-align: center; letter-spacing: 4px;" onkeydown="if(event.key==='Enter') window.joinSpectatorAction()">
@@ -408,7 +417,7 @@
         <div class="role-badge seeker-role-badge">Seeker</div>
         <div class="rail">
           <div id="headstart-banner-seeker" class="rail-cell headstart-counter lit">HIDING TIME</div>
-          <div id="match-timer-seeker" class="rail-cell">--:-- left</div>
+          <div id="match-timer-seeker" class="rail-cell">--:-- LEFT</div>
         </div>
       </div>
 
@@ -435,9 +444,9 @@
         <div id="bearing-note"></div>
       </section>
 
-      <!-- Solo Drill Indoor Test Controls -->
+      <!-- Practice controls: move the pretend hider from the couch -->
       <div id="solo-controls-card" class="card" style="display: none; margin-bottom: 8px;">
-        <div class="card-title">Solo test controls</div>
+        <div class="card-title">Practice controls</div>
         <div style="display: flex; gap: 6px;">
           <button class="btn btn-secondary" style="flex: 1; font-size: 14px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(-75)">Walk -75ft</button>
           <button class="btn btn-secondary" style="flex: 1; font-size: 14px; padding: 8px;" onclick="window.hotspotApp.moveSoloHider(75)">Move +75ft</button>
@@ -459,7 +468,7 @@
         <div class="role-badge hider-role-badge">Hider</div>
         <div class="rail">
           <div id="hider-timer-display" class="rail-cell lit">HIDING TIME</div>
-          <div id="match-timer-hider" class="rail-cell">--:-- left</div>
+          <div id="match-timer-hider" class="rail-cell">--:-- LEFT</div>
         </div>
       </div>
 
@@ -502,7 +511,7 @@
            that only exists once a round is already running. -->
       <div class="rail">
         <div class="rail-cell headstart-counter lit">HIDING TIME</div>
-        <div id="match-timer-spectator" class="rail-cell">--:-- left</div>
+        <div id="match-timer-spectator" class="rail-cell">--:-- LEFT</div>
       </div>
 
       <div id="spectator-map"></div>
@@ -512,7 +521,8 @@
         Recenter on Players
       </button>
 
-      <div class="card" style="margin-bottom: 0; flex-shrink: 0; max-height: 34%; display: flex; flex-direction: column; overflow: hidden;">
+      <!-- Tall enough for three rows on a 640px phone; more than that scrolls -->
+      <div class="card" style="margin-bottom: 0; flex-shrink: 0; max-height: min(44%, 250px); display: flex; flex-direction: column; overflow: hidden;">
         <div class="card-title">Distance to the hider</div>
         <div id="spectator-board-scroll" class="scroll-well" style="flex: 1;">
           <div id="spectator-leaderboard" class="player-list"></div>
@@ -523,10 +533,12 @@
     <!-- ==================== SCREEN 9: POST-GAME REPLAY ==================== -->
     <div id="replay-screen" class="screen">
       <div class="brand-header" style="margin-bottom: 6px;">
-        <h2 id="replay-headline" class="brand-title" style="font-size: 24px; color: var(--heat-2);">ROUND OVER</h2>
+        <h2 id="replay-headline" class="brand-title" style="font-size: 24px;">ROUND OVER</h2>
         <div id="replay-subhead" class="result-line">Post-match track replay</div>
       </div>
 
+      <!-- The map and the replay card are hidden after an indoor practice run:
+           with no GPS there is nothing real to show on a map. -->
       <div id="replay-map"></div>
 
       <!-- Appears only once you pan/zoom the replay map -->
@@ -534,17 +546,19 @@
         Recenter on Tracks
       </button>
 
-      <div class="card" style="margin-bottom: 8px;">
+      <div id="replay-drill-note" class="card drill-note" style="margin-bottom: 8px;">
+        <div class="card-title">No map this time</div>
+        <p class="solo-hint" style="display: block; margin: 0;">Indoor practice has no real location. After a real hunt, this screen shows where everyone walked.</p>
+      </div>
+
+      <div id="replay-card" class="card" style="margin-bottom: 8px;">
         <div class="card-title">Watch the hunt again</div>
-        <input type="range" id="replay-slider" min="0" max="100" value="0" style="width: 100%; accent-color: var(--heat-2); margin-bottom: 8px;" oninput="window.hotspotReplay.stepReplay(this.value)">
-        <div style="display: flex; gap: 6px;">
-          <button class="btn btn-primary" style="flex: 1; padding: 10px; margin-bottom: 0;" onclick="window.hotspotReplay.playReplay((pct) => document.getElementById('replay-slider').value = pct)">
-            Play replay
-          </button>
-          <button class="btn btn-secondary" style="flex: 1; padding: 10px; margin-bottom: 0;" onclick="window.hotspotReplay.pauseReplay()">
-            Pause
-          </button>
-        </div>
+        <input type="range" id="replay-slider" min="0" max="100" value="0" style="width: 100%; margin-bottom: 8px;" oninput="window.hotspotReplay.stepReplay(this.value)">
+        <!-- One button: Play while paused, Pause while playing. Rematch below
+             is the only primary action on this screen. -->
+        <button id="btn-replay-toggle" class="btn btn-secondary" style="padding: 10px; margin-bottom: 0;" onclick="window.hotspotReplay.toggleReplay((pct) => document.getElementById('replay-slider').value = pct)">
+          Play replay
+        </button>
       </div>
 
       <button id="btn-rematch" class="btn btn-primary" style="display: none;" onclick="window.hotspotApp.rematch()">

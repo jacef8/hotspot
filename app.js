@@ -108,7 +108,11 @@ class HotspotApp {
     this.lastPulseTime = 0;
 
     this.clearStaleCache();
-    this.startGpsTracking(); // Immediate GPS start
+    // Location is asked for on the first tap of Host, Join or Practice, not at
+    // first paint: a new player who hits Block on an app they have not read yet
+    // is blocked for good. A phone that already allowed it starts at once.
+    this.gpsStarted = false;
+    this.startGpsIfAllowed();
   }
 
   // Clear only this app's transient room state. The old version wiped ALL of
@@ -329,10 +333,14 @@ class HotspotApp {
   }
 
   requestGpsPermissionDirectly() {
-    window.hotspotGeo.startTracking(
-      (pos) => this.onGpsUpdate(pos),
-      (err) => this.onGpsError(err)
-    );
+    // Once the browser has remembered Block, asking again does nothing. After
+    // the player allows it in the browser's own settings, a reload is what
+    // picks the new answer up.
+    if (window.hotspotGeo.lastErrorCode === 1 && !this.hasGpsFix) {
+      try { location.reload(); } catch (e) {}
+      return;
+    }
+    this.startGpsTracking();
   }
 
   // --- 100% BULLETPROOF HTTPS 1-SECOND HEARTBEAT CLOUD SYNC ---
@@ -930,7 +938,7 @@ class HotspotApp {
         else if (p.role === 'hider') right = 'Hiding';
         else if (hasPos(hider)) {
           const d = window.hotspotGeo.calculateDistance(p.lat, p.lng, hider.lat, hider.lng);
-          right = d > 300 ? `${Math.round(d / 3)} yd` : `${Math.round(d)} ft`;
+          right = d > 300 ? `${Math.round(d / 3)} <span class="badge-unit">yd</span>` : `${Math.round(d)} <span class="badge-unit">ft</span>`;
         } else right = '—';
         return `
           <div class="player-badge ${p.role}">
@@ -999,7 +1007,7 @@ class HotspotApp {
         if (!this.rtdbConnected && this.peerCount() === 0) {
           this.abandonRoom('CONNECTION LOST', 'Your phone lost its connection to the other phones, so the hunt was canceled.', false);
         } else {
-          this.abandonRoom('NO SEEKERS LEFT', 'Nobody has been chasing you for over 35 seconds. Hunt canceled.', false);
+          this.abandonRoom('NO SEEKERS LEFT', 'Nobody has been chasing you for over 35 seconds. Hunt canceled.', false, 'no-seekers');
         }
       }
       return;
@@ -1021,13 +1029,14 @@ class HotspotApp {
   }
 
   // Tell the player why they are being sent home, then actually send them.
-  abandonRoom(headline, detail, quiet = true) {
+  abandonRoom(headline, detail, quiet = true, reason = null) {
     this.stopPulseLoop();
     if (this.headStartTimer) { clearInterval(this.headStartTimer); this.headStartTimer = null; }
     this.showScreen('home-screen');
     // Quiet by default: in most cases the room is already over for everyone,
-    // so there is nobody left to announce a departure to.
-    try { this.leaveRoom({ quiet }); } catch (e) {}
+    // so there is nobody left to announce a departure to. reason travels with
+    // the announcement so the others are told why, not just that we left.
+    try { this.leaveRoom({ quiet, reason }); } catch (e) {}
     this.updateSeasonStatsDisplay();
     try { window.hotspotAudio.speak(headline.charAt(0) + headline.slice(1).toLowerCase() + '.'); } catch (e) {}
     this.notify(`${headline}\n\n${detail}`);
@@ -1175,7 +1184,7 @@ class HotspotApp {
       if (this.role === 'hider') {
         const seekersLeft = Object.values(this.players).some(p => p && p.role === 'seeker');
         if (!seekersLeft) {
-          this.abandonRoom('NO SEEKERS LEFT', `${data.name || 'The last seeker'} left the hunt, so nobody is chasing you.\n\nHunt canceled.`, false);
+          this.abandonRoom('NO SEEKERS LEFT', `${data.name || 'The last seeker'} left the hunt, so nobody is chasing you.\n\nHunt canceled.`, false, 'no-seekers');
         }
       } else {
         window.hotspotAudio.speak(`${data.name || 'A player'} left the hunt.`);
@@ -1217,7 +1226,10 @@ class HotspotApp {
 
     if (data.type === 'HIDER_ABANDONED') {
       if (this.roomCode && (this.gameState === 'active' || this.gameState === 'headstart')) {
-        this.abandonRoom('HIDER LEFT THE HUNT', `${data.name || 'The hider'} left, so this hunt is over.`);
+        // The hider's phone also sends this when it cancelled because the last
+        // seeker left. That is not the hider walking away, so say what happened.
+        if (data.reason === 'no-seekers') this.abandonRoom('NO SEEKERS LEFT', 'No seekers are left, so the hunt is over.');
+        else this.abandonRoom('HIDER LEFT THE HUNT', `${data.name || 'The hider'} left, so this hunt is over.`);
       }
       return;
     }
@@ -1392,10 +1404,15 @@ class HotspotApp {
   }
 
   showScreen(screenId) {
+    // The invite card is a fixed overlay. If the round starts or the room
+    // closes while it is up, it used to stay on top of the new screen.
+    if (screenId !== 'lobby-screen') this.closeInvite();
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     const target = document.getElementById(screenId);
     if (target) target.classList.add('active');
     if (screenId !== 'home-screen') this.armBackButton();
+    // The player taps Host, Join or Practice before the phone asks for location.
+    if (screenId === 'host-setup-screen' || screenId === 'join-screen') this.ensureGps();
   }
 
   // Installed on a phone there is no browser bar, so the back gesture is the
@@ -1438,6 +1455,7 @@ class HotspotApp {
     this.beginRoundBookkeeping();
     this.acquireWakeLock();
     this.ambientMode('hunt');
+    this.ensureGps();
 
     // The drill has to work on a couch with no GPS at all. Without a fix, stand
     // on the built-in practice point; if a real fix turns up mid-drill the
@@ -1451,11 +1469,11 @@ class HotspotApp {
 
     this.players = {
       [this.playerId]: { id: this.playerId, name: this.playerName, role: 'seeker' },
-      'solo_hider': { id: 'solo_hider', name: 'Virtual Hider', role: 'hider', lat: hiderPos.lat, lng: hiderPos.lng, accuracy: 15 }
+      'solo_hider': { id: 'solo_hider', name: 'Pretend hider', role: 'hider', lat: hiderPos.lat, lng: hiderPos.lng, accuracy: 15 }
     };
     this.hiderId = 'solo_hider';
 
-    window.hotspotAudio.speak('Solo Drill initialized! Virtual hider planted 300 feet out.');
+    window.hotspotAudio.speak('Practice started. A pretend hider is 300 feet away.');
 
     this.showScreen('seeker-screen');
     
@@ -1463,7 +1481,7 @@ class HotspotApp {
     if (soloControls) soloControls.style.display = 'block';
 
     const counter = document.getElementById('headstart-banner-seeker');
-    if (counter) counter.innerText = 'SOLO DRILL';
+    if (counter) counter.innerText = 'PRACTICE';
     // There is no match clock in a drill; the cell used to sit on "MATCH 5:00".
     const clock = document.getElementById('match-timer-seeker');
     if (clock) clock.innerText = 'NO CLOCK';
@@ -1485,7 +1503,7 @@ class HotspotApp {
       this.players['solo_hider'].lat = hiderPos.lat;
       this.players['solo_hider'].lng = hiderPos.lng;
     }
-    window.hotspotAudio.speak(`Virtual hider moved to ${Math.round(hiderPos.currentDistFeet)} feet`);
+    window.hotspotAudio.speak(`The pretend hider moved to ${Math.round(hiderPos.currentDistFeet)} feet`);
   }
 
   instantTagSoloHider() {
@@ -1530,6 +1548,8 @@ class HotspotApp {
     this.hiderId = this.role === 'hider' ? this.playerId : null;
     this.gameState = 'lobby';
     this.resumed = false;
+    // A reload or a deep link lands here without passing the home screen.
+    if (this.role !== 'spectator') this.ensureGps();
 
     const pos = this.hasGpsFix ? this.myPosition : null;
 
@@ -1586,7 +1606,8 @@ class HotspotApp {
       this.broadcastCloud({
         type: 'HIDER_ABANDONED',
         roundId: this.currentRoundId,
-        name: this.playerName
+        name: this.playerName,
+        reason: opts.reason || null
       });
     }
 
@@ -1690,8 +1711,8 @@ class HotspotApp {
       this.notify('Rematch is only available in a multiplayer room.');
       return;
     }
-    if (this.role !== 'hider' && this.role !== 'spectator') {
-      this.notify('Only the next Hider or a Spectator can start the rematch.');
+    if (this.role !== 'hider' && this.role !== 'spectator' && !this.isRoomHost) {
+      this.notify('Only the next Hider, a Spectator or the host can start the rematch.');
       return;
     }
     // A host whose phone died never got to close the room. Don't rematch into it.
@@ -1762,7 +1783,7 @@ class HotspotApp {
     if (next && next.id === this.playerId) this.role = 'hider';
     else if (this.role === 'hider') this.role = 'seeker';
 
-    const canRematch = this.role === 'hider' || this.role === 'spectator';
+    const canRematch = this.role === 'hider' || this.role === 'spectator' || this.isRoomHost;
     const btn = document.getElementById('btn-rematch');
     if (btn) btn.style.display = canRematch ? 'block' : 'none';
     const wait = document.getElementById('rematch-wait');
@@ -1828,9 +1849,51 @@ class HotspotApp {
       this.players[this.playerId].name = this.playerName;
     }
 
+    this.lobbyNameEditing = false;
     this.sendHeartbeat();
     this.updateLobbyList();
     window.hotspotAudio.speak(`Name updated to ${newName}`);
+  }
+
+  // The lobby shows the saved name on one line and opens the editor only to
+  // change it. The open editor used to take a whole row from the roster, and
+  // a name typed but never saved was not used anyway.
+  syncLobbyName() {
+    const line = document.getElementById('lobby-name-line');
+    const editor = document.getElementById('lobby-name-editor');
+    const shown = document.getElementById('lobby-name-shown');
+    if (!line || !editor) return;
+    const saved = this.loadSavedName();
+    const open = this.lobbyNameEditing || !saved;
+    line.style.display = open ? 'none' : 'flex';
+    editor.style.display = open ? 'flex' : 'none';
+    if (shown) shown.innerText = saved || '';
+  }
+
+  editLobbyName() {
+    this.lobbyNameEditing = true;
+    this.syncLobbyName();
+    const el = document.getElementById('lobby-nickname-input');
+    if (el) { try { el.focus(); el.select(); } catch (e) {} }
+  }
+
+  // "+2 more below" under the seeker well. On a short phone the well fits a
+  // row or two, and a row cut off at its foot looked like a glitch rather than
+  // a list to scroll, so a host could think a joiner never arrived.
+  refreshRosterMore() {
+    const well = document.getElementById('lobby-seeker-scroll');
+    const more = document.getElementById('lobby-seeker-more');
+    if (!well || !more) return;
+    if (!this.rosterMoreBound) {
+      this.rosterMoreBound = true;
+      well.addEventListener('scroll', () => this.refreshRosterMore(), { passive: true });
+    }
+    const foot = well.getBoundingClientRect().bottom;
+    const below = [...well.querySelectorAll('.player-badge')].filter(r => r.getBoundingClientRect().bottom > foot + 2).length;
+    well.dataset.more = below ? '1' : '0';
+    well.dataset.above = well.scrollTop > 2 ? '1' : '0';
+    more.style.display = below ? 'block' : 'none';
+    more.innerText = below ? `+${below} more below` : '';
   }
 
   joinRoom(code, nickname, role = 'seeker', resumed = false) {
@@ -1867,6 +1930,8 @@ class HotspotApp {
     this.role = role;
     this.gameState = 'lobby';
     this.resumed = false;
+    // A scanned link or a reload lands here without passing the home screen.
+    if (role !== 'spectator') this.ensureGps();
 
     const pos = (this.hasGpsFix && role !== 'spectator') ? this.myPosition : null;
 
@@ -2229,7 +2294,8 @@ class HotspotApp {
     const waitMsg = document.getElementById('lobby-wait-msg');
     const hider = this.getActiveHider();
     const searching = !this.isRoomHost && !this.hostSeenAt;
-    const canStart = !searching && (this.role === 'hider' || this.role === 'spectator');
+    // The host keeps Start too, even after handing the hider role to a child.
+    const canStart = !searching && (this.role === 'hider' || this.role === 'spectator' || this.isRoomHost);
 
     if (startBtn) startBtn.style.display = canStart ? 'block' : 'none';
     if (waitMsg) {
@@ -2238,6 +2304,9 @@ class HotspotApp {
       else if (!hider) waitMsg.innerText = 'Nobody is hiding yet — tap "Become the Hider" to hide';
       else waitMsg.innerText = `Waiting for ${hider.name || 'the Hider'} to start the round`;
     }
+
+    this.syncLobbyName();
+    this.refreshRosterMore();
   }
 
   // --- GAME START & HEADSTART TIMING ENGINE ---
@@ -2251,8 +2320,8 @@ class HotspotApp {
     // Start in the same spot. A second tap that quickly is not a decision.
     if (Date.now() - (this.lobbyEnteredAt || 0) < 700) return;
 
-    if (this.role !== 'hider' && this.role !== 'spectator') {
-      this.notify('Only the Hider or a Spectator can start the round.');
+    if (this.role !== 'hider' && this.role !== 'spectator' && !this.isRoomHost) {
+      this.notify('Only the Hider, a Spectator or the host can start the round.');
       return;
     }
 
@@ -2398,7 +2467,7 @@ class HotspotApp {
           this.headStartTimer = null;
 
           document.querySelectorAll('.headstart-counter').forEach(el => {
-            el.innerText = 'HUNT IS LIVE!';
+            el.innerText = 'HUNT LIVE';
           });
           if (hiderCounter) hiderCounter.innerText = 'HUNT LIVE';
 
@@ -2475,11 +2544,12 @@ class HotspotApp {
       if (headline) {
         if (tag) {
           headline.innerText = 'TAGGED!';
-          headline.style.color = 'var(--heat-2)';
+          // Plain ink: orange means "you are close" and nothing else.
+          headline.style.color = 'var(--ink)';
           // Said to each player in their own terms. This replaces a pop-up that
           // stopped the phone dead until it was dismissed.
           let line = `${tag.seekerName} caught ${tag.hiderName}`;
-          if (this.isSoloDrill) line = 'Drill complete — you reached the virtual hider';
+          if (this.isSoloDrill) line = 'Practice complete — you reached the pretend hider';
           else if (tag.seekerId === this.playerId) line = `You caught ${tag.hiderName} — you hide next round`;
           else if (tag.hiderId === this.playerId) line = `${tag.seekerName} caught you`;
           if (subhead) subhead.innerText = line;
@@ -2491,7 +2561,12 @@ class HotspotApp {
       }
 
       this.showScreen('replay-screen');
-      if (window.hotspotReplay) {
+      // An indoor practice run has no real place to show: the map opened on
+      // the built-in practice point, a satellite view of the wrong city.
+      const noPlace = this.isSoloDrill && (!this.hasGpsFix || !this.myPosition || !!this.myPosition.simulated);
+      const resultScreen = document.getElementById('replay-screen');
+      if (resultScreen) resultScreen.classList.toggle('drill', noPlace);
+      if (window.hotspotReplay && !noPlace) {
         window.hotspotReplay.loadReplayData(this.matchTrackHistory, this.tagEvent, this.yardCenterPos);
         window.hotspotReplay.setBoundary(this.yardCenterPos, this.boundaryRadius);
       }
@@ -2502,7 +2577,7 @@ class HotspotApp {
       // Only the next hider (or a spectator) can start the rematch. Everyone
       // used to be shown the button, and most of them got an error for tapping it.
       const inRoom = !!this.roomCode && !this.isSoloDrill;
-      const canRematch = inRoom && (this.role === 'hider' || this.role === 'spectator');
+      const canRematch = inRoom && (this.role === 'hider' || this.role === 'spectator' || this.isRoomHost);
       const rematchBtn = document.getElementById('btn-rematch');
       if (rematchBtn) {
         rematchBtn.style.display = canRematch ? 'block' : 'none';
@@ -2525,7 +2600,7 @@ class HotspotApp {
   matchClockText(remainingSec) {
     if (!this.matchDurationSeconds || this.matchDurationSeconds <= 0) return 'NO TIME LIMIT';
     const left = Math.max(0, Math.floor(remainingSec));
-    return `${Math.floor(left / 60)}:${(left % 60).toString().padStart(2, '0')} left`;
+    return `${Math.floor(left / 60)}:${(left % 60).toString().padStart(2, '0')} LEFT`;
   }
 
   setMatchClock(text) {
@@ -2668,10 +2743,28 @@ class HotspotApp {
   }
 
   startGpsTracking() {
+    this.gpsStarted = true;
     window.hotspotGeo.startTracking(
       (pos) => this.onGpsUpdate(pos),
       (err) => this.onGpsError(err)
     );
+  }
+
+  // Start once, the first time the player does something that needs a fix.
+  ensureGps() {
+    if (this.gpsStarted) return;
+    this.startGpsTracking();
+  }
+
+  // A returning player who already said yes should not have to tap first.
+  // Safari's permissions API is patchy, so any failure just waits for the tap.
+  startGpsIfAllowed() {
+    try {
+      if (!navigator.permissions || !navigator.permissions.query) return;
+      navigator.permissions.query({ name: 'geolocation' })
+        .then((s) => { if (s && s.state === 'granted') this.ensureGps(); })
+        .catch(() => {});
+    } catch (e) {}
   }
 
   // Only ever called with a real fix from the phone.
@@ -2824,18 +2917,28 @@ class HotspotApp {
       main = dist.querySelector('.dist-main'); sub = dist.querySelector('.dist-sub'); w = dist.querySelector('.dist-warn');
     }
     if (k) k.innerText = kicker;
-    if (bandLabel) bandLabel.innerText = label;
-    if (box) {
-      if (band) box.dataset.band = band; else delete box.dataset.band;
-      box.classList.toggle('notice', num === null);
-    }
+    // The word and the strip colour used to flip the instant a reading changed
+    // while the number was still gliding, so for a moment the panel said COLD
+    // over a hot number. A band change on a live reading waits a beat; a
+    // notice, a unit change or reduced motion writes at once.
+    const writeBand = () => {
+      if (bandLabel) bandLabel.innerText = label;
+      if (box) { if (band) box.dataset.band = band; else delete box.dataset.band; }
+    };
+    clearTimeout(this.bandLabelTimer); this.bandLabelTimer = null;
+    const calm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const liveChange = num !== null && !!band && !!box && !!box.dataset.band && box.dataset.band !== band && main.dataset.unit === unit && !calm;
+    if (liveChange) this.bandLabelTimer = setTimeout(writeBand, 150); else writeBand();
+    if (box) box.classList.toggle('notice', num === null);
     sub.innerText = unit;
     w.innerText = warn;
     this.glideNumber(main, num, unit);
   }
 
+  // The frame handle lives on the element, so the seeker's number and the
+  // hider's number each glide on their own.
   glideNumber(el, value, unit) {
-    if (this.glideRaf) { cancelAnimationFrame(this.glideRaf); this.glideRaf = null; }
+    if (el._hsRaf) { cancelAnimationFrame(el._hsRaf); el._hsRaf = null; }
     if (value === null || value === undefined) { el.innerText = ''; el.dataset.v = ''; el.dataset.unit = ''; return; }
     const from = parseFloat(el.dataset.v);
     const sameUnit = el.dataset.unit === unit;
@@ -2848,9 +2951,9 @@ class HotspotApp {
       const p = Math.min(1, (t - t0) / dur);
       const e = 1 - Math.pow(1 - p, 3);
       el.innerText = String(Math.round(from + (value - from) * e));
-      this.glideRaf = p < 1 ? requestAnimationFrame(step) : null;
+      el._hsRaf = p < 1 ? requestAnimationFrame(step) : null;
     };
-    this.glideRaf = requestAnimationFrame(step);
+    el._hsRaf = requestAnimationFrame(step);
   }
 
   // --- living background (ambient.js) ---
@@ -3045,7 +3148,8 @@ class HotspotApp {
           label: bandInfo.label,
           band: bandInfo.band,
           num: value,
-          unit: this.isSoloDrill ? `${unit} away \u00b7 drill` : `${unit} away \u00b7 \u00b1${marginFeet} ft`,
+          // "give or take", not a plus-minus sign: a child read it as two distances.
+          unit: this.isSoloDrill ? `${unit} away \u00b7 practice` : `${unit} away \u00b7 give or take ${marginFeet} ft`,
           warn: this.decoyPos ? 'May be a decoy'
             : (bandInfo.tagBlocked && (bandInfo.capped || bandInfo.band === 'HOTTER')) ? 'GPS too loose to tag'
             : (bandInfo.capped ? 'Weak GPS fix' : '')
@@ -3153,10 +3257,22 @@ class HotspotApp {
         );
 
         if (distEl) {
-          const shown = Math.round(closestDistFeet) > 300
-            ? `${Math.round(closestDistFeet / 3)}yd`
-            : `${Math.round(closestDistFeet)}ft`;
-          distEl.innerHTML = `${shown}<span class="dist-margin">±${margin}ft</span>`;
+          const far = Math.round(closestDistFeet) > 300;
+          const value = far ? Math.round(closestDistFeet / 3) : Math.round(closestDistFeet);
+          const unit = far ? 'yd' : 'ft';
+          // Built once, then the number glides like the seeker's does and the
+          // margin line is rewritten only when it changes. This used to rebuild
+          // the whole thing every quarter second. A plain-text write elsewhere
+          // (NO GPS, hiding time) wipes the spans, so put them back when missing.
+          let val = distEl.querySelector('.dist-val'), u = distEl.querySelector('.dist-unit'), m = distEl.querySelector('.dist-margin');
+          if (!val || !u || !m) {
+            distEl.innerHTML = '<span class="dist-val"></span><span class="dist-unit"></span><span class="dist-margin"></span>';
+            val = distEl.querySelector('.dist-val'); u = distEl.querySelector('.dist-unit'); m = distEl.querySelector('.dist-margin');
+          }
+          if (u.innerText !== unit) u.innerText = unit;
+          this.glideNumber(val, value, unit);
+          const marginText = `give or take ${margin} ft`;
+          if (m.innerText !== marginText) m.innerText = marginText;
         }
         // The hider's own screen warms as the pack closes in.
         this.ambientHeat(closestDistFeet);
@@ -3207,6 +3323,12 @@ class HotspotApp {
       if (!this.outOfBoundsSpoken) {
         this.outOfBoundsSpoken = true;
         if ('vibrate' in navigator) { try { navigator.vibrate([200, 100, 200]); } catch(e) {} }
+        else if (this.role === 'hider') {
+          // No buzz on this phone, and the hider's voice is off on purpose, so
+          // flash the screen once the way a tag does.
+          const hs = document.getElementById('hider-screen');
+          if (hs) { hs.classList.add('flash-screen'); setTimeout(() => hs.classList.remove('flash-screen'), 1500); }
+        }
         window.hotspotAudio.speak('Out of bounds! Head back inside the yard!');
       }
     } else if (state === 'edge') {
@@ -3437,7 +3559,7 @@ class HotspotApp {
 
     if (this.isSoloDrill) {
       // A drill has no next round and nobody to swap roles with.
-      window.hotspotAudio.speak('Tagged! Drill complete.');
+      window.hotspotAudio.speak('Tagged! Practice complete.');
     } else {
       // Winner hides next: the seeker who made the tag becomes the hider, and
       // the hider who was caught joins the seekers.

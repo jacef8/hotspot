@@ -21,6 +21,7 @@ class HotspotGeo {
     this.headingSamples = [];
     this.headingUpdatedAt = 0;
     this.compassStarted = false;
+    this.lastErrorCode = 0;
 
     this.checkProtocol();
   }
@@ -101,6 +102,7 @@ class HotspotGeo {
     this.currentPosition = { lat, lng, timestamp };
     this.accuracyFeet = accuracyFeet;
     this.hasRealFix = true;
+    this.lastErrorCode = 0;
 
     // Bounded: this is only a short recent history, and it used to grow for as
     // long as the app stayed open.
@@ -121,9 +123,16 @@ class HotspotGeo {
   handlePosError(err) {
     // Each of these is shown in the banner at the top of the screen, which is
     // also the button that retries — so each says what to do and stays short.
+    this.lastErrorCode = err && typeof err.code === 'number' ? err.code : 0;
     let msg = 'No location yet. Tap here to try again.';
     if (err && err.code === 1) { // PERMISSION_DENIED
-      msg = 'Location is blocked. Allow it in your browser settings, then tap here.';
+      // The browser will not ask again once Block has been chosen, so say
+      // where the switch is on this kind of phone.
+      const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent)
+        || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      msg = iOS
+        ? 'Location is blocked. On iPhone: Settings > Privacy & Security > Location Services > Safari Websites > Allow. Then tap here to reload.'
+        : 'Location is blocked. Tap the lock icon in the address bar > Permissions > Location > Allow. Then tap here to reload.';
     } else if (err && err.code === 2) { // POSITION_UNAVAILABLE
       msg = 'No location signal. Turn on Location, then tap here.';
     } else if (err && err.code === 3) { // TIMEOUT
@@ -197,6 +206,10 @@ class HotspotGeo {
 
     const attach = () => {
       this.compassStarted = true;
+      // The averaged samples are stale the moment the screen turns.
+      const reset = () => { this.headingSamples = []; };
+      window.addEventListener('orientationchange', reset);
+      try { if (screen.orientation && screen.orientation.addEventListener) screen.orientation.addEventListener('change', reset); } catch (e) {}
       // deviceorientationabsolute is true-north referenced. Plain
       // deviceorientation on Android is often relative to an arbitrary origin,
       // which would swing the arrow confidently in the wrong direction, so a
@@ -227,7 +240,10 @@ class HotspotGeo {
       heading = e.webkitCompassHeading;              // iOS: already true-north clockwise
       absolute = true;
     } else if (typeof e.alpha === 'number' && !isNaN(e.alpha)) {
-      heading = (360 - e.alpha) % 360;               // Android: alpha is counter-clockwise
+      // Android: alpha is counter-clockwise and read from the phone's top
+      // edge. In a browser tab the page can turn sideways, and then the
+      // radar's top is a different edge, so add the screen's turn.
+      heading = (360 - e.alpha + this.screenAngle()) % 360;
       absolute = !!(fromAbsoluteEvent || e.absolute);
     }
 
@@ -251,6 +267,16 @@ class HotspotGeo {
     this.headingSamples.forEach(v => { s += v.s; c += v.c; });
     this.deviceHeading = (((Math.atan2(s, c) * 180) / Math.PI) + 360) % 360;
     this.headingUpdatedAt = Date.now();
+  }
+
+  // How far the screen content is turned from the phone's upright position
+  // (0, 90, 180 or 270). 0 when the browser cannot say.
+  screenAngle() {
+    try {
+      if (screen.orientation && typeof screen.orientation.angle === 'number') return screen.orientation.angle;
+      if (typeof window.orientation === 'number') return (window.orientation + 360) % 360;
+    } catch (e) {}
+    return 0;
   }
 
   // Only trust a heading that is true-north referenced and still arriving.

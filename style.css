@@ -456,8 +456,11 @@ button.cooling .cd-bar { opacity: 1; }
   width: 11px; height: 11px; border-radius: 50%;
   background: var(--ink-3);
 }
-.player-badge.hider::before { background: var(--heat-hot); }
+.player-badge.hider::before { background: var(--hider-fill); }
 .player-badge.seeker::before { background: var(--accent); }
+/* The roster headings in the same two colours as the dots and labels below them */
+.card-title.hider { color: var(--hider-ink); font-weight: 800; }
+.card-title.seeker { color: var(--accent); font-weight: 800; }
 
 .badge-name {
   flex: 1 1 auto; min-width: 0;
@@ -776,9 +779,8 @@ button.cooling .cd-bar { opacity: 1; }
   color: var(--ink-2); white-space: nowrap;
 }
 .stat-bar { width: 100%; height: 5px; margin-top: 6px; border-radius: 5px; background: var(--surface-3); overflow: hidden; }
+/* All three bars in the accent: heat colours mean distance, nothing else */
 .stat-bar i { display: block; height: 100%; width: 0; border-radius: 5px; background: var(--accent); transition: width .5s ease; }
-.stat-box:nth-child(2) .stat-bar i { background: var(--heat-warm); }
-.stat-box:nth-child(3) .stat-bar i { background: var(--heat-hot); }
 
 /* ------------------------------------------------------------ diagnostics */
 #diag-panel { font-family: var(--font-mono); background: var(--bg) !important; color: var(--ink); }
@@ -916,16 +918,21 @@ button.cooling .cd-bar { opacity: 1; }
   .dialog, .toast { animation: none !important; transition: none !important; }
 }
 
-/* Hider panel: quiet scanner rings behind the number */
+/* Hider panel: quiet scanner rings behind the number. The rings are the card's
+   own background and never move (they are round, so turning them changed
+   nothing but cost a frame every refresh for the whole hunt). Only the thin
+   wedge turns, in 6-degree ticks so it draws about ten times a second. */
 .hider-radar-box { overflow: hidden; }
+.hider-radar-box {
+  background-image: repeating-radial-gradient(circle at 50% 50%, transparent 0 46px, color-mix(in srgb, var(--accent) 22%, transparent) 46px 47.5px);
+}
 .hider-radar-box::before {
   content: ""; position: absolute; left: 50%; top: 50%;
   width: 150%; aspect-ratio: 1; transform: translate(-50%, -50%);
-  background:
-    repeating-radial-gradient(circle, transparent 0 46px, color-mix(in srgb, var(--accent) 22%, transparent) 46px 47.5px),
-    conic-gradient(from 0deg, transparent 0 80%, color-mix(in srgb, var(--accent) 16%, transparent) 100%);
+  background: conic-gradient(from 0deg, transparent 0 80%, color-mix(in srgb, var(--accent) 16%, transparent) 100%);
   border-radius: 50%;
-  animation: hider-sweep 6s linear infinite;
+  animation: hider-sweep 6s steps(60) infinite;
+  will-change: transform;
   pointer-events: none; z-index: 0;
 }
 .hider-radar-box > * { position: relative; z-index: 1; }
@@ -1027,3 +1034,103 @@ button.cooling .cd-bar { opacity: 1; }
 .readout:not(.notice) { grid-template-columns: minmax(0, 1fr) minmax(0, 46%); }
 .readout:not(.notice) #seeker-dist-readout .dist-sub,
 .readout:not(.notice) #seeker-dist-readout .dist-warn { white-space: normal; text-align: right; }
+
+/* ------------------------------------------------------- home and setup */
+/* One plain line before the phone asks for location */
+.home-note { font-size: 14px; font-weight: 700; line-height: 1.3; color: var(--ink-2); text-align: center; margin-top: 8px; }
+
+/* Setup cards hug their fields; the button sits right under them instead of
+   the fields floating in the middle of a stretched card */
+.setup-card { flex: 0 0 auto; }
+
+/* ------------------------------------------------------------------ lobby */
+/* Your saved name on one line; the editor opens only to change it */
+.lobby-name-line {
+  width: 100%; min-height: 44px;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 8px 14px; margin-bottom: 8px;
+  border-radius: var(--r-s);
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  font-family: var(--font-text);
+  font-size: 15px; font-weight: 700;
+  color: var(--ink-2);
+  cursor: pointer; flex-shrink: 0;
+  position: relative; z-index: 20;
+}
+.lobby-name-line b { color: var(--ink); font-weight: 800; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lobby-name-line .lobby-name-change { margin-left: 6px; color: var(--accent); }
+.lobby-name-line:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+/* A roster well on a short phone fits a row or two. The line under it says
+   how many more are waiting below, and the well fades out at its foot while
+   there are. The well never shrinks under one row. */
+#lobby-seeker-scroll { min-height: 60px; }
+.scroll-well[data-more="1"] {
+  -webkit-mask-image: linear-gradient(#000 calc(100% - 14px), transparent);
+          mask-image: linear-gradient(#000 calc(100% - 14px), transparent);
+}
+/* Scrolled down: the rows that went up out of view fade the same way */
+.scroll-well[data-above="1"] {
+  -webkit-mask-image: linear-gradient(transparent, #000 14px);
+          mask-image: linear-gradient(transparent, #000 14px);
+}
+.scroll-well[data-above="1"][data-more="1"] {
+  -webkit-mask-image: linear-gradient(transparent, #000 14px, #000 calc(100% - 14px), transparent);
+          mask-image: linear-gradient(transparent, #000 14px, #000 calc(100% - 14px), transparent);
+}
+.roster-more { font-family: var(--font-text); font-size: 14px; font-weight: 700; color: var(--accent); text-align: center; padding-top: 6px; flex-shrink: 0; }
+
+/* The unit stays lower-case inside an upper-case label: "109 ft", not "109 FT" */
+.badge-unit { text-transform: none; }
+
+/* --------------------------------------------------------- hider alerts */
+/* The hider's phone is silent and an iPhone cannot buzz, so crossing the yard
+   line also shakes the banner rather than only recolouring it */
+@keyframes bound-shake { 20%, 60% { transform: translateX(-7px); } 40%, 80% { transform: translateX(7px); } }
+#hider-boundary-alert[data-bound="out"] { animation: bound-shake .5s ease-in-out 4; }
+@media (prefers-reduced-motion: reduce) { #hider-boundary-alert[data-bound="out"] { animation: none; } }
+
+/* After an indoor practice run there is no real place to show on a map; a
+   short note stands in for it */
+#replay-screen.drill #replay-map, #replay-screen.drill #replay-card, #replay-screen.drill .map-recenter-btn { display: none !important; }
+#replay-screen .drill-note { display: none; }
+#replay-screen.drill .drill-note { display: block; }
+
+/* -------------------------------------------------------------- map chrome */
+/* Leaflet ships white 12px chrome. Everything the map draws takes the app's
+   tokens, so night mode stays dark, labels stay readable and the people on
+   the map wear the same colours as in the lobby. */
+.leaflet-container { background: var(--surface-2); font-family: var(--font-text); font-size: 14px; }
+.leaflet-touch .leaflet-bar, .leaflet-bar { border: 1px solid var(--line); border-radius: var(--r-s); overflow: hidden; box-shadow: var(--raise); }
+.leaflet-touch .leaflet-bar a, .leaflet-bar a {
+  width: 48px; height: 48px; line-height: 48px;
+  font-family: var(--font-display); font-size: 24px; font-weight: 800;
+  background: var(--surface); color: var(--ink);
+  border-bottom: 1px solid var(--line);
+}
+.leaflet-touch .leaflet-bar a:last-child, .leaflet-bar a:last-child { border-bottom: 0; }
+.leaflet-bar a:hover, .leaflet-bar a:focus { background: var(--surface-2); color: var(--ink); }
+.leaflet-bar a.leaflet-disabled { background: var(--surface-3); color: var(--ink-3); }
+.leaflet-tooltip {
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--r-s);
+  box-shadow: var(--raise);
+  font-family: var(--font-text); font-size: 14px; font-weight: 700; line-height: 1.2;
+  padding: 5px 9px;
+}
+.leaflet-tooltip-top:before { border-top-color: var(--line); }
+.leaflet-tooltip-bottom:before { border-bottom-color: var(--line); }
+.leaflet-tooltip-left:before { border-left-color: var(--line); }
+.leaflet-tooltip-right:before { border-right-color: var(--line); }
+.leaflet-container .leaflet-control-attribution {
+  background: var(--surface); color: var(--ink-2);
+  font-family: var(--font-text); font-size: 12px; font-weight: 700; line-height: 1.3;
+  padding: 3px 8px; border-radius: var(--r-s) 0 0 0;
+}
+.leaflet-container .leaflet-control-attribution a { color: var(--accent); }
+/* Tracks, rings and the yard circle are SVG; a class lets them follow a theme switch */
+.hs-track.hider { stroke: var(--hider-fill); fill: var(--hider-fill); }
+.hs-track.seeker { stroke: var(--accent); fill: var(--accent); }
+.hs-yard { stroke: var(--warn-fill); fill: var(--warn-fill); }
+.custom-player-marker, .tag-marker { background: transparent; border: 0; }

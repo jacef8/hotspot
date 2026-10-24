@@ -36,6 +36,16 @@ class HotspotReplay {
     return Date.now() < this.programmaticUntil;
   }
 
+  // A token's current value, for the colour strings Leaflet wants when a layer
+  // is first drawn. Each layer also carries a class, so a theme switch
+  // restyles it from the stylesheet without redrawing.
+  token(name, fallback) {
+    try {
+      const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      return v || fallback;
+    } catch (e) { return fallback; }
+  }
+
   setUserPanned(panned) {
     this.userHasPanned = panned;
     // Both the spectator and replay screens carry a recenter button.
@@ -76,13 +86,15 @@ class HotspotReplay {
       return;
     }
 
+    const yard = this.token('--warn-fill', '#F5A524');
     this.boundaryCircle = L.circle(latLng, {
+      className: 'hs-yard',
       radius: radiusMeters,
-      color: '#FFB020',
+      color: yard,
       weight: 2,
       dashArray: '6, 6',
       fill: true,
-      fillColor: '#FFB020',
+      fillColor: yard,
       fillOpacity: 0.07
     }).addTo(this.map);
     this.boundaryCircle.bindTooltip(`Yard limit — ${radiusFeet}ft`, { permanent: false });
@@ -111,6 +123,8 @@ class HotspotReplay {
     }
 
     this.map = L.map(elementId, { zoomControl: true }).setView(center, zoom);
+    // Esri's credit stays; the "Leaflet" prefix made the strip span the map.
+    try { this.map.attributionControl.setPrefix(false); } catch (e) {}
 
     // A freshly built map starts following again.
     this.setUserPanned(false);
@@ -162,8 +176,11 @@ class HotspotReplay {
       present[player.id] = true;
 
       const isHider = player.role === 'hider';
-      // The app's own palette: the target is hot, everyone else is cold.
-      const color = isHider ? '#FF6B3D' : '#7DD3FC';
+      // The same tokens as the lobby and the readouts: the hider wears the
+      // hider colour, seekers the accent. The marker's inline style uses the
+      // tokens directly; the SVG layers get a class for the same reason.
+      const kind = isHider ? 'hider' : 'seeker';
+      const color = this.token(isHider ? '--hider-fill' : '--accent', isHider ? '#B03A06' : '#0A5BC4');
       // Accuracy arrives in feet; Leaflet draws radii in metres. Passing feet
       // straight through drew every uncertainty ring 3.3 times too large.
       const accuracyMeters = (player.accuracy || 33) / 3.28084;
@@ -172,16 +189,17 @@ class HotspotReplay {
       if (!this.markers[player.id]) {
         const iconHtml = `
           <div style="
-            background: ${color};
+            background: var(${isHider ? '--hider-fill' : '--accent'});
+            color: var(${isHider ? '--hider-fill-ink' : '--accent-ink'});
             width: 22px;
             height: 22px;
             border-radius: 50%;
-            border: 3px solid #FFF;
-            box-shadow: 0 0 6px ${color};
+            border: 3px solid var(--surface);
+            box-shadow: var(--raise);
             display: flex;
             align-items: center;
             justify-content: center;
-            color: #000;
+            font-family: var(--font-display);
             font-weight: 800;
             font-size: 13px;
           ">
@@ -199,6 +217,7 @@ class HotspotReplay {
           .bindTooltip(`${window.hsEscape(player.name)} (${window.hsEscape(String(player.role).toUpperCase())})`, { permanent: true, direction: 'top' });
 
         this.polylines[player.id] = L.polyline(player.trail || [latlng], {
+          className: `hs-track ${kind}`,
           color: color,
           weight: 4,
           opacity: 0.7,
@@ -206,6 +225,7 @@ class HotspotReplay {
         }).addTo(this.map);
 
         this.accuracyCircles[player.id] = L.circle(latlng, {
+          className: `hs-track ${kind}`,
           radius: accuracyMeters,
           color: color,
           fillColor: color,
@@ -301,16 +321,16 @@ class HotspotReplay {
     if (this.map && this.tagEvent && this.tagEvent.lat) {
       const tagMarkerHtml = `
         <div style="
-          background: #FF4257;
-          width: 32px;
-          height: 32px;
+          background: var(--bad-fill);
+          color: var(--bad-fill-ink);
+          width: 30px;
+          height: 30px;
           border-radius: 50%;
-          border: 3px solid #FFF;
-          box-shadow: 0 0 20px #FF4257;
+          border: 3px solid var(--surface);
+          box-shadow: var(--raise);
           display: flex;
           align-items: center;
           justify-content: center;
-          color: #FFF;
           font-weight: 800;
           font-size: 15px;
         ">
@@ -390,6 +410,7 @@ class HotspotReplay {
     // Play on a finished replay starts over; it used to do nothing at all.
     if ((this.replayPct || 0) >= 100) this.replayPct = 0;
     this.isPlaying = true;
+    this.syncReplayButton();
 
     // The whole round in about twenty seconds, never slower than it happened.
     const roundSec = Math.max(1, (range.t1 - range.t0) / 1000);
@@ -409,6 +430,21 @@ class HotspotReplay {
       clearInterval(this.replayInterval);
       this.replayInterval = null;
     }
+    this.syncReplayButton();
+  }
+
+  // One button for play and pause. Two always-live buttons used to sit side by
+  // side, and nothing on them said whether the replay was running.
+  toggleReplay(onProgressUpdate) {
+    if (this.isPlaying) this.pauseReplay();
+    else this.playReplay(onProgressUpdate);
+  }
+
+  // The label follows the state wherever it changes: a tap, the run reaching
+  // the end, a new result loading.
+  syncReplayButton() {
+    const btn = document.getElementById('btn-replay-toggle');
+    if (btn) btn.innerText = this.isPlaying ? 'Pause' : 'Play replay';
   }
 
   setSpeed(speed) {
