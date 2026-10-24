@@ -26,22 +26,36 @@ self.addEventListener('activate', (event) => {
   );
 });
 
+// The pinned libraries and fonts the page loads from CDNs: the scripts carry
+// a fixed version in their path and the font files never change, so a cached
+// copy is always the one asked for. Nothing live is on this list: the
+// database, PeerJS signalling and map tiles are never touched.
+function isPinnedLibrary(url) {
+  if (url.hostname === 'fonts.googleapis.com' || url.hostname === 'fonts.gstatic.com') return true;
+  if (url.hostname === 'unpkg.com' || url.hostname === 'cdn.jsdelivr.net') return /@\d/.test(url.pathname);
+  if (url.hostname === 'www.gstatic.com') return url.pathname.startsWith('/firebasejs/');
+  return false;
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
 
-  // Only ever touch same-origin GETs. Never interfere with the Firebase
-  // Realtime Database socket, PeerJS signalling, or map tiles.
+  // Only same-origin GETs and the pinned libraries above.
   if (req.method !== 'GET') return;
-  let sameOrigin = false;
-  try { sameOrigin = new URL(req.url).origin === self.location.origin; } catch (e) { return; }
-  if (!sameOrigin) return;
+  let url;
+  try { url = new URL(req.url); } catch (e) { return; }
+  const sameOrigin = url.origin === self.location.origin;
+  const library = !sameOrigin && isPinnedLibrary(url);
+  if (!sameOrigin && !library) return;
 
   event.respondWith(
     fetch(req)
       .then((res) => {
         // Cache under the full URL including its ?v= query, so a hit can only
-        // ever be the exact build that asked for it.
-        if (res && res.ok) {
+        // ever be the exact build that asked for it. A library script loaded
+        // by a plain <script> tag comes back opaque (no status to read); it
+        // is kept too, and only ever used when the network fails outright.
+        if (res && (res.ok || (library && res.type === 'opaque'))) {
           const copy = res.clone();
           caches.open(CACHE_NAME).then((c) => c.put(req, copy)).catch(() => {});
         }

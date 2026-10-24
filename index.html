@@ -35,10 +35,14 @@
 
   <!-- Type: Archivo for the big numbers and headings; Atkinson Hyperlegible,
        built to stay readable in poor light and at a glance, for everything
-       else; its mono for room codes and clocks. -->
+       else; its mono for room codes and clocks.
+       Loaded as "print" and switched on when it arrives, so the first paint
+       never waits on Google: on a weak yard signal the screen shows in the
+       phone's own fonts and swaps when these land. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,700..900&family=Atkinson+Hyperlegible+Next:wght@400;700;800&family=Atkinson+Hyperlegible+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,700..900&family=Atkinson+Hyperlegible+Next:wght@400;700;800&family=Atkinson+Hyperlegible+Mono:wght@500;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+  <noscript><link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,700..900&family=Atkinson+Hyperlegible+Next:wght@400;700;800&family=Atkinson+Hyperlegible+Mono:wght@500;700&display=swap" rel="stylesheet"></noscript>
 
   <!-- Bright or night mode, applied before the first paint so the screen
        never flashes the wrong one. No choice saved = follow the phone. -->
@@ -51,8 +55,11 @@
     })();
   </script>
 
-  <!-- Leaflet Map CSS + JS -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <!-- Leaflet Map CSS + JS. The CSS is only for the two map screens, so it
+       loads the same non-blocking way as the fonts; style.css still comes
+       later in the page and keeps its overrides. -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" media="print" onload="this.media='all'" />
+  <noscript><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" /></noscript>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
   <!-- PeerJS WebRTC P2P Library for Direct Phone-to-Phone Sync (Zero Rate Limits) -->
@@ -98,11 +105,11 @@
 <body>
 
   <!-- Diagnostics overlay — opened by tapping the version badge -->
-  <div id="diag-panel" style="display:none; position:fixed; inset:0; z-index:9999; background:#080A0F; overflow-y:auto; font-family:ui-monospace,Menlo,Consolas,monospace;">
-   <div id="diag-scroll" style="padding:16px;">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-      <strong style="font-size:15px; color:var(--accent); letter-spacing:1px;">DIAGNOSTICS</strong>
-      <button onclick="window.hotspotApp.toggleDiagnostics()" style="background:var(--e2-hi); color:var(--ink); min-height:44px; border:0; border-radius:8px; padding:8px 14px; font-weight:800;">Close</button>
+  <div id="diag-panel" style="display:none;">
+   <div id="diag-scroll">
+    <div class="diag-head">
+      <strong class="diag-title">DIAGNOSTICS</strong>
+      <button class="btn btn-secondary diag-close" onclick="window.hotspotApp.toggleDiagnostics()">Close</button>
     </div>
     <div id="diag-body"></div>
     <p>
@@ -116,7 +123,7 @@
     <div class="overlay-inner">
       <div class="overlay-head">
         <strong class="overlay-title">INVITE PLAYERS</strong>
-        <button class="btn btn-secondary" style="width:auto; margin:0; padding:8px 16px;" onclick="window.hotspotApp.closeInvite()">Close</button>
+        <button class="btn btn-secondary overlay-close" onclick="window.hotspotApp.closeInvite()">Close</button>
       </div>
       <div class="qr-tile" id="invite-qr" role="img" aria-label="QR code for this room"></div>
       <div class="brand-subtitle" style="margin-top: 14px;">SCAN WITH THE PHONE CAMERA</div>
@@ -131,7 +138,7 @@
   <!-- The app's own pop-up (no browser alert/confirm boxes) and a small
        message strip for quick confirmations. -->
   <div id="hs-dialog" class="dialog-scrim" hidden>
-    <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="hs-dialog-title" aria-describedby="hs-dialog-body">
+    <div class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="hs-dialog-title" aria-describedby="hs-dialog-body" tabindex="-1">
       <div id="hs-dialog-title" class="dialog-title"></div>
       <div id="hs-dialog-body" class="dialog-body"></div>
       <div class="dialog-actions">
@@ -154,7 +161,11 @@
 
     <!-- Top bar: GPS fix, then bright/night, voice and home. Icons are Lucide. -->
     <div class="top-bar">
-      <span class="accuracy-tag" onclick="window.hotspotApp.requestGpsPermissionDirectly()">GPS: Searching...</span>
+      <!-- The words say the state, so a weak or lost fix never rests on the
+           dot's colour alone. A screen reader hears the state when it changes
+           (the hidden line), not every new accuracy number. -->
+      <button type="button" class="accuracy-tag" onclick="window.hotspotApp.requestGpsPermissionDirectly()">GPS SEARCHING…</button>
+      <span id="gps-tag-sr" class="sr-only" aria-live="polite"></span>
       <div class="top-actions">
         <button class="icon-btn theme-btn" onclick="window.hotspotApp.toggleTheme()" aria-label="Switch bright or night mode">
           <svg class="ic ic-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg>
@@ -173,11 +184,9 @@
     <!-- ==================== SCREEN 1: HOME / MAIN MENU ==================== -->
     <div id="home-screen" class="screen active">
       <div class="scope-head">
-        <div class="scope-rule"><span>THERMAL PURSUIT SYSTEM</span></div>
         <h1 class="brand-title">HOTSPOT</h1>
         <div class="scope-meta">
-          <span class="tele" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.5.2</span>
-          <span id="cloud-sync-status" class="tele">STANDBY</span>
+          <span class="tele tele-tap" onclick="window.hotspotApp.toggleDiagnostics()" title="Tap for diagnostics">BUILD 3.5.2</span>
         </div>
       </div>
 
@@ -227,7 +236,7 @@
             <div class="stat-bar" aria-hidden="true"><i id="dial-2"></i></div>
           </div>
           <div class="stat-box">
-            <div class="stat-val" id="stat-longest-hide">0s</div>
+            <div class="stat-val" id="stat-longest-hide">--</div>
             <div class="stat-lbl">Best hide</div>
             <div class="stat-bar" aria-hidden="true"><i id="dial-3"></i></div>
           </div>
@@ -242,7 +251,7 @@
     <!-- ==================== SCREEN 2: HOST SETUP ==================== -->
     <div id="host-setup-screen" class="screen">
       <div class="brand-header">
-        <h2 class="brand-title" style="font-size: 24px;">Host Setup</h2>
+        <h2 class="brand-title screen-title">Host Setup</h2>
       </div>
 
       <div class="card setup-card">
@@ -312,9 +321,9 @@
       <button id="lobby-name-line" class="lobby-name-line" style="display: none;" onclick="window.hotspotApp.editLobbyName()">
         Playing as <b id="lobby-name-shown">—</b><span class="lobby-name-change">Change</span>
       </button>
-      <div id="lobby-name-editor" style="display: flex; gap: 8px; margin-bottom: 8px;">
-        <input type="text" id="lobby-nickname-input" class="text-input" style="flex: 1; padding: 10px 14px; margin-bottom: 0;" placeholder="Your name">
-        <button class="btn btn-secondary" style="width: auto; padding: 10px 14px; margin-bottom: 0; border-color: var(--accent); color: var(--accent); font-weight: 800;" onclick="window.hotspotApp.updateLobbyNickname()">
+      <div id="lobby-name-editor" class="lobby-name-editor" style="display: flex;">
+        <input type="text" id="lobby-nickname-input" class="text-input" placeholder="Your name">
+        <button class="btn btn-secondary btn-outline" onclick="window.hotspotApp.updateLobbyNickname()">
           Save Name
         </button>
       </div>
@@ -323,10 +332,10 @@
            beside the invite button: a QR code to scan or a link to send, so
            nobody has to read a six-character code out loud. -->
       <div class="lobby-actions">
-        <button id="btn-switch-role" class="btn btn-secondary" style="border-color: var(--accent);" onclick="window.hotspotApp.toggleRole()">
+        <button id="btn-switch-role" class="btn btn-secondary btn-outline" onclick="window.hotspotApp.toggleRole()">
           Become the Hider
         </button>
-        <button id="btn-invite" class="btn btn-secondary" style="width: auto; padding-left: 14px; padding-right: 14px; border-color: var(--accent); color: var(--accent);" onclick="window.hotspotApp.openInvite()" aria-label="Invite players with a QR code or link">
+        <button id="btn-invite" class="btn btn-secondary btn-outline" onclick="window.hotspotApp.openInvite()" aria-label="Invite players with a QR code or link">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 14h3v3h-3zM20 14h1M14 20h2M20 18v3h-2"/></svg>
           Invite
         </button>
@@ -334,14 +343,14 @@
 
       <div class="card" style="flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; gap: 12px;">
         <div>
-          <div class="card-title hider" style="font-size: 14px; letter-spacing: 1px; margin-bottom: 6px;">
+          <div class="card-title hider">
             HIDER
           </div>
           <div id="lobby-hider-list"></div>
         </div>
 
         <div style="flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden;">
-          <div class="card-title seeker" style="font-size: 14px; letter-spacing: 1px; margin-bottom: 6px;">
+          <div class="card-title seeker">
             SEEKERS
           </div>
           <!-- Outer well scrolls (Lenis); the inner list is what app.js rebuilds.
@@ -363,7 +372,7 @@
       </div>
 
       <button id="btn-start-round" class="btn btn-primary" style="display: none;" onclick="window.hotspotApp.startHeadstart()">
-        Start Round
+        Start the hunt
       </button>
       <div id="lobby-wait-msg" class="lobby-wait" style="display: none;">
         Looking for this room…
@@ -373,13 +382,13 @@
     <!-- ==================== SCREEN 4: JOIN ROOM ==================== -->
     <div id="join-screen" class="screen">
       <div class="brand-header">
-        <h2 class="brand-title" style="font-size: 24px;">Join Hunt</h2>
+        <h2 class="brand-title screen-title">Join Hunt</h2>
       </div>
 
       <div class="card setup-card">
         <div class="input-group">
           <label class="input-label">Room code — 6 characters</label>
-          <input type="text" id="join-code-input" class="text-input" maxlength="6" placeholder="e.g. K7RQ4M" style="text-transform: uppercase; font-size: 22px; text-align: center; letter-spacing: 4px;" onkeydown="if(event.key==='Enter') window.joinRoomAction()">
+          <input type="text" id="join-code-input" class="text-input code-input" maxlength="6" placeholder="e.g. K7RQ4M" onkeydown="if(event.key==='Enter') window.joinRoomAction()">
         </div>
 
         <div class="input-group">
@@ -389,22 +398,22 @@
       </div>
 
       <button id="btn-enter-hunt" class="btn btn-primary" onclick="window.joinRoomAction()">
-        Enter Hunt
+        Join
       </button>
     </div>
 
     <!-- ==================== SCREEN 5: JOIN SPECTATOR ==================== -->
     <div id="join-spectator-screen" class="screen">
       <div class="brand-header">
-        <h2 class="brand-title" style="font-size: 24px;">Watch</h2>
+        <h2 class="brand-title screen-title">Watch</h2>
       </div>
 
       <div class="card setup-card">
         <div class="input-group">
           <label class="input-label">Room code — 6 characters</label>
-          <input type="text" id="spectator-code-input" class="text-input" maxlength="6" placeholder="e.g. K7RQ4M" style="text-transform: uppercase; font-size: 22px; text-align: center; letter-spacing: 4px;" onkeydown="if(event.key==='Enter') window.joinSpectatorAction()">
+          <input type="text" id="spectator-code-input" class="text-input code-input" maxlength="6" placeholder="e.g. K7RQ4M" onkeydown="if(event.key==='Enter') window.joinSpectatorAction()">
         </div>
-        <p class="solo-hint" style="display: block; margin: 0;">You wait in the lobby with everyone else. The live map opens when the round starts, and you can start the round yourself.</p>
+        <p class="solo-hint" style="display: block; margin: 0;">You wait in the lobby with everyone else. The live map opens when the hunt starts, and you can start the hunt yourself.</p>
       </div>
 
       <button class="btn btn-primary" onclick="window.joinSpectatorAction()">
@@ -514,21 +523,21 @@
 
     <!-- ==================== SCREEN 8: SPECTATOR GOD VIEW ==================== -->
     <div id="spectator-screen" class="screen">
-      <div class="brand-header" style="margin-bottom: 6px;">
-        <h2 class="brand-title" style="font-size: 20px;">Live map</h2>
-      </div>
-
-      <!-- Round status. A "Start Round" button used to sit here, on a screen
-           that only exists once a round is already running. -->
-      <div class="rail">
-        <div class="rail-cell headstart-counter lit">HIDING TIME</div>
-        <div id="match-timer-spectator" class="rail-cell">--:-- LEFT</div>
+      <!-- The same head as the seeker and hider screens: who you are in this
+           hunt, then the clocks. A "Start Round" button used to sit here, on
+           a screen that only exists once a round is already running. -->
+      <div class="hunt-head">
+        <div class="role-badge watch-role-badge">Watcher</div>
+        <div class="rail">
+          <div class="rail-cell headstart-counter lit">HIDING TIME</div>
+          <div id="match-timer-spectator" class="rail-cell">--:-- LEFT</div>
+        </div>
       </div>
 
       <div id="spectator-map"></div>
 
       <!-- Appears only once you pan/zoom; auto-follow pauses until you tap it -->
-      <button class="btn btn-secondary map-recenter-btn" style="display: none; margin-bottom: 8px; border-color: var(--accent); color: var(--accent); padding: 8px;" onclick="window.hotspotReplay.recenterMap()">
+      <button class="btn btn-secondary btn-outline map-recenter-btn" style="display: none;" onclick="window.hotspotReplay.recenterMap()">
         Recenter on Players
       </button>
 
@@ -544,8 +553,8 @@
     <!-- ==================== SCREEN 9: POST-GAME REPLAY ==================== -->
     <div id="replay-screen" class="screen">
       <div class="brand-header" style="margin-bottom: 6px;">
-        <h2 id="replay-headline" class="brand-title" style="font-size: 24px;">ROUND OVER</h2>
-        <div id="replay-subhead" class="result-line">Post-match track replay</div>
+        <h2 id="replay-headline" class="brand-title screen-title">HUNT OVER</h2>
+        <div id="replay-subhead" class="result-line">Replay of the hunt</div>
       </div>
 
       <!-- The map and the replay card are hidden after an indoor practice run:
@@ -553,7 +562,7 @@
       <div id="replay-map"></div>
 
       <!-- Appears only once you pan/zoom the replay map -->
-      <button class="btn btn-secondary map-recenter-btn" style="display: none; margin-bottom: 8px; border-color: var(--accent); color: var(--accent); padding: 8px;" onclick="window.hotspotReplay.recenterMap()">
+      <button class="btn btn-secondary btn-outline map-recenter-btn" style="display: none;" onclick="window.hotspotReplay.recenterMap()">
         Recenter on Tracks
       </button>
 
@@ -567,7 +576,7 @@
         <input type="range" id="replay-slider" min="0" max="100" value="0" aria-label="Replay position" oninput="window.hotspotReplay.stepReplay(this.value)">
         <!-- One button: Play while paused, Pause while playing. Rematch below
              is the only primary action on this screen. -->
-        <button id="btn-replay-toggle" class="btn btn-secondary" style="padding: 10px; margin-bottom: 0;" onclick="window.hotspotReplay.toggleReplay((pct) => document.getElementById('replay-slider').value = pct)">
+        <button id="btn-replay-toggle" class="btn btn-secondary" style="margin-bottom: 0;" onclick="window.hotspotReplay.toggleReplay((pct) => document.getElementById('replay-slider').value = pct)">
           Play replay
         </button>
         <!-- Shown, with the slider and button switched off, when this phone has
@@ -596,7 +605,10 @@
       const md = document.getElementById('setup-matchduration').value;
       const tr = document.getElementById('setup-tagradius').value;
       const name = document.getElementById('host-nickname').value;
+      // A first-time player has to give a name: a blank one used to put
+      // "Runner_482" on everyone's roster with no warning.
       if (name && name.trim()) window.hotspotApp.saveName(name);
+      else if (!window.hotspotApp.loadSavedName()) { window.hotspotApp.fieldError('host-nickname', 'Type your name so the others know who you are'); return; }
       window.hotspotApp.createRoom(hs, 'classic', b, md, tr);
     };
 
@@ -608,7 +620,10 @@
 
       // joinRoom does the checking and says exactly what is wrong. This used to
       // let a 4-character code through to it, only for joinRoom to refuse it.
-      window.hotspotApp.joinRoom(code, nick, 'seeker');
+      // The name is checked here, on the Join screen only: a spectator, a
+      // resumed room and a scanned link with a saved name all skip it.
+      const nameMissing = !(nick && nick.trim()) && !window.hotspotApp.loadSavedName();
+      window.hotspotApp.joinRoom(code, nick, 'seeker', false, nameMissing ? 'join-nickname-input' : null);
     };
 
     window.joinSpectatorAction = function() {

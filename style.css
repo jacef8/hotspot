@@ -28,6 +28,8 @@
   --surface-3: #E2E7ED;   /* pressed / lit cell */
   --line: #C3CCD7;
   --line-2: #A9B4C2;
+  --field-edge: #7F8DA0;  /* text box outline, 3.4:1 on white */
+  --btn-edge: var(--line);
 
   --ink: #0D1116;         /* body, ~19:1 on white */
   --ink-2: #2E3641;       /* secondary, ~12:1 */
@@ -89,6 +91,8 @@
     --surface-3: #16203A;
     --line: #22314F;
     --line-2: #34476B;
+    --field-edge: #4C638F;
+    --btn-edge: #3A4C70;   /* a black shadow does not show on black, so the edge does the work */
     --ink: #EEF4FF;
     --ink-2: #C6D3EA;
     --ink-3: #97A8C6;
@@ -122,6 +126,8 @@
   --surface-3: #16203A;
   --line: #22314F;
   --line-2: #34476B;
+  --field-edge: #4C638F;
+  --btn-edge: #3A4C70;
   --ink: #EEF4FF;
   --ink-2: #C6D3EA;
   --ink-3: #97A8C6;
@@ -203,26 +209,35 @@ svg.ic { width: 22px; height: 22px; flex: 0 0 auto; display: block; }
   padding: 10px 14px 6px;
   flex-shrink: 0; position: relative; z-index: 20;
 }
-.top-actions { display: flex; gap: 8px; }
+.top-actions { display: flex; gap: 8px; flex: 0 0 auto; }
 
+/* The GPS line is a real button, as tall as the icons beside it: the GPS
+   messages tell players to tap it. A long state ("GPS WEAK ±60 ft") wraps to
+   two lines on a narrow phone rather than pushing the icons off. */
 .accuracy-tag {
   display: inline-flex; align-items: center; gap: 6px;
-  min-height: 44px; padding: 0 14px;   /* a tap here asks for GPS */
+  flex: 0 1 auto; min-width: 0;
+  min-height: var(--tap); padding: 0 14px;   /* a tap here asks for GPS */
   border-radius: 999px;
   background: var(--surface);
   border: 1px solid var(--line);
   font-family: var(--font-mono);
-  font-size: 14px; font-weight: 700; letter-spacing: .02em;
+  font-size: 14px; font-weight: 700; letter-spacing: .02em; line-height: 1.15;
   font-variant-numeric: tabular-nums;
+  text-align: left;
   color: var(--ink-2);
-  cursor: pointer; white-space: nowrap;
+  cursor: pointer;
 }
 .accuracy-tag::before {
-  content: ""; width: 9px; height: 9px; border-radius: 50%;
+  content: ""; flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%;
   background: var(--ok);
 }
-.accuracy-tag.weak::before { background: var(--warn-fill); }
+/* The words say weak or off; the dot backs them up in a colour that shows
+   on both grounds */
+.accuracy-tag.weak::before { background: var(--warn); }
 .accuracy-tag.off::before { background: var(--bad); }
+.accuracy-tag:active { background: var(--surface-2); }
+.accuracy-tag:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
 /* Round icon buttons in the top dock */
 .icon-btn {
@@ -272,15 +287,6 @@ svg.ic { width: 22px; height: 22px; flex: 0 0 auto; display: block; }
 /* --------------------------------------------------------------- wordmark */
 .scope-head, .brand-header { flex-shrink: 0; text-align: center; margin-bottom: 10px; }
 
-.scope-rule {
-  display: flex; align-items: center; gap: 10px;
-  font-family: var(--font-text);
-  font-size: 12px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase;
-  color: var(--ink-3);
-  margin-bottom: 6px;
-}
-.scope-rule::before, .scope-rule::after { content: ""; flex: 1; height: 1px; background: var(--line); }
-
 .brand-title {
   font-family: var(--font-display);
   font-weight: 900;
@@ -289,7 +295,10 @@ svg.ic { width: 22px; height: 22px; flex: 0 0 auto; display: block; }
   line-height: .95;
   color: var(--ink);
 }
-h2.brand-title { font-weight: 800; letter-spacing: -.015em; line-height: 1.05; }
+/* Screen titles share the wordmark's wide tracking (set with font-stretch
+   below); this rule used to beat it with a tighter one for h2s only. */
+h2.brand-title { font-weight: 800; line-height: 1.05; }
+.brand-title.screen-title { font-size: 24px; }
 
 .brand-subtitle {
   font-family: var(--font-text);
@@ -309,9 +318,10 @@ h2.brand-title { font-weight: 800; letter-spacing: -.015em; line-height: 1.05; }
   border-radius: 999px;
   background: var(--surface-2);
   border: 1px solid var(--line);
-  cursor: pointer;
   max-width: 60vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* Only the build tag does anything when tapped (it opens diagnostics) */
+.tele-tap { cursor: pointer; }
 
 /* ------------------------------------------------------------------ cards */
 .card, .hider-radar-box, #solo-controls-card {
@@ -341,7 +351,7 @@ h2.brand-title { font-weight: 800; letter-spacing: -.015em; line-height: 1.05; }
   min-height: var(--tap);
   padding: 12px 16px;
   border-radius: var(--r-s);
-  border: 1px solid var(--line);
+  border: 1px solid var(--btn-edge);
   font-family: var(--font-display);
   font-size: 17px; font-weight: 800; letter-spacing: 0;
   display: flex; align-items: center; justify-content: center; gap: 10px;
@@ -370,6 +380,22 @@ h2.brand-title { font-weight: 800; letter-spacing: -.015em; line-height: 1.05; }
 
 .btn-secondary { /* the default solid button */ }
 
+/* Outlined in the accent: the lobby's same-rank actions and the map's
+   recenter button. Each used to carry its own inline copy, and one had
+   the border without the coloured label. */
+.btn-outline { border-color: var(--accent); color: var(--accent); }
+/* "Lexi is hiding": the role button while someone else holds the role. It
+   reads as a status in the hider's colour, dashed and flat so it does not
+   look tappable, never a washed-out grey. */
+#btn-switch-role:disabled {
+  background: var(--surface-2); color: var(--hider-ink);
+  border: 1px dashed var(--hider-ink); box-shadow: none;
+}
+
+/* "I'm hidden" counting down before it releases the seekers: a different
+   colour so the hider sees at a glance that a tap is pending. */
+.btn-primary.arming { background: var(--warn-fill); color: var(--warn-fill-ink); }
+
 .btn-solo { color: var(--accent); }
 
 /* Practice controls: three equal buttons, the same height even when a label wraps */
@@ -380,7 +406,7 @@ h2.brand-title { font-weight: 800; letter-spacing: -.015em; line-height: 1.05; }
   min-height: var(--tap);
   padding: 10px;
   border-radius: var(--r-s);
-  border: 1px solid var(--line);
+  border: 1px solid var(--btn-edge);
   background: var(--surface);
   box-shadow: var(--raise);
   color: var(--ink);
@@ -405,10 +431,12 @@ h2.brand-title { font-weight: 800; letter-spacing: -.015em; line-height: 1.05; }
   opacity: 0; transition: opacity .2s;
   pointer-events: none;
 }
+/* Full width, scaled: app.js glides the scale from where the cooldown stands
+   to full in one transition timed to the seconds left */
 .cd-bar i {
-  display: block; height: 100%; width: 0;
+  display: block; height: 100%; width: 100%;
   background: var(--accent);
-  transition: width .9s linear;
+  transform: scaleX(0); transform-origin: left center;
 }
 button.cooling .cd-bar { opacity: 1; }
 
@@ -429,7 +457,7 @@ button.cooling .cd-bar { opacity: 1; }
   min-height: var(--tap);
   padding: 12px 14px;
   border-radius: var(--r-s);
-  border: 1px solid var(--line-2);
+  border: 1px solid var(--field-edge);   /* its own token: --line-2 also draws scrollbars and dashed wells */
   background: var(--surface-2);
   color: var(--ink);
   font-family: var(--font-text);
@@ -438,10 +466,13 @@ button.cooling .cd-bar { opacity: 1; }
   position: relative; z-index: 20;
 }
 .text-input::placeholder { color: var(--ink-3); font-weight: 400; }
+/* A solid accent ring; the pale halo it replaces barely showed on the card */
 .text-input:focus, .select-input:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  box-shadow: 0 0 0 2px var(--accent);
 }
+/* Room codes: big, spaced and centred, so a mistyped character stands out */
+.code-input { text-transform: uppercase; font-size: 22px; text-align: center; letter-spacing: 4px; }
 
 /* ----------------------------------------------------------------- roster */
 .player-list { display: flex; flex-direction: column; gap: 8px; min-height: 0; overflow: hidden; }
@@ -467,6 +498,7 @@ button.cooling .cd-bar { opacity: 1; }
 /* The roster headings in the same two colours as the dots and labels below them */
 .card-title.hider { color: var(--hider-ink); font-weight: 800; }
 .card-title.seeker { color: var(--accent); font-weight: 800; }
+.card-title.hider, .card-title.seeker { font-size: 14px; letter-spacing: 1px; margin-bottom: 6px; }
 
 .badge-name {
   flex: 1 1 auto; min-width: 0;
@@ -514,6 +546,7 @@ button.cooling .cd-bar { opacity: 1; }
   margin-bottom: 10px;
 }
 .lobby-wait:last-child { margin-bottom: 0; }
+.lobby-wait[data-state="lost"] { color: var(--warn); }
 
 .roster-empty {
   font-family: var(--font-text);
@@ -553,6 +586,8 @@ button.cooling .cd-bar { opacity: 1; }
   background: var(--accent);
 }
 .hider-role-badge { background: var(--hider-fill); color: var(--hider-fill-ink); }
+/* Watchers are not on the field: an outlined badge, not a role colour */
+.watch-role-badge { background: var(--surface); color: var(--ink); border: 1px solid var(--line-2); }
 .role-header-banner { flex-shrink: 0; display: flex; justify-content: center; margin-bottom: 8px; }
 
 /* Status rail: a segmented strip sunk into a well */
@@ -823,10 +858,19 @@ button.cooling .cd-bar { opacity: 1; }
 }
 .stat-bar { width: 100%; height: 5px; margin-top: 6px; border-radius: 5px; background: var(--surface-3); overflow: hidden; }
 /* All three bars in the accent: heat colours mean distance, nothing else */
-.stat-bar i { display: block; height: 100%; width: 0; border-radius: 5px; background: var(--accent); transition: width .5s ease; }
+.stat-bar i { display: block; height: 100%; width: 100%; background: var(--accent); transform: scaleX(0); transform-origin: left center; transition: transform .5s ease; }
 
 /* ------------------------------------------------------------ diagnostics */
-#diag-panel { font-family: var(--font-mono); background: var(--bg) !important; color: var(--ink); }
+#diag-panel {
+  position: fixed; inset: 0; z-index: 9999;
+  overflow-y: auto;
+  font-family: var(--font-mono); background: var(--bg); color: var(--ink);
+}
+#diag-scroll { padding: 16px; }
+.diag-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px; }
+.diag-title { font-size: 15px; font-weight: 800; color: var(--accent); letter-spacing: .1em; }
+.diag-close { width: auto; margin: 0; }
+.diag-rule { border: 0; border-top: 1px solid var(--line-2); margin: 6px 0; }
 #diag-body { font-size: 15px; line-height: 1.5; color: var(--ink); }
 #diag-panel p { font-size: 14px; color: var(--ink-2); margin-top: 12px; line-height: 1.4; }
 
@@ -842,16 +886,35 @@ button.cooling .cd-bar { opacity: 1; }
   .input-group { margin-bottom: 8px; }
   .stat-box { padding: 7px 9px 9px; }
   .stat-val { font-size: 24px; }
-  .btn-install { display: none !important; }
   .home-start .btn-host { min-height: 58px; }
   .readout { padding: 10px 14px 12px; }
   #seeker-dist-readout .dist-main { font-size: clamp(50px, 16vw, 68px); }
 }
-@media (max-height: 700px) { .scope-rule { display: none; } }
+/* The home screen takes the compact sizes on taller phones than the rest
+   (390x780 and 390x844 included), so Host, Join, Watch and practice always
+   sit above the fold and the records fit wherever there is room. Any height
+   left over is shared out between the cards instead of pooling at the
+   bottom as an empty band. */
+#home-screen { justify-content: space-between; }
+@media (max-height: 860px) {
+  #home-screen { padding-top: 4px; padding-bottom: 10px; }
+  #home-screen .brand-title { font-size: clamp(32px, 10vw, 42px); }
+  #home-screen .scope-head { margin-bottom: 6px; }
+  #home-screen .scope-meta { margin-top: 6px; }
+  #home-screen .card { padding: 11px; margin-bottom: 8px; }
+  #home-screen .card-title { margin-bottom: 6px; }
+  #home-screen .records-head { margin-bottom: 8px; }
+  #home-screen .stat-box { padding: 7px 9px 9px; }
+  #home-screen .stat-val { font-size: 24px; }
+  #home-screen .home-start .btn-host { min-height: 58px; }
+}
+/* The install shortcut is the first thing to go when the records need its room */
+@media (max-height: 800px) { .btn-install { display: none !important; } }
 @media (max-height: 660px) {
   .top-bar { padding: 6px 12px 4px; }
   .icon-btn { width: 50px; height: 50px; }
-  .card { padding: 10px; margin-bottom: 7px; }
+  .accuracy-tag { min-height: 50px; }
+  .card, #home-screen .card { padding: 10px; margin-bottom: 7px; }
   /* Short phones keep the ring's meaning as one small chip on the panel's
      bottom edge; "you are the center" is the one that goes. */
   .radar-key { left: 6px; bottom: 6px; }
@@ -896,7 +959,7 @@ button.cooling .cd-bar { opacity: 1; }
 .brand-title, .seeker-band-label, .hider-dist-num, #seeker-dist-readout .dist-main,
 .btn, .btn-powerup, .badge-name, .dialog-title { font-stretch: 118%; }
 .brand-title { font-stretch: 125%; letter-spacing: .02em; }
-.card-title, .readout-kicker, .input-label, .brand-subtitle, .role-badge, .scope-rule { letter-spacing: .16em; }
+.card-title, .readout-kicker, .input-label, .brand-subtitle, .role-badge { letter-spacing: .16em; }
 
 /* --------------------------------------------------------------- hider */
 .hider-radar-box {
@@ -933,6 +996,8 @@ button.cooling .cd-bar { opacity: 1; }
   margin-bottom: max(8px, env(safe-area-inset-bottom));
 }
 @keyframes dialog-in { from { opacity: 0; transform: translateY(24px); } }
+/* Focus rests on the sheet for a moment before its button takes it */
+.dialog:focus { outline: none; }
 .dialog-title {
   font-family: var(--font-display);
   font-size: 22px; font-weight: 900; line-height: 1.15;
@@ -945,18 +1010,22 @@ button.cooling .cd-bar { opacity: 1; }
 .btn-danger { background: var(--bad-fill); color: var(--bad-fill-ink); border-color: transparent; }
 
 /* --------------------------------------------------------------- toast */
+/* At rest it sits its full height plus the top gap and shadow above the
+   screen, whatever its height, and is see-through: an empty toast used to
+   leave a small nub peeking in at the top centre of every screen. */
 .toast {
   position: fixed; left: 50%; top: 14px; z-index: 10001;
-  transform: translate(-50%, -140%);
+  transform: translate(-50%, calc(-100% - 28px));
+  opacity: 0;
   max-width: min(440px, calc(100vw - 32px));
   background: var(--ink); color: var(--bg);
   font-size: 16px; font-weight: 700;
   padding: 12px 18px; border-radius: var(--r-s);
   box-shadow: var(--raise);
-  transition: transform .25s cubic-bezier(.2, .8, .2, 1);
+  transition: transform .25s cubic-bezier(.2, .8, .2, 1), opacity .25s ease;
   pointer-events: none;
 }
-.toast.show { transform: translate(-50%, 0); }
+.toast.show { transform: translate(-50%, 0); opacity: 1; }
 
 /* A problem with something typed, right under it */
 .field-error {
@@ -1002,7 +1071,7 @@ button.cooling .cd-bar { opacity: 1; }
   overflow: hidden;
   position: relative; z-index: 1;
 }
-.map-recenter-btn { margin-bottom: 9px; }
+.map-recenter-btn { margin-bottom: 8px; }
 /* The replay scrubber: a 44px strip with a thumb-sized knob, so a grandparent
    can grab the knob instead of tapping the track and jumping */
 #replay-slider {
@@ -1035,6 +1104,7 @@ button.cooling .cd-bar { opacity: 1; }
 /* ------------------------------------------------------- invite (restored) */
 .lobby-actions { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 9px; }
 .lobby-actions .btn { margin-bottom: 0; }
+.lobby-actions #btn-invite { width: auto; padding-left: 14px; padding-right: 14px; }
 .overlay {
   position: fixed; inset: 0; z-index: 9000;
   background: var(--bg);
@@ -1049,6 +1119,7 @@ button.cooling .cd-bar { opacity: 1; }
   width: 100%; display: flex; justify-content: space-between; align-items: center;
   margin-bottom: 12px;
 }
+.overlay-close { width: auto; margin: 0; padding: 8px 16px; }
 .overlay-title {
   font-family: var(--font-display); font-stretch: 118%;
   font-size: 15px; font-weight: 800; letter-spacing: .16em;
@@ -1077,13 +1148,19 @@ button.cooling .cd-bar { opacity: 1; }
   user-select: text; -webkit-user-select: text;
 }
 #invite-panel .btn { max-width: 320px; }
-#invite-panel .room-code { font-size: 34px; }
+/* The code people read out across the yard keeps the lobby's full size here
+   too (it was shrunk to 28-34px with a third of the sheet empty below). */
 @media (max-height: 700px) {
   .qr-tile { width: min(56vw, 220px); padding: 10px; }
   #invite-panel .btn { margin-bottom: 7px; }
-  #invite-panel .room-code { font-size: 28px; }
   .overlay-head { margin-bottom: 8px; }
 }
+/* Tall phones have the room for a bigger code to scan from farther away */
+@media (min-height: 800px) { .qr-tile { width: min(84vw, 360px); } }
+/* The QR, the code and the buttons sit together in the middle of the space
+   under the header, rather than at the top over an empty band */
+#invite-panel .qr-tile { margin-top: auto; }
+#invite-panel .invite-link { margin-bottom: auto; }
 
 /* ------------------------------------------------- short-screen fitting */
 /* The practice line is one short line now, so only the shortest screens drop it */
@@ -1133,6 +1210,10 @@ button.cooling .cd-bar { opacity: 1; }
 .lobby-name-line b { color: var(--ink); font-weight: 800; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lobby-name-line .lobby-name-change { margin-left: 6px; color: var(--accent); }
 .lobby-name-line:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+/* The editor that replaces it while changing the name (display set by app.js) */
+.lobby-name-editor { gap: 8px; margin-bottom: 8px; flex-shrink: 0; }
+.lobby-name-editor .text-input { flex: 1; min-width: 0; margin: 0; }
+.lobby-name-editor .btn { width: auto; margin: 0; }
 
 /* A roster well on a short phone fits a row or two. The line under it says
    how many more are waiting below, and the well fades out at its foot while
