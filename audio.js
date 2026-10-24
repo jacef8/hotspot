@@ -116,8 +116,14 @@ class HotspotAudio {
     };
   }
 
+  // Test is the one place the mute does not apply: a muted player tapping it
+  // wants to hear the voice, and it used to do nothing with no sign why. The
+  // hider's hunt-time silence still holds inside speak().
   testVoice() {
-    this.speak('Hot! You are closing in. Stay low and keep moving.');
+    const was = this.speechEnabled;
+    this.speechEnabled = true;
+    try { this.speak('Hot! You are closing in. Stay low and keep moving.'); }
+    finally { this.speechEnabled = was; }
   }
 
   // Sentence case for shouted words. Engines read capitals inconsistently —
@@ -131,9 +137,7 @@ class HotspotAudio {
   setupUnlockListeners() {
     const unlock = () => {
       this.initAudioContext();
-      if (this.audioCtx && this.audioCtx.state === 'suspended') {
-        this.audioCtx.resume();
-      }
+      this.resumeAudio();
       this.unlocked = true;
       if (this.synth && this.speechEnabled) {
         try {
@@ -147,6 +151,36 @@ class HotspotAudio {
     ['click', 'touchstart', 'touchend', 'keydown'].forEach(evt => {
       window.addEventListener(evt, unlock, { once: true, capture: true });
     });
+
+    // That first unlock used to be the only one. iOS parks the AudioContext
+    // after a phone call, Siri or a locked screen, and every beep stayed
+    // silent until the page was reloaded. Any later tap, and coming back to
+    // the app, wakes it again. Resuming makes no sound of its own.
+    ['pointerdown', 'touchend'].forEach(evt => {
+      window.addEventListener(evt, () => this.resumeAudio(), { capture: true, passive: true });
+    });
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') this.resumeAudio();
+    });
+  }
+
+  // True when sound can play right now. Otherwise asks the context to wake
+  // up and says no; the promise may never settle on iOS, so nobody waits on
+  // it, and the next beep plays once the context is running again.
+  resumeAudio() {
+    const ctx = this.audioCtx;
+    if (!ctx) return false;
+    if (ctx.state === 'running') return true;
+    if (ctx.state === 'closed') {
+      this.audioCtx = null;
+      this.initAudioContext();
+      return false;
+    }
+    try {
+      const p = ctx.resume();
+      if (p && typeof p.catch === 'function') p.catch(() => {});
+    } catch (e) {}
+    return false;
   }
 
   // The hider's phone stays quiet so it cannot give the hiding spot away — but
@@ -202,9 +236,7 @@ class HotspotAudio {
 
     try {
       this.initAudioContext();
-      if (this.audioCtx && this.audioCtx.state === 'suspended') {
-        this.audioCtx.resume();
-      }
+      this.resumeAudio();
 
       this.synth.cancel();
 
@@ -238,7 +270,7 @@ class HotspotAudio {
 
     try {
       this.initAudioContext();
-      if (!this.audioCtx || this.audioCtx.state === 'suspended') return;
+      if (!this.resumeAudio()) return;
 
       const osc = this.audioCtx.createOscillator();
       const gain = this.audioCtx.createGain();
@@ -273,7 +305,7 @@ class HotspotAudio {
 
     try {
       this.initAudioContext();
-      if (!this.audioCtx || this.audioCtx.state === 'suspended') return;
+      if (!this.resumeAudio()) return;
 
       const osc = this.audioCtx.createOscillator();
       const gain = this.audioCtx.createGain();
@@ -313,7 +345,7 @@ class HotspotAudio {
 
     try {
       this.initAudioContext();
-      if (!this.audioCtx || this.audioCtx.state === 'suspended') return;
+      if (!this.resumeAudio()) return;
 
       const osc = this.audioCtx.createOscillator();
       const gain = this.audioCtx.createGain();
@@ -337,7 +369,7 @@ class HotspotAudio {
     if (!this.audioFxEnabled) return;
     try {
       this.initAudioContext();
-      if (!this.audioCtx || this.audioCtx.state === 'suspended') return;
+      if (!this.resumeAudio()) return;
 
       const now = this.audioCtx.currentTime;
       const osc = this.audioCtx.createOscillator();

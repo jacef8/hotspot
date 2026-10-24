@@ -245,6 +245,12 @@ class HotspotApp {
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState !== 'visible' || !this.roomCode) return;
       this.acquireWakeLock();
+      // iOS drops the broker socket while the app is in the background.
+      const p = this.peer;
+      if (p && p.disconnected && !p.destroyed) {
+        this.peerReconnectAt = Date.now();
+        try { p.reconnect(); } catch (e) {}
+      }
       this.sendHeartbeat();
       this.refreshTransportStatus();
     });
@@ -366,6 +372,7 @@ class HotspotApp {
     //    own state on a steady tick.
     this.heartbeatInterval = setInterval(() => {
       if (!this.isRoomHost) this.ensureHostConnection();
+      this.nudgePeerBroker();
       this.sendHeartbeat();
       this.refreshTransportStatus();
       this.refreshFixFreshness();
@@ -389,6 +396,10 @@ class HotspotApp {
       }
 
       this.peerConnections = {};
+      this.pendingPeerDials = {};
+      this.peerDialFails = {};
+      this.peerLostAt = 0;
+      this.peerReconnects = 0;
 
       // Discovery MUST NOT depend on a relay. v2.5.10 made the relay the only
       // way to learn the host's peer id, so when that relay went unreachable no
@@ -401,24 +412,43 @@ class HotspotApp {
       // destroys the peer (releasing the id immediately), and an unavailable-id
       // error retries until the ghost expires.
       const codeClean = this.roomCode.toLowerCase().trim();
+      // A non-host whose own id is still held by a ghost of its last session
+      // falls back to a suffixed one. That fallback has to survive this
+      // re-run, or the same taken id is asked for again every 1.5 seconds.
       this.myPeerId = this.isRoomHost
         ? this.getHostPeerId()
-        : `hotspot_${codeClean}_${this.playerId}`;
+        : (this.peerIdOverride || `hotspot_${codeClean}_${this.playerId}`);
 
       this.peer = new Peer(this.myPeerId);
+      const peer = this.peer;
 
-      this.peer.on('open', () => {
+      peer.on('open', () => {
+        this.hostIdRetries = 0;
+        this.peerLostAt = 0;
+        this.peerReconnects = 0;
         this.updateSyncStatus(true);
         // Dial the host immediately — no relay round-trip needed.
         if (!this.isRoomHost) this.ensureHostConnection();
         this.sendHeartbeat();
       });
 
-      this.peer.on('connection', (conn) => {
+      peer.on('connection', (conn) => {
         this.setupPeerDataConnection(conn);
       });
 
-      this.peer.on('error', (err) => {
+      // The broker socket dropped: a cellular blip, or iOS parking the app in
+      // the background. Open links survive it, but nothing new can be dialed
+      // until the socket is back, and PeerJS does not reconnect on its own.
+      // reconnect() keeps this peer's token, so the broker hands the same id
+      // straight back instead of calling it a ghost for a minute.
+      peer.on('disconnected', () => {
+        if (this.peer !== peer || peer.destroyed || !this.roomCode) return;
+        if (!this.peerLostAt) this.peerLostAt = Date.now();
+        this.updateSyncStatus(this.peerCount() > 0);
+        this.schedulePeerReconnect(peer);
+      });
+
+      peer.on('error', (err) => {
         const type = err && err.type;
         this.lastPeerError = type || (err && err.message) || 'unknown';
 
@@ -434,7 +464,8 @@ class HotspotApp {
               setTimeout(() => this.initPeerSync(), 3000);
             }
           } else {
-            this.myPeerId = `hotspot_${codeClean}_${this.playerId}_${Math.random().toString(36).slice(2, 6)}`;
+            this.peerIdOverride = `hotspot_${codeClean}_${this.playerId}_${Math.random().toString(36).slice(2, 6)}`;
+            this.myPeerId = this.peerIdOverride;
             try { if (this.peer) this.peer.destroy(); } catch(e) {}
             this.peer = null;
             setTimeout(() => this.initPeerSync(), 1500);
@@ -443,10 +474,46 @@ class HotspotApp {
         }
 
         // peer-unavailable just means the host is not up yet; the 3s retry in
-        // ensureHostConnection will keep trying.
+        // ensureHostConnection will keep trying. PeerJS leaves that dial and
+        // its RTCPeerConnection open, so close it here rather than in 5s.
+        if (type === 'peer-unavailable') {
+          const m = /peer (\S+)$/.exec((err && err.message) || '');
+          const id = m && m[1];
+          const conn = (id && this.pendingPeerDials) ? this.pendingPeerDials[id] : null;
+          if (conn && typeof conn.close === 'function' && !conn.open) {
+            delete this.pendingPeerDials[id];
+            this.dropPeerDial(id, conn);
+          }
+        }
         this.updateSyncStatus(this.peerCount() > 0);
       });
     } catch(e) {}
+  }
+
+  // Try the broker again under the same id, waiting longer each time: 2, 4,
+  // 8, then 15 seconds. With no internet the wait just rolls over.
+  schedulePeerReconnect(peer) {
+    const n = this.peerReconnects || 0;
+    this.peerReconnects = n + 1;
+    const delay = Math.min(2000 * Math.pow(2, n), 15000);
+    setTimeout(() => {
+      if (this.peer !== peer || peer.destroyed || !peer.disconnected || !this.roomCode) return;
+      if ((typeof navigator.onLine === 'boolean') && !navigator.onLine) { this.schedulePeerReconnect(peer); return; }
+      this.peerReconnectAt = Date.now();
+      try { peer.reconnect(); } catch (e) { this.initPeerSync(); }
+    }, delay);
+  }
+
+  // The broker link has been down a while and no retry has gone out for 20
+  // seconds, so the retry chain is dead or stuck. With no live link to lose,
+  // start the peer over. Live links are kept and the retries carry on.
+  nudgePeerBroker() {
+    const p = this.peer;
+    if (!p || p.destroyed || !this.peerLostAt) return;
+    if (Date.now() - Math.max(this.peerLostAt, this.peerReconnectAt || 0) < 20000) return;
+    if ((typeof navigator.onLine === 'boolean') && !navigator.onLine) return;
+    if (this.peerCount() > 0) return;
+    this.initPeerSync();
   }
 
   // --- FIREBASE REALTIME DATABASE RELAY ---
@@ -719,21 +786,40 @@ class HotspotApp {
   // previously spectators never connected at all and ran the spectator map on the slow,
   // rate-limited cloud relay alone.
   connectToPeerId(peerId) {
-    if (!this.peer || !peerId || peerId === this.myPeerId) return;
+    if (!this.peer || this.peer.disconnected || this.peer.destroyed) return;
+    if (!peerId || peerId === this.myPeerId) return;
     if (this.peerConnections && this.peerConnections[peerId]) return;
     if (this.pendingPeerDials && this.pendingPeerDials[peerId]) return;
+    // A phone that is not answering is dialed less and less often: 5, 10, 20,
+    // then 30 seconds apart. Every attempt is a full ICE round, and a host
+    // whose phone had died used to be redialed every 6 seconds all hunt.
+    const fail = this.peerDialFails && this.peerDialFails[peerId];
+    if (fail && Date.now() < fail.nextAt) return;
+
+    let conn = null;
+    try { conn = this.peer.connect(peerId, { reliable: true }); } catch(e) {}
+    if (!conn) return;
 
     this.pendingPeerDials = this.pendingPeerDials || {};
-    this.pendingPeerDials[peerId] = true;
+    this.pendingPeerDials[peerId] = conn;
+    this.setupPeerDataConnection(conn);
 
-    try {
-      const conn = this.peer.connect(peerId, { reliable: true });
-      this.setupPeerDataConnection(conn);
-    } catch(e) {}
-
+    // A dial that has not opened in 5 seconds is closed, or its
+    // RTCPeerConnection lives on with nobody holding it.
     setTimeout(() => {
-      if (this.pendingPeerDials) delete this.pendingPeerDials[peerId];
+      if (!this.pendingPeerDials || this.pendingPeerDials[peerId] !== conn) return;
+      delete this.pendingPeerDials[peerId];
+      if (!conn.open) this.dropPeerDial(peerId, conn);
     }, 5000);
+  }
+
+  // A dial that never opened: close it and push the next try out.
+  dropPeerDial(peerId, conn) {
+    try { conn.close(); } catch(e) {}
+    this.peerDialFails = this.peerDialFails || {};
+    const n = ((this.peerDialFails[peerId] || {}).n || 0) + 1;
+    const wait = [5000, 10000, 20000][n - 1] || 30000;
+    this.peerDialFails[peerId] = { n, nextAt: Date.now() + wait };
   }
 
   destroyPeer() {
@@ -744,18 +830,30 @@ class HotspotApp {
     }
     this.peerConnections = {};
     this.pendingPeerDials = {};
+    this.peerDialFails = {};
     if (this.peer) {
       try { this.peer.destroy(); } catch(e) {}
       this.peer = null;
     }
+    // After the destroy: tearing the peer down fires its own disconnected
+    // handler, which would mark the link lost again.
+    this.peerLostAt = 0;
     this.myPeerId = null;
+    this.peerIdOverride = null;
   }
 
   setupPeerDataConnection(conn) {
     if (!conn) return;
 
     conn.on('open', () => {
+      // A redial from the same phone replaces the link we held. The old one
+      // is closed; its own close handler sees it is no longer ours.
+      this.peerConnections = this.peerConnections || {};
+      const prev = this.peerConnections[conn.peer];
       this.peerConnections[conn.peer] = conn;
+      if (prev && prev !== conn) { try { prev.close(); } catch(e) {} }
+      if (this.pendingPeerDials && this.pendingPeerDials[conn.peer] === conn) delete this.pendingPeerDials[conn.peer];
+      if (this.peerDialFails) delete this.peerDialFails[conn.peer];
       this.updateSyncStatus(true);
       this.sendHeartbeat();
     });
@@ -766,13 +864,14 @@ class HotspotApp {
       if (data) this.handleCloudMessage(data);
     });
 
-    conn.on('close', () => {
-      delete this.peerConnections[conn.peer];
-    });
-
-    conn.on('error', () => {
-      delete this.peerConnections[conn.peer];
-    });
+    // Only the link we are holding. A stale one closing late used to delete
+    // its live replacement, and that seeker quietly fell back to the 3-second
+    // cloud tick for the rest of the hunt.
+    const forget = () => {
+      if (this.peerConnections && this.peerConnections[conn.peer] === conn) delete this.peerConnections[conn.peer];
+    };
+    conn.on('close', forget);
+    conn.on('error', forget);
   }
 
   broadcastPeer(data) {
@@ -1398,9 +1497,9 @@ class HotspotApp {
 
   // The browser's own bar colour follows the mode too.
   syncThemeChrome() {
-    const meta = document.querySelector('meta[name="theme-color"]');
     const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
-    if (meta && bg) meta.setAttribute('content', bg);
+    if (!bg) return;
+    document.querySelectorAll('meta[name="theme-color"]').forEach((meta) => meta.setAttribute('content', bg));
   }
 
   showScreen(screenId) {
@@ -2437,7 +2536,12 @@ class HotspotApp {
       // A spectator's map has to show the hiding time too, not just the hunt.
       if (this.role === 'spectator') this.startPulseLoop();
 
-      window.hotspotAudio.speak(`Hider has ${duration} seconds to hide!`);
+      // A phone that joins or reloads mid-countdown hears what is left, not
+      // the full hiding time the counter is about to contradict. At zero the
+      // tick below announces the hunt itself.
+      const left = Math.max(0, duration - Math.floor((this.serverNow() - startTime) / 1000));
+      if (left >= duration - 2) window.hotspotAudio.speak(`Hider has ${duration} seconds to hide!`);
+      else if (left > 0) window.hotspotAudio.speak(`Hider has ${left} seconds left to hide!`);
 
       if (this.headStartTimer) clearInterval(this.headStartTimer);
 

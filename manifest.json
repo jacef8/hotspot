@@ -5,8 +5,8 @@
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
-  "background_color": "#080A0F",
-  "theme_color": "#080A0F",
+  "background_color": "#04060D",
+  "theme_color": "#04060D",
   "description": "Extreme yard tag and real-world proximity manhunt web app.",
   "icons": [
     {
